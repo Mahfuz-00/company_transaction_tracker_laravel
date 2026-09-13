@@ -6,6 +6,7 @@ use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class TransactionController extends Controller
 {
@@ -77,10 +78,26 @@ class TransactionController extends Controller
         // replace paginator collection with transformed items
         $paginator->setCollection($transformed);
 
+        // this month's totals (compute here so dashboard can display them)
+        $startOfMonth = Carbon::now()->startOfMonth();
+        $endOfMonth = Carbon::now()->endOfMonth();
+
+        $monthIncome = Transaction::where('user_id', $userId)
+            ->where('type', 'in')
+            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->sum('amount');
+
+        $monthExpense = Transaction::where('user_id', $userId)
+            ->where('type', 'out')
+            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->sum('amount');
+
         return Inertia::render('Dashboard', [
             'transactions' => $paginator,
             // pass the overall balance (not affected by filters)
             'currentBalance' => $overallBalance,
+            'monthIncome' => $monthIncome ?? 0,
+            'monthExpense' => $monthExpense ?? 0,
         ]);
     }
 
@@ -90,6 +107,7 @@ class TransactionController extends Controller
             'item' => 'required|string|max:255',
             'type' => 'required|in:in,out',
             'amount' => 'required|numeric|min:0.01',
+            'category' => 'nullable|string|max:100',
         ]);
 
         $request->user()->transactions()->create($validated);
@@ -103,7 +121,20 @@ class TransactionController extends Controller
 
         $totalIn = Transaction::where('user_id', $userId)->where('type', 'in')->sum('amount');
         $totalOut = Transaction::where('user_id', $userId)->where('type', 'out')->sum('amount');
-        
+
+        // this month's totals
+        $startOfMonth = Carbon::now()->startOfMonth();
+        $endOfMonth = Carbon::now()->endOfMonth();
+
+        $monthIncome = Transaction::where('user_id', $userId)
+            ->where('type', 'in')
+            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->sum('amount');
+
+        $monthExpense = Transaction::where('user_id', $userId)
+            ->where('type', 'out')
+            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->sum('amount');
         // Use driver-specific month formatting (SQLite doesn't support DATE_FORMAT)
         $driver = DB::connection()->getDriverName();
         $monthExpr = $driver === 'sqlite'

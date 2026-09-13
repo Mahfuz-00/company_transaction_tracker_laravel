@@ -2,12 +2,14 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm } from '@inertiajs/react';
 import { Inertia } from '@inertiajs/inertia';
 import { useState, useEffect, useRef } from 'react';
+import StatCard from '@/Components/StatCard';
 
-export default function Dashboard({ auth, transactions, currentBalance }) {
+export default function Dashboard({ auth, transactions, currentBalance, monthIncome, monthExpense }) {
     const { data, setData, post, processing, reset, errors } = useForm({
         item: '',
         type: 'in',
         amount: '',
+        category: '',
     });
 
     const { data: filters, setData: setFilter, processing: filtering, reset: resetFilters } = useForm({
@@ -115,37 +117,44 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
         >
             <Head title="Dashboard" />
 
-            <div className="py-12 max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-                {/* Balance Summary Card */}
-                <div className="p-6 bg-white rounded-lg shadow border-l-4 border-indigo-500 flex justify-between items-center">
-                    <div>
-                        <p className="text-sm text-gray-500 font-medium">Current Total Balance</p>
-                        <h3 className={`text-3xl font-bold ${currentBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            ${currentBalance.toFixed(2)}
-                        </h3>
-                    </div>
+            <div className="py-6 px-6 w-full space-y-6">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <StatCard title="Current Total Balance" value={`$${currentBalance.toFixed(2)}`} accent={currentBalance >= 0 ? 'green' : 'red'} />
+                    <StatCard title="This Month Expense" value={`-$${Number(monthExpense || 0).toFixed(2)}`} accent="red" />
+                    <StatCard title="This Month Revenue" value={`$${Number(monthIncome || 0).toFixed(2)}`} accent="green" />
                 </div>
 
                 {/* Add Transaction Form */}
-                <div className="p-6 bg-white rounded-lg shadow">
-                    <h3 className="text-lg font-bold mb-4">Add New Transaction</h3>
-                    <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-                        <div className="flex items-center">
+                <div className="p-6 md:p-8 bg-white/6 backdrop-blur-md rounded-xl shadow-lg border border-white/10">
+                    <h3 className="text-xl font-bold text-gray-900 mb-6">Add New Transaction</h3>
+                    
+                    <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        {/* Item Description (Full Width) */}
+                        <div className="md:col-span-2">
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                                Item description
+                            </label>
                             <input
                                 type="text"
-                                placeholder="Item description"
-                                className="w-full border-gray-300 rounded-md shadow-sm px-3 py-2"
+                                placeholder="e.g., Office Supplies, Client Payment"
+                                className="w-full border border-gray-300 rounded-lg shadow-sm px-4 h-11 text-gray-900 bg-white/90 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition disabled:opacity-50"
                                 value={data.item}
                                 onChange={(e) => setData('item', e.target.value)}
                                 autoFocus
                                 disabled={processing}
                             />
-                            {errors.item && <span className="text-red-500 text-xs ml-2">{errors.item}</span>}
+                            {errors.item && <span className="text-red-500 text-xs mt-1 block">{errors.item}</span>}
                         </div>
-                        <div className="flex items-center">
-                            <fieldset className="flex items-center gap-6">
-                                <legend className="sr-only">Transaction type</legend>
-                                <label className="inline-flex items-center gap-2">
+
+                        {/* Transaction Type (Left Column - No Border Box, Extra Gap) */}
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 mb-2 block">
+                                Transaction type
+                            </label>
+                            <div className="flex items-center gap-8 h-11">
+                                <label className="inline-flex items-center gap-2.5 cursor-pointer text-sm font-medium text-gray-800">
                                     <input
                                         type="radio"
                                         name="type"
@@ -153,11 +162,12 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                                         checked={data.type === 'in'}
                                         onChange={() => setData('type', 'in')}
                                         disabled={processing}
-                                        className="w-4 h-4"
+                                        className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                                     />
-                                    <span>Cash In (+)</span>
+                                    <span className="text-green-700 font-semibold">Cash In (+)</span>
                                 </label>
-                                <label className="inline-flex items-center gap-2">
+
+                                <label className="inline-flex items-center gap-2.5 cursor-pointer text-sm font-medium text-gray-800">
                                     <input
                                         type="radio"
                                         name="type"
@@ -165,18 +175,23 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                                         checked={data.type === 'out'}
                                         onChange={() => setData('type', 'out')}
                                         disabled={processing}
-                                        className="w-4 h-4"
+                                        className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                                     />
-                                    <span>Cash Out (-)</span>
+                                    <span className="text-red-700 font-semibold">Cash Out (-)</span>
                                 </label>
-                            </fieldset>
+                            </div>
                         </div>
-                        <div className="flex items-center">
+
+                        {/* Amount (Right Column) */}
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                                Amount
+                            </label>
                             <input
                                 type="number"
                                 step="0.01"
-                                placeholder="Amount"
-                                className="w-full border-gray-300 rounded-md shadow-sm px-3 py-2"
+                                placeholder="0.00"
+                                className="w-full border border-gray-300 rounded-lg shadow-sm px-4 h-11 text-gray-900 bg-white/90 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition disabled:opacity-50"
                                 value={data.amount}
                                 min="0.01"
                                 inputMode="decimal"
@@ -187,23 +202,42 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                                 }}
                                 disabled={processing}
                             />
-                            {errors.amount && <span className="text-red-500 text-xs ml-2">{errors.amount}</span>}
+                            {errors.amount && <span className="text-red-500 text-xs mt-1 block">{errors.amount}</span>}
                         </div>
-                        <div className="flex items-center">
+
+                        {/* Category (Left Column on Desktop) */}
+                        <div>
+                            <label className="text-sm font-medium text-gray-700 mb-1.5 block">
+                                Category (optional)
+                            </label>
+                            <input
+                                type="text"
+                                placeholder="e.g., Utilities, Salary"
+                                className="w-full border border-gray-300 rounded-lg shadow-sm px-4 h-11 text-gray-900 bg-white/90 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition disabled:opacity-50"
+                                value={data.category}
+                                onChange={(e) => setData('category', e.target.value)}
+                                disabled={processing}
+                            />
+                            {errors.category && <span className="text-red-500 text-xs mt-1 block">{errors.category}</span>}
+                        </div>
+
+                        {/* Submit Button (Right Column, Aligned with Bottom) */}
+                        <div className="flex items-end">
                             <button
                                 type="submit"
                                 disabled={processing}
-                                className="bg-indigo-600 text-white font-semibold rounded-md py-2 px-4 hover:bg-indigo-700 transition disabled:opacity-50 flex items-center justify-center"
+                                className="bg-indigo-600 text-white font-semibold rounded-lg h-11 w-full hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-200 transition disabled:opacity-50 flex items-center justify-center shadow-sm"
                             >
-                                {processing ? (
+                                {processing && (
                                     <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                                     </svg>
-                                ) : null}
+                                )}
                                 {processing ? 'Saving...' : 'Save Transaction'}
                             </button>
                         </div>
+
                     </form>
                 </div>
 
@@ -215,19 +249,19 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                 )}
 
                 {/* Filters */}
-                <div className="p-4 bg-white rounded-lg shadow">
+                <div className="p-4 bg-white/6 backdrop-blur-md rounded-xl shadow-lg">
                     <form onSubmit={handleFilterSubmit} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
                         <div className="border-r border-gray-200 pr-3">
                             <label className="text-xs text-gray-600">From</label>
-                            <input type="date" className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1" value={filters.date_from} onChange={(e) => setFilter('date_from', e.target.value)} />
+                            <input type="date" className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1 text-black bg-white/90" value={filters.date_from} onChange={(e) => setFilter('date_from', e.target.value)} />
                         </div>
                         <div className="border-r border-gray-200 pr-3">
                             <label className="text-xs text-gray-600">To</label>
-                            <input type="date" className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1" value={filters.date_to} onChange={(e) => setFilter('date_to', e.target.value)} />
+                            <input type="date" className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1 text-black bg-white/90" value={filters.date_to} onChange={(e) => setFilter('date_to', e.target.value)} />
                         </div>
                         <div className="border-r border-gray-200 pr-3">
                             <label className="text-xs text-gray-600">Type</label>
-                            <select className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1" value={filters.type} onChange={(e) => setFilter('type', e.target.value)}>
+                            <select className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1 text-black bg-white/90" value={filters.type} onChange={(e) => setFilter('type', e.target.value)}>
                                 <option value="all">All</option>
                                 <option value="in">Cash In</option>
                                 <option value="out">Cash Out</option>
@@ -235,15 +269,15 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                         </div>
                         <div className="border-r border-gray-200 pr-3">
                             <label className="text-xs text-gray-600">Amount Min</label>
-                            <input type="number" step="0.01" className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1" value={filters.amount_min} onChange={(e) => setFilter('amount_min', e.target.value)} />
+                            <input type="number" step="0.01" className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1 text-black bg-white/90" value={filters.amount_min} onChange={(e) => setFilter('amount_min', e.target.value)} />
                         </div>
                         <div className="border-r border-gray-200 pr-3">
                             <label className="text-xs text-gray-600">Amount Max</label>
-                            <input type="number" step="0.01" className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1" value={filters.amount_max} onChange={(e) => setFilter('amount_max', e.target.value)} />
+                            <input type="number" step="0.01" className="w-full border-gray-300 rounded-md shadow-sm px-2 py-1 text-black bg-white/90" value={filters.amount_max} onChange={(e) => setFilter('amount_max', e.target.value)} />
                         </div>
                         <div className="md:col-span-1 flex flex-col items-end gap-2">
                             <select
-                                className="w-full md:w-40 border-gray-300 rounded-md px-3 py-2 pr-10 text-sm bg-white"
+                                className="w-full md:w-40 border-gray-300 rounded-md px-3 py-2 pr-10 text-sm bg-white/90 text-black"
                                 value={filters.per_page}
                                 onChange={(e) => {
                                     const newPer = e.target.value;
@@ -281,16 +315,14 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                     </form>
                 </div>
 
-                {/* Transaction Ledger Table */}
-                <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-white rounded-xl shadow-lg overflow-hidden">
                     <table className="w-full text-left border-collapse">
                         <thead>
-                            <tr className="bg-gray-100 text-gray-700 text-sm uppercase">
+                            <tr className="bg-white/6 text-gray-700 text-sm uppercase">
                                 <th className="p-4">Date</th>
                                 <th className="p-4">Item Description</th>
-                                   <th className="p-4">Category</th>
+                                <th className="p-4">Category</th>
                                 <th className="p-4 cursor-pointer" onClick={() => {
-                                    // toggle sort_amount: '', 'asc', 'desc'
                                     const next = filters.sort_amount === 'asc' ? 'desc' : (filters.sort_amount === 'desc' ? '' : 'asc');
                                     setFilter('sort_amount', next);
                                     const params = {
@@ -327,21 +359,21 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                                 localTransactions.map((t) => (
                                     <tr
                                         key={t.id}
-                                        className={`${t.type === 'in' ? 'bg-green-50 text-green-900' : 'bg-red-50 text-red-900'}`}
-                                            style={{
-                                                transformOrigin: 'top',
-                                                transform: visibleIds.has(t.id) ? 'scaleY(1)' : 'scaleY(0)',
-                                                transition: 'transform 320ms cubic-bezier(0.2,0.8,0.2,1), opacity 200ms',
-                                                opacity: visibleIds.has(t.id) ? 1 : 0,
-                                            }}
+                                        className={`${t.type === 'in' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'} hover:bg-gray-50`}
+                                        style={{
+                                            transformOrigin: 'top',
+                                            transform: visibleIds.has(t.id) ? 'scaleY(1)' : 'scaleY(0)',
+                                            transition: 'transform 320ms cubic-bezier(0.2,0.8,0.2,1), opacity 200ms',
+                                            opacity: visibleIds.has(t.id) ? 1 : 0,
+                                        }}
                                     >
-                                        <td className="p-4 text-sm">{t.created_at}</td>
-                                        <td className="p-4 font-medium">{t.item}</td>
-                                           <td className="p-4 text-sm text-gray-600">{t.category || '-'}</td>
-                                        <td className="p-4 font-bold">
+                                        <td className="p-4 text-sm text-gray-700">{t.created_at}</td>
+                                        <td className="p-4 font-medium text-gray-900">{t.item}</td>
+                                        <td className="p-4 text-sm text-gray-600">{t.category || '-'}</td>
+                                        <td className="p-4 font-bold text-gray-900">
                                             {t.type === 'in' ? `+$${Number(t.amount).toFixed(2)}` : `-$${Math.abs(Number(t.amount)).toFixed(2)}`}
                                         </td>
-                                        <td className="p-4 font-semibold">${Number(t.running_balance || 0).toFixed(2)}</td>
+                                        <td className="p-4 font-semibold text-gray-900">${Number(t.running_balance || 0).toFixed(2)}</td>
                                     </tr>
                                 ))
                             ) : (
@@ -353,6 +385,7 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                             )}
                         </tbody>
                     </table>
+                </div>
                 </div>
                 {/* Pagination Controls */}
                 {transactions && transactions.meta && (
@@ -378,7 +411,6 @@ export default function Dashboard({ auth, transactions, currentBalance }) {
                         </div>
                     </div>
                 )}
-            </div>
         </AuthenticatedLayout>
     );
 }
