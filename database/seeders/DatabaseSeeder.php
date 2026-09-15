@@ -11,8 +11,10 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $adminRole = Role::firstOrCreate(['name' => 'admin']);
-        $userRole = Role::firstOrCreate(['name' => 'user']);
+        // Call roles & permissions seeder first
+        $this->call(RolesAndPermissionsSeeder::class);
+
+        $adminRole = Role::firstOrCreate(['name' => 'Super Admin']);
 
         $user = User::firstOrCreate([
             'email' => 'mahfuz@example.com',
@@ -21,8 +23,8 @@ class DatabaseSeeder extends Seeder
             'password' => bcrypt('password123'),
         ]);
 
-        if (! $user->hasRole($userRole->name)) {
-            $user->assignRole($userRole);
+        if (! $user->hasRole($adminRole->name)) {
+            $user->assignRole($adminRole->name);
         }
 
         // two months of sample transactions for the seeded user

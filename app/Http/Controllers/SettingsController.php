@@ -15,7 +15,7 @@ class SettingsController extends Controller
         $currencies = Currency::orderBy('name')->get();
         $userSettings = UserSetting::where('user_id', $user->id)->first();
 
-        return Inertia::render('Settings', [
+        return Inertia::render('Settings/CurrencyManager', [
             'currencies' => $currencies,
             'userSettings' => $userSettings ? $userSettings->settings : null,
         ]);

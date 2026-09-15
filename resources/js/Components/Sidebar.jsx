@@ -1,17 +1,35 @@
+import React, { useState } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
+import useCan from '@/Utils/can';
 
 export default function Sidebar({ user }) {
-    // Get current route context from Inertia
     const { url } = usePage();
+    const { can } = useCan();
 
-    // Helper function for active nav item styles
+    // Check if user is currently inside any settings sub-route
+    const isSettingsActive = route().current('settings*');
+
+    // State to toggle Settings sub-menu collapse/expand
+    const [settingsOpen, setSettingsOpen] = useState(isSettingsActive);
+
+    // Helper function for main nav active classes
     const navLinkClasses = (routeName) => {
         const isActive = route().current(routeName);
         return `group relative flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 ${
             isActive
                 ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
                 : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+        }`;
+    };
+
+    // Helper function for sub-menu active classes
+    const subNavLinkClasses = (routeName) => {
+        const isActive = route().current(routeName);
+        return `flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
+            isActive
+                ? 'bg-indigo-50 text-indigo-600 font-bold'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
         }`;
     };
 
@@ -80,18 +98,57 @@ export default function Sidebar({ user }) {
                         <span>Add Transaction</span>
                     </Link>
 
-                    {/* Settings */}
-                    <Link 
-                        href={route('settings')} 
-                        className={navLinkClasses('settings')} 
-                        aria-current={route().current('settings') ? 'page' : undefined}
-                    >
-                        <svg className={`h-5 w-5 ${iconClasses('settings')}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                            <circle cx="12" cy="12" r="3" />
-                        </svg>
-                        <span>Settings</span>
-                    </Link>
+                    {/* Settings Dropdown Group */}
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => setSettingsOpen(!settingsOpen)}
+                            className={`w-full group relative flex items-center justify-between px-3.5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 ${
+                                isSettingsActive
+                                    ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
+                                    : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+                            }`}
+                        >
+                            <div className="flex items-center gap-3.5">
+                                <svg className={`h-5 w-5 ${isSettingsActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-700'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
+                                <span>Settings</span>
+                            </div>
+                            <svg 
+                                className={`w-4 h-4 transition-transform duration-200 ${settingsOpen ? 'rotate-180' : ''}`} 
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        {/* Sub-menu Items */}
+                        {settingsOpen && (
+                            <div className="ml-4 pl-3 mt-1.5 border-l-2 border-slate-100 space-y-1">
+                                {/* Currency Manager */}
+                                <Link 
+                                    href={route('settings.currency')} 
+                                    className={subNavLinkClasses('settings.currency')}
+                                >
+                                    <span>Currency Manager</span>
+                                </Link>
+
+                                {/* Role Manager (Role & Permission Gated) */}
+                                {(user?.permissions?.includes('roles.view') || user?.roles?.includes('admin')) && (
+                                    <Link 
+                                        href={route('settings.roles.index')} 
+                                        className={subNavLinkClasses('settings.roles.index')}
+                                    >
+                                        <span>Role Manager</span>
+                                    </Link>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </nav>
             </div>
 

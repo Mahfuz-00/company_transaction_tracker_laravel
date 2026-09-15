@@ -141,43 +141,120 @@ class TransactionController extends Controller
     {
         $userId = $request->user()->id;
 
-        $totalIn = Transaction::where('user_id', $userId)->where('type', 'in')->sum('amount');
-        $totalOut = Transaction::where('user_id', $userId)->where('type', 'out')->sum('amount');
+        // Determine filter range
+        $period = $request->input('period');
+        $from = $request->input('from');
+        $to = $request->input('to');
 
-        // this month's totals
-        $startOfMonth = Carbon::now()->startOfMonth();
-        $endOfMonth = Carbon::now()->endOfMonth();
+        $now = Carbon::now();
 
-        $monthIncome = Transaction::where('user_id', $userId)
+        if ($from && $to) {
+            $start = Carbon::parse($from)->startOfDay();
+            $end = Carbon::parse($to)->endOfDay();
+            $activePeriod = 'custom';
+        } else {
+            switch ($period) {
+                case 'last_month':
+                    $start = $now->copy()->subMonthNoOverflow()->startOfMonth();
+                    $end = $now->copy()->subMonthNoOverflow()->endOfMonth();
+                    $activePeriod = 'last_month';
+                    break;
+                case 'last_3_months':
+                    $start = $now->copy()->subMonths(3)->startOfMonth();
+                    $end = $now->copy()->endOfMonth();
+                    $activePeriod = 'last_3_months';
+                    break;
+                case 'ytd':
+                    $start = $now->copy()->startOfYear();
+                    $end = $now->copy()->endOfDay();
+                    $activePeriod = 'ytd';
+                    break;
+                case 'current_month':
+                default:
+                    $start = $now->copy()->startOfMonth();
+                    $end = $now->copy()->endOfMonth();
+                    $activePeriod = 'current_month';
+                    break;
+            }
+        }
+
+        // Ensure $start and $end are defined
+        if (!isset($start) || !isset($end)) {
+            $start = $now->copy()->startOfMonth();
+            $end = $now->copy()->endOfMonth();
+            $activePeriod = 'current_month';
+        }
+
+        // Totals for the selected period
+        $totalIn = Transaction::where('user_id', $userId)
             ->where('type', 'in')
-            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->whereBetween('created_at', [$start, $end])
             ->sum('amount');
 
-        $monthExpense = Transaction::where('user_id', $userId)
+        $totalOut = Transaction::where('user_id', $userId)
             ->where('type', 'out')
-            ->whereBetween('created_at', [$startOfMonth, $endOfMonth])
+            ->whereBetween('created_at', [$start, $end])
             ->sum('amount');
-        // Use driver-specific month formatting (SQLite doesn't support DATE_FORMAT)
+
+        $netBalance = $totalIn - $totalOut;
+
+        // Current overall balance (all time)
+        $totalInOverall = Transaction::where('user_id', $userId)->where('type', 'in')->sum('amount');
+        $totalOutOverall = Transaction::where('user_id', $userId)->where('type', 'out')->sum('amount');
+        $currentBalance = $totalInOverall - $totalOutOverall;
+
+        // Previous period (for percent change): compute same-length previous span
+        $periodDays = $start->diffInDays($end) + 1;
+        $prevEnd = $start->copy()->subDay();
+        $prevStart = $prevEnd->copy()->subDays($periodDays - 1)->startOfDay();
+
+        $prevIn = Transaction::where('user_id', $userId)
+            ->where('type', 'in')
+            ->whereBetween('created_at', [$prevStart, $prevEnd])
+            ->sum('amount');
+
+        $prevOut = Transaction::where('user_id', $userId)
+            ->where('type', 'out')
+            ->whereBetween('created_at', [$prevStart, $prevEnd])
+            ->sum('amount');
+
+        // Decide grouping granularity: if range <= 31 days use daily, else monthly
+        $useDaily = ($start->diffInDays($end) <= 31);
         $driver = DB::connection()->getDriverName();
-        $monthExpr = $driver === 'sqlite'
-            ? "strftime('%Y-%m', created_at)"
-            : "DATE_FORMAT(created_at, '%Y-%m')";
+        if ($useDaily) {
+            $groupExpr = $driver === 'sqlite' ? "strftime('%Y-%m-%d', created_at)" : "DATE_FORMAT(created_at, '%Y-%m-%d')";
+        } else {
+            $groupExpr = $driver === 'sqlite' ? "strftime('%Y-%m', created_at)" : "DATE_FORMAT(created_at, '%Y-%m')";
+        }
 
         $monthlySummary = Transaction::where('user_id', $userId)
+            ->whereBetween('created_at', [$start, $end])
             ->select(
                 DB::raw("SUM(CASE WHEN type = 'in' THEN amount ELSE 0 END) as income"),
                 DB::raw("SUM(CASE WHEN type = 'out' THEN amount ELSE 0 END) as expense"),
-                DB::raw("{$monthExpr} as month")
+                DB::raw("{$groupExpr} as period")
             )
-            ->groupBy('month')
-            ->orderBy('month', 'asc')
+            ->groupBy('period')
+            ->orderBy('period', 'asc')
             ->get();
 
         return Inertia::render('Analytics', [
             'totalIn' => (float)$totalIn,
             'totalOut' => (float)$totalOut,
-            'netBalance' => (float)($totalIn - $totalOut),
+            'netBalance' => (float)$netBalance,
+            'currentBalance' => (float)$currentBalance,
             'monthlySummary' => $monthlySummary,
+            'activeFilters' => [
+                'period' => $activePeriod,
+                'from' => $start->toDateString(),
+                'to' => $end->toDateString(),
+            ],
+            'previousPeriod' => [
+                'from' => $prevStart->toDateString(),
+                'to' => $prevEnd->toDateString(),
+                'totalIn' => (float)$prevIn,
+                'totalOut' => (float)$prevOut,
+            ],
         ]);
     }
 }

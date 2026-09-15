@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head } from '@inertiajs/react';
+import { Head, useForm, router } from '@inertiajs/react';
+import { useEffect, useRef, useState } from 'react';
 import { useCurrencySettings, formatCurrencyValue } from '@/Utils/useCurrency';
 import { 
     Chart as ChartJS, 
@@ -9,21 +10,62 @@ import {
     BarElement, 
     Title, 
     Tooltip, 
-    Legend 
+    Legend,
+    LineElement, 
+    PointElement, 
+    Filler 
 } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 
-ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Title, Tooltip, Legend);
 
-export default function Analytics({ auth, totalIn, totalOut, netBalance, monthlySummary }) {
+export default function Analytics({ auth, totalIn = 0, totalOut = 0, netBalance = 0, monthlySummary = [], currentBalance = 0, activeFilters = {}, previousPeriod = {} }) {
     const [currency] = useCurrencySettings();
+    const { data, setData } = useForm({
+        period: activeFilters.period || 'current_month',
+        from: activeFilters.from || '',
+        to: activeFilters.to || '',
+    });
 
-    // Chart.js global style enhancements
+    const [viewType, setViewType] = useState('area'); // 'area' or 'bar'
+    const chartRef = useRef(null);
+
+    // Keep state in sync when server returns updated filters
+    useEffect(() => {
+        setData((prev) => ({
+            ...prev,
+            period: activeFilters.period || 'current_month',
+            from: activeFilters.from || '',
+            to: activeFilters.to || '',
+        }));
+    }, [activeFilters]);
+
+    // Handler for quick period select buttons
+    const handlePeriodChange = (period) => {
+        setData('period', period);
+        router.get(
+            route('analytics'),
+            { period },
+            { preserveState: true, preserveScroll: true, replace: true }
+        );
+    };
+
+    // Handler for custom date range filter
+    const handleDateApply = (e) => {
+        e.preventDefault();
+        router.get(
+            route('analytics'),
+            { period: 'custom', from: data.from, to: data.to },
+            { preserveState: true, preserveScroll: true, replace: true }
+        );
+    };
+
+    // Pie / Doughnut Data
     const pieData = {
         labels: ['Cash In', 'Cash Out'],
         datasets: [
             {
-                data: [totalIn, totalOut],
+                data: [Number(totalIn) || 0, Number(totalOut) || 0],
                 backgroundColor: ['#10b981', '#f43f5e'],
                 hoverBackgroundColor: ['#059669', '#e11d48'],
                 borderWidth: 2,
@@ -32,22 +74,66 @@ export default function Analytics({ auth, totalIn, totalOut, netBalance, monthly
         ],
     };
 
+    const labels = monthlySummary.map((m) => m.period || m.month || '');
+    const incomes = monthlySummary.map((m) => Number(m.income) || 0);
+    const expenses = monthlySummary.map((m) => Number(m.expense) || 0);
+
     const barData = {
-        labels: monthlySummary.map((m) => m.month),
+        labels,
         datasets: [
             {
+                type: 'line',
                 label: 'Income',
-                data: monthlySummary.map((m) => m.income),
-                backgroundColor: '#10b981',
-                borderRadius: 6,
+                data: incomes,
+                borderColor: '#10b981',
+                backgroundColor: (ctx) => {
+                    const chart = ctx.chart;
+                    const { ctx: c, chartArea } = chart;
+                    if (!chartArea) return 'rgba(16,185,129,0.1)';
+                    const gradient = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                    gradient.addColorStop(0, 'rgba(16,185,129,0.28)');
+                    gradient.addColorStop(1, 'rgba(16,185,129,0.06)');
+                    return gradient;
+                },
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
             },
             {
+                type: 'bar',
                 label: 'Expense',
-                data: monthlySummary.map((m) => m.expense),
+                data: expenses,
                 backgroundColor: '#f43f5e',
                 borderRadius: 6,
             },
         ],
+    };
+
+    // Corrected Doughnut Center Text Plugin
+    const doughnutCenterPlugin = {
+        id: 'doughnutCenter',
+        afterDraw(chart) {
+            const centerConfig = chart.config.options.plugins?.doughnutCenter;
+            if (centerConfig && centerConfig.text) {
+                const { ctx, chartArea } = chart;
+                if (!chartArea) return;
+
+                const fontStyle = centerConfig.fontStyle || '600';
+                const txt = centerConfig.text;
+                const color = centerConfig.color || '#374151';
+
+                ctx.save();
+                ctx.font = `${fontStyle} 16px Inter, sans-serif`;
+                ctx.fillStyle = color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                const centerX = (chartArea.left + chartArea.right) / 2;
+                const centerY = (chartArea.top + chartArea.bottom) / 2;
+                ctx.fillText(txt, centerX, centerY);
+                ctx.restore();
+            }
+        },
     };
 
     const commonChartOptions = {
@@ -98,26 +184,119 @@ export default function Analytics({ auth, totalIn, totalOut, netBalance, monthly
                 },
             },
         },
+        animation: { duration: 600, easing: 'easeOutCubic' },
+    };
+
+    const doughnutOptions = {
+        ...commonChartOptions,
+        cutout: '75%',
+        plugins: {
+            ...commonChartOptions.plugins,
+            legend: { display: false },
+            doughnutCenter: {
+                text: formatCurrencyValue(Number(totalOut || 0), currency),
+                color: '#0f172a',
+            },
+        },
     };
 
     return (
         <AuthenticatedLayout
-            user={auth.user}
+            user={auth?.user}
             header={<h2 className="font-bold text-2xl text-slate-800 tracking-tight">Analytics Dashboard</h2>}
         >
             <Head title="Analytics" />
 
             <div className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-8">
-                
+                {/* Filter Bar */}
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50" role="group">
+                            {['current_month', 'last_month', 'last_3_months', 'ytd'].map((p) => {
+                                const labelsMap = {
+                                    current_month: 'Current Month',
+                                    last_month: 'Last Month',
+                                    last_3_months: 'Last 3 Months',
+                                    ytd: 'YTD',
+                                };
+                                return (
+                                    <button
+                                        key={p}
+                                        type="button"
+                                        onClick={() => handlePeriodChange(p)}
+                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                            data.period === p
+                                                ? 'bg-indigo-600 text-white shadow-sm'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        {labelsMap[p]}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <form onSubmit={handleDateApply} className="flex items-center gap-2">
+                            <input
+                                type="date"
+                                value={data.from}
+                                onChange={(e) => setData('from', e.target.value)}
+                                className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                            <span className="text-slate-400 text-xs">to</span>
+                            <input
+                                type="date"
+                                value={data.to}
+                                onChange={(e) => setData('to', e.target.value)}
+                                className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:ring-indigo-500 focus:border-indigo-500"
+                            />
+                            <button
+                                type="submit"
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-xs transition-colors"
+                            >
+                                Apply
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Wider View Selector */}
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                            View Mode:
+                        </label>
+                        <select
+                            value={viewType}
+                            onChange={(e) => setViewType(e.target.value)}
+                            className="w-48 border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 bg-white focus:ring-indigo-500 focus:border-indigo-500 shadow-sm cursor-pointer"
+                        >
+                            <option value="area">Area + Bars</option>
+                            <option value="bar">Stacked Bars</option>
+                        </select>
+                    </div>
+                </div>
+
                 {/* Metric Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     {/* Total Cash In */}
                     <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Cash In</p>
-                            <h3 className="text-2xl font-extrabold text-emerald-600 mt-1">
-                                {formatCurrencyValue(Number(totalIn || 0), currency)}
-                            </h3>
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-2xl font-extrabold text-emerald-600 mt-1">
+                                    {formatCurrencyValue(Number(totalIn || 0), currency)}
+                                </h3>
+                                {previousPeriod && previousPeriod.totalIn !== undefined && (
+                                    <span className={`text-xs font-medium px-2 py-1 rounded ${Number(previousPeriod.totalIn) < Number(totalIn) ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                        {(() => {
+                                            const prev = Number(previousPeriod.totalIn || 0);
+                                            const curr = Number(totalIn || 0);
+                                            if (prev === 0) return '–';
+                                            const p = Math.round(((curr - prev) / Math.abs(prev)) * 100);
+                                            return `${p >= 0 ? '+' : ''}${p}%`;
+                                        })()}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100/60">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,9 +309,22 @@ export default function Analytics({ auth, totalIn, totalOut, netBalance, monthly
                     <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Cash Out</p>
-                            <h3 className="text-2xl font-extrabold text-rose-600 mt-1">
-                                {formatCurrencyValue(Number(totalOut || 0), currency)}
-                            </h3>
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-2xl font-extrabold text-rose-600 mt-1">
+                                    {formatCurrencyValue(Number(totalOut || 0), currency)}
+                                </h3>
+                                {previousPeriod && previousPeriod.totalOut !== undefined && (
+                                    <span className={`text-xs font-medium px-2 py-1 rounded ${Number(previousPeriod.totalOut) < Number(totalOut) ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                        {(() => {
+                                            const prev = Number(previousPeriod.totalOut || 0);
+                                            const curr = Number(totalOut || 0);
+                                            if (prev === 0) return '–';
+                                            const p = Math.round(((curr - prev) / Math.abs(prev)) * 100);
+                                            return `${p >= 0 ? '+' : ''}${p}%`;
+                                        })()}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100/60">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,6 +351,23 @@ export default function Analytics({ auth, totalIn, totalOut, netBalance, monthly
                             </svg>
                         </div>
                     </div>
+
+                    {/* Current Overall Balance */}
+                    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Current Balance</p>
+                            <h3 className={`text-2xl font-extrabold mt-1 ${currentBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {formatCurrencyValue(Number(currentBalance || 0), currency)}
+                            </h3>
+                        </div>
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${
+                            currentBalance >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100/60' : 'bg-rose-50 text-rose-600 border-rose-100/60'
+                        }`}>
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2" />
+                            </svg>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Charts Grid */}
@@ -170,7 +379,7 @@ export default function Analytics({ auth, totalIn, totalOut, netBalance, monthly
                             <p className="text-xs text-slate-500 mt-1">Ratio of total income against expenses</p>
                         </div>
                         <div className="w-full h-64 relative flex items-center justify-center my-4">
-                            <Doughnut data={pieData} options={commonChartOptions} />
+                            <Doughnut data={pieData} options={doughnutOptions} plugins={[doughnutCenterPlugin]} />
                         </div>
                     </div>
 
@@ -181,11 +390,39 @@ export default function Analytics({ auth, totalIn, totalOut, netBalance, monthly
                             <p className="text-xs text-slate-500 mt-1">Comparative breakdown across months</p>
                         </div>
                         <div className="w-full h-64 my-4">
-                            <Bar data={barData} options={barOptions} />
+                            {viewType === 'area' ? (
+                                <Bar key="area-bar-chart" data={barData} options={barOptions} ref={chartRef} />
+                            ) : (
+                                <Bar
+                                    key="stacked-bar-chart"
+                                    data={{
+                                        labels,
+                                        datasets: [
+                                            { label: 'Income', data: incomes, backgroundColor: '#10b981', borderRadius: 4 },
+                                            { label: 'Expense', data: expenses, backgroundColor: '#f43f5e', borderRadius: 4 },
+                                        ],
+                                    }}
+                                    options={{
+                                        ...barOptions,
+                                        scales: {
+                                            x: { stacked: true, grid: { display: false }, ticks: { font: { family: 'Inter, sans-serif', size: 11 }, color: '#94a3b8' } },
+                                            y: {
+                                                stacked: true,
+                                                border: { dash: [4, 4] },
+                                                grid: { color: '#f1f5f9' },
+                                                ticks: {
+                                                    callback: (v) => formatCurrencyValue(Number(v || 0), currency),
+                                                    color: '#94a3b8',
+                                                    font: { family: 'Inter, sans-serif', size: 11 },
+                                                },
+                                            },
+                                        },
+                                    }}
+                                />
+                            )}
                         </div>
                     </div>
                 </div>
-
             </div>
         </AuthenticatedLayout>
     );

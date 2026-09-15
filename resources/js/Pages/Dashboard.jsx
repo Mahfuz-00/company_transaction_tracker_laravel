@@ -128,7 +128,7 @@ export default function Dashboard({ auth, transactions, currentBalance, monthInc
 
     if (!currency || typeof currency !== 'object') {
         return (
-            <AuthenticatedLayout user={auth.user} header={<h2 className="font-bold text-2xl text-slate-900 tracking-tight">Financial Overview</h2>}>
+            <AuthenticatedLayout user={auth?.user} header={<h2 className="font-bold text-2xl text-slate-900 tracking-tight">Financial Overview</h2>}>
                 <div className="flex items-center justify-center min-h-[450px]">
                     <div className="flex flex-col items-center gap-3 p-8 rounded-2xl bg-white/60 backdrop-blur-md border border-slate-100 shadow-xl shadow-slate-200/50">
                         <svg className="animate-spin h-9 w-9 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -144,7 +144,7 @@ export default function Dashboard({ auth, transactions, currentBalance, monthInc
 
     return (
         <AuthenticatedLayout
-            user={auth.user}
+            user={auth?.user}
             header={
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div>

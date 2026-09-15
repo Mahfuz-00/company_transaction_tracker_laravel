@@ -35,7 +35,7 @@ export default function AddTransaction({ auth }) {
 
     return (
         <AuthenticatedLayout 
-            user={auth.user} 
+            user={auth?.user} 
             header={<h2 className="font-bold text-2xl text-slate-800 tracking-tight">Add Transaction</h2>}
         >
             <Head title="Add Transaction" />
