@@ -166,7 +166,7 @@ export default function Dashboard({ auth, transactions, currentBalance, monthInc
                     />
                     <StatCard 
                         title="This Month Expense" 
-                        value={`-${formatCurrencyValue(Number(monthExpense || 0), currency || { symbol: '$' })}`} 
+                        value={`${formatCurrencyValue(-Number(monthExpense || 0), currency || { symbol: '$' })}`} 
                         accent="red" 
                     />
                     <StatCard 
