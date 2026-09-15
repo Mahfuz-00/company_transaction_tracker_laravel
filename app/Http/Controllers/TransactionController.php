@@ -44,6 +44,15 @@ class TransactionController extends Controller
             $query->where('amount', '<=', $request->amount_max);
         }
 
+        // Search across item and by_whom
+        if ($request->filled('search')) {
+            $q = $request->search;
+            $query->where(function ($sub) use ($q) {
+                $sub->where('item', 'like', "%{$q}%")
+                    ->orWhere('by_whom', 'like', "%{$q}%");
+            });
+        }
+
         // Sorting: amount asc/desc or default by created_at desc
         if ($request->filled('sort_amount') && in_array(strtolower($request->sort_amount), ['asc', 'desc'])) {
             $query->orderBy('amount', $request->sort_amount);
@@ -52,7 +61,8 @@ class TransactionController extends Controller
         }
 
         // Pagination
-        $perPage = (int) $request->input('per_page', 10);
+        // support 'limit' as alias for per_page
+        $perPage = (int) $request->input('per_page', $request->input('limit', 10));
         $paginator = $query->paginate($perPage)->withQueryString();
 
         // Calculate running balance for the displayed (filtered) list
@@ -72,6 +82,8 @@ class TransactionController extends Controller
                 'running_balance' => $balance,
                 'created_at' => $t->created_at->format('Y-m-d H:i'),
                 'category' => $t->category ?? null,
+                'payment_method' => $t->payment_method ?? 'Cash',
+                'by_whom' => $t->by_whom ?? null,
             ];
         })->reverse()->values();
 
@@ -101,6 +113,11 @@ class TransactionController extends Controller
         ]);
     }
 
+    public function create(Request $request)
+    {
+        return Inertia::render('AddTransaction');
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -109,6 +126,11 @@ class TransactionController extends Controller
             'amount' => 'required|numeric|min:0.01',
             'category' => 'nullable|string|max:100',
         ]);
+
+        $validated = array_merge($validated, $request->validate([
+            'payment_method' => 'nullable|string|max:100',
+            'by_whom' => 'nullable|string|max:255',
+        ]));
 
         $request->user()->transactions()->create($validated);
 

@@ -15,9 +15,9 @@ class DatabaseSeeder extends Seeder
         $userRole = Role::firstOrCreate(['name' => 'user']);
 
         $user = User::firstOrCreate([
-            'email' => 'user@example.com',
+            'email' => 'mahfuz@example.com',
         ], [
-            'name' => 'John Doe',
+            'name' => 'Md. Abdullah al Mahfuz',
             'password' => bcrypt('password123'),
         ]);
 

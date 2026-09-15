@@ -34,12 +34,16 @@ class TwoMonthsTransactionsSeeder extends Seeder
             for ($i = 0; $i < $count; $i++) {
                 $type = rand(0,1) ? 'in' : 'out';
                 $amount = rand(100, 10000) / 100; // 1.00 - 100.00
+                $paymentMethods = ['Cash', 'Bank', 'Mobile Banking'];
+                $byWhomNames = ['Supplier', 'Client', 'Friend', 'System'];
                 $entries[] = [
                     'user_id' => $user->id,
                     'item' => ($type === 'in' ? 'Income' : 'Expense') . ' sample',
                     'type' => $type,
                     'amount' => $amount,
                     'category' => $type === 'in' ? 'salary' : 'misc',
+                    'payment_method' => $paymentMethods[array_rand($paymentMethods)],
+                    'by_whom' => $byWhomNames[array_rand($byWhomNames)],
                     'created_at' => $current->format('Y-m-d H:i:s'),
                     'updated_at' => $current->format('Y-m-d H:i:s'),
                 ];
