@@ -6,6 +6,14 @@ use Spatie\Permission\Models\Role;
 
 return [
 
+    /*
+     * Role automatically granted to accounts created through public
+     * self-registration. Users added by a Super Admin via the User Manager
+     * receive whatever roles the admin selects instead.
+     */
+
+    'registration_default_role' => env('REGISTRATION_DEFAULT_ROLE', 'Student'),
+
     'models' => [
 
         /*

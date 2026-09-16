@@ -11,13 +11,28 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     public function run()
     {
-        // Define permissions grouped by module
+        // Define permissions grouped by module.
+        // These names must match the route middleware in routes/web.php and
+        // the `permission` keys in resources/js/Utils/navItems.js.
         $definitions = [
             'transactions' => [
                 'transactions.view', 'transactions.create', 'transactions.edit', 'transactions.delete'
             ],
             'meals' => [
-                'meals.view', 'meals.entry', 'meals.manage'
+                'meals.view', 'meals.entry', 'meals.manage',
+                'meals.deposit', 'meals.expense', 'meals.reports',
+            ],
+            'students' => [
+                'students.view', 'students.manage',
+            ],
+            'departments' => [
+                'departments.view', 'departments.manage',
+            ],
+            'vendors' => [
+                'vendors.view', 'vendors.manage',
+            ],
+            'institution' => [
+                'institution.view', 'institution.manage',
             ],
             'users' => [
                 'users.view', 'users.create', 'users.edit', 'users.delete'
@@ -45,11 +60,22 @@ class RolesAndPermissionsSeeder extends Seeder
         // Super Admin gets all permissions
         $super->syncPermissions($allPermissions);
 
-        // Meal Manager gets most transaction and meal permissions
-        $managerPerms = array_merge($definitions['transactions'], $definitions['meals'], ['users.view']);
+        // Meal Manager runs the mess: full transaction + meal rights, plus the
+        // ability to see the roster. Deliberately excludes roles.manage and
+        // users.create/delete so an admin can still revoke access.
+        $managerPerms = array_merge(
+            $definitions['transactions'],
+            $definitions['meals'],
+            $definitions['students'],
+            $definitions['departments'],
+            // Vendors are operational data a manager needs; institution
+            // configuration stays with Super Admin.
+            $definitions['vendors'],
+            ['users.view', 'institution.view']
+        );
         $manager->syncPermissions($managerPerms);
 
-        // Student gets limited view permissions
+        // Student gets limited view permissions only.
         $student->syncPermissions(['meals.view', 'transactions.view']);
 
         // Assign Super Admin to first seed user (if exists)

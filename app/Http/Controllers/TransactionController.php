@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\MealEntry;
+use App\Models\MealRate;
+use App\Models\Student;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -115,23 +118,43 @@ class TransactionController extends Controller
 
     public function create(Request $request)
     {
-        return Inertia::render('AddTransaction');
+        return Inertia::render('AddTransaction', [
+            // Needed so a Cash In can be attributed to a student.
+            'students' => Student::active()->orderBy('name')->get(['id', 'name', 'roll']),
+        ]);
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'item' => 'required|string|max:255',
-            'type' => 'required|in:in,out',
-            'amount' => 'required|numeric|min:0.01',
-            'category' => 'nullable|string|max:100',
+            'item' => ['required', 'string', 'max:255'],
+            'type' => ['required', 'in:in,out'],
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'payment_method' => ['nullable', 'string', 'max:100'],
+            'by_whom' => ['nullable', 'string', 'max:255'],
+            // Dorm context. student_id only makes sense on money coming in.
+            'student_id' => ['nullable', 'exists:students,id', 'required_if:type,in'],
+            'payee' => ['nullable', 'string', 'max:255'],
+            'reason' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $validated = array_merge($validated, $request->validate([
-            'payment_method' => 'nullable|string|max:100',
-            'by_whom' => 'nullable|string|max:255',
-        ]));
+        // A Cash In is money from a student; a Cash Out has a payee vendor.
+        $validated['source'] = 'manual';
+        $validated['student_id'] = $validated['type'] === 'in'
+            ? ($validated['student_id'] ?? null)
+            : null;
 
+        // Mirror the student name into by_whom so the existing list view,
+        // which reads that column, keeps showing who the money came from.
+        if (! empty($validated['student_id'])) {
+            $validated['by_whom'] = Student::find($validated['student_id'])?->name
+                ?? $validated['by_whom'];
+        }
+
+        // Transaction::$fillable excludes user_id for mass assignment, but the
+        // column is NOT NULL. Setting the relation explicitly is what actually
+        // populates it - omitting this made every manual entry fail.
         $request->user()->transactions()->create($validated);
 
         return redirect()->back()->with('success', 'Transaction logged successfully.');
@@ -238,12 +261,97 @@ class TransactionController extends Controller
             ->orderBy('period', 'asc')
             ->get();
 
+        // --- Dorm-wide figures (the pool is shared, not per-user) ---------
+        $dormIn = (float) Transaction::query()->deposits()
+            ->whereBetween('created_at', [$start, $end])->sum('amount');
+        $dormOut = (float) Transaction::query()->expenses()
+            ->whereBetween('created_at', [$start, $end])->sum('amount');
+
+        $mealsInRange = (int) MealEntry::query()
+            ->whereBetween('date', [$start, $end])
+            ->selectRaw('COALESCE(SUM(breakfast + lunch + dinner), 0) as total')
+            ->first()->total;
+
+        $mealByType = MealEntry::query()
+            ->whereBetween('date', [$start, $end])
+            ->selectRaw('COALESCE(SUM(breakfast), 0) as breakfast')
+            ->selectRaw('COALESCE(SUM(lunch), 0) as lunch')
+            ->selectRaw('COALESCE(SUM(dinner), 0) as dinner')
+            ->first();
+
+        // Meals per day (or per month for long ranges) so the trend chart lines
+        // up with the money trend chart.
+        $mealGroupExpr = $useDaily
+            ? ($driver === 'sqlite' ? "strftime('%Y-%m-%d', date)" : 'DATE(date)')
+            : ($driver === 'sqlite' ? "strftime('%Y-%m', date)" : "DATE_FORMAT(date, '%Y-%m')");
+
+        $mealTrend = MealEntry::query()
+            ->whereBetween('date', [$start, $end])
+            ->select(
+                DB::raw("{$mealGroupExpr} as period"),
+                DB::raw('COALESCE(SUM(breakfast), 0) as breakfast'),
+                DB::raw('COALESCE(SUM(lunch), 0) as lunch'),
+                DB::raw('COALESCE(SUM(dinner), 0) as dinner'),
+                DB::raw('COALESCE(SUM(breakfast + lunch + dinner), 0) as total')
+            )
+            ->groupBy('period')
+            ->orderBy('period', 'asc')
+            ->get();
+
+        // Where the money went, by category.
+        $expenseByCategory = Transaction::query()
+            ->expenses()
+            ->whereBetween('created_at', [$start, $end])
+            ->select('category', DB::raw('COALESCE(SUM(amount), 0) as total'))
+            ->groupBy('category')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($row) => [
+                'category' => $row->category ?: 'Uncategorised',
+                'total' => (float) $row->total,
+            ]);
+
+        // Largest individual outgoings, with payee context.
+        $topExpenses = Transaction::query()
+            ->expenses()
+            ->with('user:id,name')
+            ->whereBetween('created_at', [$start, $end])
+            ->orderByDesc('amount')
+            ->limit(8)
+            ->get()
+            ->map(fn (Transaction $tx) => [
+                'id' => $tx->id,
+                'item' => $tx->item,
+                'payee' => $tx->payee,
+                'category' => $tx->category,
+                'amount' => (float) $tx->amount,
+                'date' => $tx->created_at->format('M j, Y'),
+            ]);
+
         return Inertia::render('Analytics', [
             'totalIn' => (float)$totalIn,
             'totalOut' => (float)$totalOut,
             'netBalance' => (float)$netBalance,
             'currentBalance' => (float)$currentBalance,
             'monthlySummary' => $monthlySummary,
+            'dorm' => [
+                'deposits' => $dormIn,
+                'expenses' => $dormOut,
+                'pool_balance' => round($dormIn - $dormOut, 2),
+                'meals' => $mealsInRange,
+                'breakfast' => (int) $mealByType->breakfast,
+                'lunch' => (int) $mealByType->lunch,
+                'dinner' => (int) $mealByType->dinner,
+                'cost_per_meal' => (float) (MealRate::query()
+                    ->whereNotNull('cost_per_meal')
+                    ->orderByDesc('to_date')
+                    ->first()->cost_per_meal ?? 0),
+                'active_students' => Student::active()->count(),
+            ],
+            'mealTrend' => $mealTrend,
+            'expenseByCategory' => $expenseByCategory,
+            'topExpenses' => $topExpenses,
+            'grouping' => $useDaily ? 'daily' : 'monthly',
             'activeFilters' => [
                 'period' => $activePeriod,
                 'from' => $start->toDateString(),

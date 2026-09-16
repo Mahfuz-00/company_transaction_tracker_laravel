@@ -33,9 +33,15 @@ function abbreviateEastAsian(value, precision=2) {
 
 export default function formatNumber(value, settings = {}, currencies = []) {
     const s = settings || {};
-    const precision = Number(s.decimal_precision ?? 2);
     const decimalSep = s.decimal_separator ?? '.';
     const thousandSep = s.thousands_separator === undefined ? ',' : s.thousands_separator;
+
+    // Money in a dense table doesn't need cents on every row. `compact` drops
+    // the decimals, which keeps columns narrow and easy to scan. Pair it with
+    // `abbreviated` + `abbreviations` for K/Mil scales on big figures.
+    const precision = Number(
+        s.precision ?? (s.compact ? 0 : s.decimal_precision ?? 2)
+    );
 
     let symbol = '';
     if (s.currency_code) {
@@ -43,8 +49,8 @@ export default function formatNumber(value, settings = {}, currencies = []) {
         if (c) symbol = c.symbol || c.code || '';
     }
 
-    // Abbreviated formats
-    if (s.abbreviations && s.abbreviated) {
+    // Abbreviated formats (compact implied)
+    if (s.abbreviated && s.abbreviations !== false) {
         let formatted;
         switch (s.numbering_system) {
             case 'indian': formatted = abbreviateIndian(value, precision); break;
@@ -60,11 +66,8 @@ export default function formatNumber(value, settings = {}, currencies = []) {
     // Standard full number formatting: first create with US separators, then replace
     const useThousand = thousandSep || '';
     const formatted = numberWithSeparators(value, '.', ',');
-    // replace separators accordingly
-    let [intPart, decPart] = formatted.split('.');
-    if (decimalSep !== '.') {
-        // swap decimal sep
-    }
+    // Swap the US separators produced above for the configured ones.
+    const [intPart, decPart] = formatted.split('.');
     const intWithCustom = intPart.replace(/,/g, useThousand);
     const final = precision > 0 ? intWithCustom + (decimalSep + (decPart || '').slice(0, precision)) : intWithCustom;
 

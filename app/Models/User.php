@@ -22,7 +22,10 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'phone',
+        'status',
         'password',
+        'last_login_at',
     ];
 
     /**
@@ -42,8 +45,27 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'last_login_at' => 'datetime',
         'password' => 'hashed',
     ];
+
+    /**
+     * Is the account currently active?
+     */
+    public function isActive(): bool
+    {
+        return ($this->status ?? 'active') === 'active';
+    }
+
+    /**
+     * Does this user hold the protected Super Admin role?
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->roles->contains(function ($role) {
+            return in_array(strtolower($role->name), ['super admin', 'superadmin'], true);
+        });
+    }
 
     /**
      * Get the transactions for the user.

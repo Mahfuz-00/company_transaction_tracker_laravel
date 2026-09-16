@@ -4,7 +4,7 @@ import { useState } from 'react';
 import useCurrencySettings from '@/Utils/useCurrency';
 import Button from '@/Components/UI/Button';
 
-export default function AddTransaction({ auth }) {
+export default function AddTransaction({ auth, students = [] }) {
     const { data, setData, post, processing, reset, errors } = useForm({
         item: '',
         by_whom: '',
@@ -12,13 +12,19 @@ export default function AddTransaction({ auth }) {
         amount: '',
         category: '',
         payment_method: 'Cash',
+        // Dorm context: who paid in, or which vendor was paid.
+        student_id: '',
+        payee: '',
+        reason: '',
     });
+
+    const isCashIn = data.type === 'in';
 
     const [alert, setAlert] = useState(null);
     const [currencySettings] = useCurrencySettings();
 
-    const displayCurrencySymbol = (currencySettings && (currencySettings.symbol || currencySettings.sign)) 
-        ? (currencySettings.symbol || currencySettings.sign) 
+    const displayCurrencySymbol = (currencySettings && (currencySettings.symbol || currencySettings.sign))
+        ? (currencySettings.symbol || currencySettings.sign)
         : '$';
 
     const handleSubmit = (e) => {
@@ -34,8 +40,8 @@ export default function AddTransaction({ auth }) {
     };
 
     return (
-        <AuthenticatedLayout 
-            user={auth?.user} 
+        <AuthenticatedLayout
+            user={auth?.user}
             header={<h2 className="font-bold text-2xl text-slate-800 tracking-tight">Add Transaction</h2>}
         >
             <Head title="Add Transaction" />
@@ -43,7 +49,7 @@ export default function AddTransaction({ auth }) {
             <div className="py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto w-full">
                 {/* Main Card */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 sm:p-8 transition-all">
-                    
+
                     {/* Header Section */}
                     <div className="mb-8 pb-5 border-b border-slate-100 flex items-center justify-between">
                         <div>
@@ -60,7 +66,7 @@ export default function AddTransaction({ auth }) {
                     </div>
 
                     <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                        
+
                         {/* Transaction Type Radio Options */}
                         <div className="md:col-span-2">
                             <label className="text-sm font-semibold text-slate-700 mb-2.5 block">
@@ -68,26 +74,26 @@ export default function AddTransaction({ auth }) {
                             </label>
                             <div className="flex items-center gap-6">
                                 <label className="inline-flex items-center gap-2.5 cursor-pointer select-none">
-                                    <input 
-                                        type="radio" 
-                                        name="type" 
-                                        value="in" 
-                                        checked={data.type === 'in'} 
-                                        onChange={() => setData('type', 'in')} 
-                                        disabled={processing} 
+                                    <input
+                                        type="radio"
+                                        name="type"
+                                        value="in"
+                                        checked={data.type === 'in'}
+                                        onChange={() => setData('type', 'in')}
+                                        disabled={processing}
                                         className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
                                     />
                                     <span className="text-sm font-semibold text-emerald-700">Cash In (+)</span>
                                 </label>
 
                                 <label className="inline-flex items-center gap-2.5 cursor-pointer select-none">
-                                    <input 
-                                        type="radio" 
-                                        name="type" 
-                                        value="out" 
-                                        checked={data.type === 'out'} 
-                                        onChange={() => setData('type', 'out')} 
-                                        disabled={processing} 
+                                    <input
+                                        type="radio"
+                                        name="type"
+                                        value="out"
+                                        checked={data.type === 'out'}
+                                        onChange={() => setData('type', 'out')}
+                                        disabled={processing}
                                         className="w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 cursor-pointer"
                                     />
                                     <span className="text-sm font-semibold text-rose-700">Cash Out (-)</span>
@@ -101,37 +107,100 @@ export default function AddTransaction({ auth }) {
                             <label className="text-sm font-semibold text-slate-700 mb-1.5 block">
                                 Item Description <span className="text-rose-500">*</span>
                             </label>
-                            <input 
-                                type="text" 
-                                required 
-                                placeholder="e.g., Office Supplies" 
+                            <input
+                                type="text"
+                                required
+                                placeholder="e.g., Office Supplies"
                                 className={`w-full border rounded-xl shadow-sm px-4 h-11 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
                                     errors.item ? 'border-rose-300 bg-rose-50/30' : 'border-slate-300 bg-white'
                                 }`}
-                                value={data.item} 
-                                onChange={(e) => setData('item', e.target.value)} 
-                                disabled={processing} 
+                                value={data.item}
+                                onChange={(e) => setData('item', e.target.value)}
+                                disabled={processing}
                             />
                             {errors.item && <span className="text-rose-600 text-xs mt-1.5 font-medium block">{errors.item}</span>}
                         </div>
 
-                        {/* By Whom */}
-                        <div>
+                        {/* Counterparty: student for Cash In, vendor for Cash Out */}
+                        {isCashIn ? (
+                            <div>
+                                <label className="text-sm font-semibold text-slate-700 mb-1.5 block">
+                                    Student <span className="text-rose-500">*</span>
+                                </label>
+                                <select
+                                    required
+                                    className={`w-full border rounded-xl shadow-sm px-4 h-11 text-slate-900 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
+                                        errors.student_id ? 'border-rose-300 bg-rose-50/30' : 'border-slate-300 bg-white'
+                                    }`}
+                                    value={data.student_id}
+                                    onChange={(e) => {
+                                        const id = e.target.value;
+                                        setData((current) => ({
+                                            ...current,
+                                            student_id: id,
+                                            // Keep the legacy column in step so older views still work.
+                                            by_whom: students.find((s) => String(s.id) === String(id))?.name || '',
+                                        }));
+                                    }}
+                                    disabled={processing}
+                                >
+                                    <option value="">— Select a student —</option>
+                                    {students.map((student) => (
+                                        <option key={student.id} value={student.id}>
+                                            {student.roll ? `${student.name} (${student.roll})` : student.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {errors.student_id && <span className="text-rose-600 text-xs mt-1.5 font-medium block">{errors.student_id}</span>}
+                                <p className="text-xs text-slate-400 mt-1">
+                                    The student this money came from.
+                                </p>
+                            </div>
+                        ) : (
+                            <div>
+                                <label className="text-sm font-semibold text-slate-700 mb-1.5 block">
+                                    Paid To (Vendor) <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="e.g., Rahim Store"
+                                    className={`w-full border rounded-xl shadow-sm px-4 h-11 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
+                                        errors.payee ? 'border-rose-300 bg-rose-50/30' : 'border-slate-300 bg-white'
+                                    }`}
+                                    value={data.payee}
+                                    onChange={(e) => {
+                                        setData((current) => ({
+                                            ...current,
+                                            payee: e.target.value,
+                                            by_whom: e.target.value,
+                                        }));
+                                    }}
+                                    disabled={processing}
+                                />
+                                {errors.payee && <span className="text-rose-600 text-xs mt-1.5 font-medium block">{errors.payee}</span>}
+                                <p className="text-xs text-slate-400 mt-1">
+                                    Who was paid for this purchase.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Reason - optional context on either direction */}
+                        <div className="md:col-span-2">
                             <label className="text-sm font-semibold text-slate-700 mb-1.5 block">
-                                By Whom <span className="text-rose-500">*</span>
+                                Reason / Notes
                             </label>
-                            <input 
-                                type="text" 
-                                required 
-                                placeholder="e.g., Supplier / Person Name" 
-                                className={`w-full border rounded-xl shadow-sm px-4 h-11 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
-                                    errors.by_whom ? 'border-rose-300 bg-rose-50/30' : 'border-slate-300 bg-white'
+                            <textarea
+                                rows={2}
+                                placeholder={isCashIn ? 'e.g., Advance deposit for November' : 'e.g., Weekly vegetable market run'}
+                                className={`w-full border rounded-xl shadow-sm px-4 py-2.5 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all ${
+                                    errors.reason ? 'border-rose-300 bg-rose-50/30' : 'border-slate-300 bg-white'
                                 }`}
-                                value={data.by_whom} 
-                                onChange={(e) => setData('by_whom', e.target.value)} 
-                                disabled={processing} 
+                                value={data.reason}
+                                onChange={(e) => setData('reason', e.target.value)}
+                                disabled={processing}
                             />
-                            {errors.by_whom && <span className="text-rose-600 text-xs mt-1.5 font-medium block">{errors.by_whom}</span>}
+                            {errors.reason && <span className="text-rose-600 text-xs mt-1.5 font-medium block">{errors.reason}</span>}
                         </div>
 
                         {/* Amount Field with Prefix */}

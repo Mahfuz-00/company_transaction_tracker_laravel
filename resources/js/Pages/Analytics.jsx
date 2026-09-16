@@ -19,7 +19,21 @@ import { Doughnut, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Title, Tooltip, Legend);
 
-export default function Analytics({ auth, totalIn = 0, totalOut = 0, netBalance = 0, monthlySummary = [], currentBalance = 0, activeFilters = {}, previousPeriod = {} }) {
+export default function Analytics({
+    auth,
+    totalIn = 0,
+    totalOut = 0,
+    netBalance = 0,
+    monthlySummary = [],
+    currentBalance = 0,
+    activeFilters = {},
+    previousPeriod = {},
+    dorm = {},
+    mealTrend = [],
+    expenseByCategory = [],
+    topExpenses = [],
+    grouping = 'daily',
+}) {
     const [currency] = useCurrencySettings();
     const { data, setData } = useForm({
         period: activeFilters.period || 'current_month',
@@ -164,6 +178,94 @@ export default function Analytics({ auth, totalIn = 0, totalOut = 0, netBalance 
             },
         },
     };
+
+    /* --- Dorm meal trend: stacked B/L/D bars --- */
+    const mealTrendLabels = mealTrend.map((m) => m.period);
+
+    const mealTrendData = {
+        labels: mealTrendLabels,
+        datasets: [
+            {
+                label: 'Breakfast',
+                data: mealTrend.map((m) => Number(m.breakfast) || 0),
+                backgroundColor: '#f59e0b',
+                borderRadius: 3,
+                stack: 'meals',
+            },
+            {
+                label: 'Lunch',
+                data: mealTrend.map((m) => Number(m.lunch) || 0),
+                backgroundColor: '#0ea5e9',
+                borderRadius: 3,
+                stack: 'meals',
+            },
+            {
+                label: 'Dinner',
+                data: mealTrend.map((m) => Number(m.dinner) || 0),
+                backgroundColor: '#8b5cf6',
+                borderRadius: 3,
+                stack: 'meals',
+            },
+        ],
+    };
+
+    const mealTrendOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    usePointStyle: true,
+                    padding: 16,
+                    font: { family: 'Inter, sans-serif', size: 11, weight: '500' },
+                    color: '#64748b',
+                },
+            },
+            tooltip: {
+                backgroundColor: '#0f172a',
+                padding: 12,
+                cornerRadius: 10,
+                callbacks: {
+                    // Plain counts - these are meals, not money.
+                    label: (ctx) => ` ${ctx.dataset.label}: ${ctx.parsed.y} meals`,
+                },
+            },
+        },
+        scales: {
+            x: {
+                stacked: true,
+                grid: { display: false },
+                ticks: { font: { size: 10 }, color: '#94a3b8' },
+            },
+            y: {
+                stacked: true,
+                beginAtZero: true,
+                grid: { color: '#f1f5f9' },
+                ticks: { font: { size: 10 }, color: '#94a3b8', precision: 0 },
+            },
+        },
+    };
+
+    /* --- Expense by category --- */
+    const categoryPalette = [
+        '#6366f1', '#f43f5e', '#10b981', '#f59e0b',
+        '#0ea5e9', '#8b5cf6', '#14b8a6', '#64748b',
+    ];
+
+    const categoryData = {
+        labels: expenseByCategory.map((e) => e.category),
+        datasets: [
+            {
+                data: expenseByCategory.map((e) => Number(e.total) || 0),
+                backgroundColor: categoryPalette.slice(0, expenseByCategory.length),
+                borderWidth: 2,
+                borderColor: '#ffffff',
+            },
+        ],
+    };
+
+    const categoryTotal = expenseByCategory.reduce((sum, e) => sum + Number(e.total || 0), 0);
 
     const barOptions = {
         ...commonChartOptions,
@@ -369,6 +471,171 @@ export default function Analytics({ auth, totalIn = 0, totalOut = 0, netBalance 
                         </div>
                     </div>
                 </div>
+
+                {/* Dorm-wide metrics */}
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pool Balance</p>
+                        <h3 className={`mt-1 text-2xl font-extrabold ${(dorm.pool_balance ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {formatCurrencyValue(Number(dorm.pool_balance || 0), currency)}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                            {formatCurrencyValue(Number(dorm.deposits || 0), currency)} in ·{' '}
+                            {formatCurrencyValue(Number(dorm.expenses || 0), currency)} out
+                        </p>
+                    </div>
+
+                    <div className="rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Meals</p>
+                        <h3 className="mt-1 text-2xl font-extrabold text-indigo-600">
+                            {dorm.meals ?? 0}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                            {dorm.breakfast ?? 0}B · {dorm.lunch ?? 0}L · {dorm.dinner ?? 0}D
+                        </p>
+                    </div>
+
+                    <div className="rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Cost / Meal</p>
+                        <h3 className="mt-1 text-2xl font-extrabold text-slate-900">
+                            {formatCurrencyValue(Number(dorm.cost_per_meal || 0), currency)}
+                        </h3>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                            {formatCurrencyValue(Number(dorm.meals || 0) * Number(dorm.cost_per_meal || 0), currency)} total cost
+                        </p>
+                    </div>
+
+                    <div className="rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Active Students</p>
+                        <h3 className="mt-1 text-2xl font-extrabold text-slate-900">{dorm.active_students ?? 0}</h3>
+                        <p className="mt-0.5 text-xs text-slate-400">Currently sharing meals</p>
+                    </div>
+                </div>
+
+                {/* Meal trend + expense breakdown */}
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+                    <div className="rounded-2xl border-slate-200/80 bg-white p-6 shadow-sm lg:col-span-3">
+                        <div>
+                            <h3 className="text-lg font-bold tracking-tight text-slate-900">Meal Consumption Trend</h3>
+                            <p className="mt-1 text-xs text-slate-500">
+                                Meals eaten per {grouping} period, split by type
+                            </p>
+                        </div>
+                        <div className="my-4 h-64">
+                            {mealTrend.length > 0 ? (
+                                <Bar data={mealTrendData} options={mealTrendOptions} />
+                            ) : (
+                                <div className="flex h-full items-center justify-center text-xs italic text-slate-400">
+                                    No meal entries recorded in this period.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="rounded-2xl border-slate-200/80 bg-white p-6 shadow-sm lg:col-span-2">
+                        <div>
+                            <h3 className="text-lg font-bold tracking-tight text-slate-900">Where Money Went</h3>
+                            <p className="mt-1 text-xs text-slate-500">Expenses grouped by category</p>
+                        </div>
+
+                        {expenseByCategory.length > 0 ? (
+                            <>
+                                <div className="relative my-4 h-48">
+                                    <Doughnut
+                                        data={categoryData}
+                                        options={{
+                                            ...doughnutOptions,
+                                            plugins: {
+                                                ...doughnutOptions.plugins,
+                                                doughnutCenter: {
+                                                    text: formatCurrencyValue(categoryTotal, currency),
+                                                    color: '#0f172a',
+                                                },
+                                            },
+                                        }}
+                                        plugins={[doughnutCenterPlugin]}
+                                    />
+                                </div>
+
+                                <ul className="space-y-2">
+                                    {expenseByCategory.slice(0, 5).map((row, index) => {
+                                        const pct = categoryTotal > 0
+                                            ? Math.round((Number(row.total) / categoryTotal) * 100)
+                                            : 0;
+
+                                        return (
+                                            <li key={row.category} className="space-y-1">
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className="flex items-center gap-2 font-semibold text-slate-700">
+                                                        <span
+                                                            className="h-2.5 w-2.5 rounded-full"
+                                                            style={{ backgroundColor: categoryPalette[index % categoryPalette.length] }}
+                                                        />
+                                                        {row.category}
+                                                    </span>
+                                                    <span className="font-bold text-slate-800">
+                                                        {formatCurrencyValue(Number(row.total), currency)}
+                                                        <span className="ml-1.5 font-normal text-slate-400">{pct}%</span>
+                                                    </span>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </>
+                        ) : (
+                            <div className="flex h-64 items-center justify-center text-xs italic text-slate-400">
+                                No expenses in this period.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Largest expenses */}
+                {topExpenses.length > 0 && (
+                    <div className="overflow-hidden rounded-2xl border-slate-200/80 bg-white shadow-sm">
+                        <div className="border-b border-slate-100 px-6 py-4">
+                            <h3 className="text-base font-bold text-slate-900">Largest Expenses</h3>
+                            <p className="text-xs text-slate-500">Biggest single outgoings in this period</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-left">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                        <th className="px-6 py-2.5">Date</th>
+                                        <th className="px-6 py-2.5">Description</th>
+                                        <th className="px-6 py-2.5">Paid To</th>
+                                        <th className="px-6 py-2.5">Category</th>
+                                        <th className="px-6 py-2.5 text-right">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-sm">
+                                    {topExpenses.map((tx) => (
+                                        <tr key={tx.id} className="transition-colors hover:bg-slate-50/60">
+                                            <td className="whitespace-nowrap px-6 py-3 text-xs text-slate-500">{tx.date}</td>
+                                            <td className="px-6 py-3 font-medium text-slate-800">{tx.item}</td>
+                                            <td className="px-6 py-3 text-xs text-slate-500">
+                                                {tx.payee || <span className="text-slate-300">—</span>}
+                                            </td>
+                                            <td className="px-6 py-3 text-xs text-slate-500">
+                                                {tx.category ? (
+                                                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 font-medium text-slate-600">
+                                                        {tx.category}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-300">—</span>
+                                                )}
+                                            </td>
+                                            <td className="whitespace-nowrap px-6 py-3 text-right font-bold text-rose-600">
+                                                −{formatCurrencyValue(Number(tx.amount), currency)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
 
                 {/* Charts Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">

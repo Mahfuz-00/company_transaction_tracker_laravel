@@ -1,404 +1,570 @@
+import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { Head, useForm } from '@inertiajs/react';
-import { Inertia } from '@inertiajs/inertia';
-import { useState, useEffect, useRef } from 'react';
-import { useCurrencySettings, formatCurrencyValue } from '@/Utils/useCurrency';
-import Button from '@/Components/UI/Button';
-import StatCard from '@/Components/StatCard';
+import useMoney from '@/Utils/useMoney';
+import { Head, Link } from '@inertiajs/react';
+import {
+    Chart as ChartJS,
+    ArcElement,
+    CategoryScale,
+    LinearScale,
+    BarElement,
+    LineElement,
+    PointElement,
+    Title,
+    Tooltip,
+    Legend,
+    Filler,
+} from 'chart.js';
+import { Doughnut, Bar } from 'react-chartjs-2';
 
-export default function Dashboard({ auth, transactions, currentBalance, monthIncome, monthExpense }) {
-    // Standardize pagination metadata detection across API resources and direct LengthAwarePaginator
-    const paginationMeta = {
-        current_page: Number(transactions?.meta?.current_page ?? transactions?.current_page ?? 1),
-        last_page: Number(transactions?.meta?.last_page ?? transactions?.last_page ?? 1),
-        per_page: Number(transactions?.meta?.per_page ?? transactions?.per_page ?? 10),
-        total: Number(transactions?.meta?.total ?? transactions?.total ?? 0),
+ChartJS.register(
+    ArcElement,
+    CategoryScale,
+    LinearScale,
+    BarElement,
+    LineElement,
+    PointElement,
+    Filler,
+    Title,
+    Tooltip,
+    Legend
+);
+
+/* ------------------------------------------------------------------ *
+ * Metric card
+ * ------------------------------------------------------------------ */
+
+function MetricCard({ label, value, hint, tone = 'slate', icon }) {
+    const tones = {
+        slate: 'text-slate-900',
+        indigo: 'text-indigo-600',
+        emerald: 'text-emerald-600',
+        rose: 'text-rose-600',
+        amber: 'text-amber-600',
     };
 
-    // Initialize per_page: prefer URL query param, fallback to localStorage, default to 10
-    let initialPerPage = '10';
-    try {
-        const url = typeof window !== 'undefined' ? new URL(window.location.href) : null;
-        const qp = url ? (url.searchParams.get('per_page') || url.searchParams.get('limit')) : null;
-        if (qp) {
-            initialPerPage = qp;
-        } else {
-            const stored = localStorage.getItem('per_page') || localStorage.getItem('transactions_per_page');
-            if (stored) initialPerPage = stored;
-        }
-    } catch (e) { /* ignore */ }
-
-    const { data: filters, setData: setFilter, processing: filtering, reset: resetFilters } = useForm({
-        date_from: '',
-        date_to: '',
-        type: 'all',
-        search: '',
-        amount_min: '',
-        amount_max: '',
-        sort_amount: '',
-        per_page: initialPerPage,
-    });
-
-    const [filteringLoading, setFilteringLoading] = useState(false);
-    const [sortingLoading, setSortingLoading] = useState(false);
-
-    const [alert, setAlert] = useState(null);
-    const [localTransactions, setLocalTransactions] = useState([]);
-    const [visibleIds, setVisibleIds] = useState(new Set());
-    const [currency] = useCurrencySettings();
-    const [blurAmounts, setBlurAmounts] = useState(() => {
-        try { return JSON.parse(localStorage.getItem('blurAmounts')) !== false; } catch (e) { return true; }
-    });
-    const [revealedAmountId, setRevealedAmountId] = useState(null);
-    const [revealedBalanceId, setRevealedBalanceId] = useState(null);
-    const mountedRef = useRef(false);
-    const prevIdsRef = useRef(new Set());
-
-    // Sync incoming prop updates into localTransactions and animate new rows
-    useSyncTransactions(transactions, setLocalTransactions, computeRunningBalances, setVisibleIds, mountedRef, prevIdsRef);
-
-    const handleFilterSubmit = (e) => {
-        if (e) e.preventDefault();
-
-        let from = filters.date_from || '';
-        let to = filters.date_to || '';
-        if (from && !to) to = from;
-        if (to && !from) from = to;
-        if (from && to && from > to) { const tmp = from; from = to; to = tmp; }
-
-        const min = filters.amount_min !== '' ? filters.amount_min : undefined;
-        const max = filters.amount_max !== '' ? filters.amount_max : undefined;
-
-        const params = {
-            search: filters.search || undefined,
-            date_from: from || undefined,
-            date_to: to || undefined,
-            type: filters.type && filters.type !== 'all' ? filters.type : undefined,
-            amount_min: min,
-            amount_max: max,
-            sort_amount: filters.sort_amount || undefined,
-            per_page: filters.per_page || undefined,
-            page: 1,
-        };
-
-        setFilteringLoading(true);
-        Inertia.get(route('dashboard'), params, {
-            preserveState: false,
-            preserveScroll: true,
-            onFinish: () => setFilteringLoading(false),
-            onCancel: () => setFilteringLoading(false),
-        });
-    };
-
-    const handleClearFilters = () => {
-        resetFilters();
-        try {
-            const stored = localStorage.getItem('per_page') || localStorage.getItem('transactions_per_page');
-            if (stored) setFilter('per_page', stored);
-        } catch (e) {}
-        setFilteringLoading(true);
-        Inertia.get(route('dashboard'), { per_page: filters.per_page, page: 1 }, { preserveState: false, preserveScroll: true, onFinish: () => setFilteringLoading(false) });
-    };
-
-    const getPaginationParams = () => ({
-        search: filters.search || undefined,
-        date_from: filters.date_from || undefined,
-        date_to: filters.date_to || undefined,
-        type: filters.type && filters.type !== 'all' ? filters.type : undefined,
-        amount_min: filters.amount_min || undefined,
-        amount_max: filters.amount_max || undefined,
-        sort_amount: filters.sort_amount || undefined,
-        per_page: filters.per_page || undefined,
-    });
-
-    const toggleBlurAmounts = () => {
-        const next = !blurAmounts;
-        setBlurAmounts(next);
-        try { localStorage.setItem('blurAmounts', JSON.stringify(next)); } catch (e) {}
-    };
-
-    function computeRunningBalances(list) {
-        let balance = 0;
-        return list.map((t) => {
-            const effective = t.type === 'in' ? Number(t.amount) : -Number(t.amount);
-            balance += effective;
-            return { ...t, running_balance: balance };
-        });
-    }
-
-    if (!currency || typeof currency !== 'object') {
-        return (
-            <AuthenticatedLayout user={auth?.user} header={<h2 className="font-bold text-2xl text-slate-900 tracking-tight">Financial Overview</h2>}>
-                <div className="flex items-center justify-center min-h-[450px]">
-                    <div className="flex flex-col items-center gap-3 p-8 rounded-2xl bg-white/60 backdrop-blur-md border border-slate-100 shadow-xl shadow-slate-200/50">
-                        <svg className="animate-spin h-9 w-9 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                        </svg>
-                        <p className="text-sm font-semibold text-slate-600">Preparing workspace dashboard...</p>
-                    </div>
+    return (
+        <div className="rounded-2xl border-slate-200 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        {label}
+                    </p>
+                    <p className={`mt-1.5 truncate text-2xl font-extrabold ${tones[tone] || tones.slate}`}>
+                        {value}
+                    </p>
+                    {hint && <p className="mt-1 text-xs font-medium text-slate-400">{hint}</p>}
                 </div>
-            </AuthenticatedLayout>
-        );
-    }
+                {icon && (
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-400">
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d={icon} />
+                        </svg>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ------------------------------------------------------------------ *
+ * Page
+ * ------------------------------------------------------------------ */
+
+export default function Dashboard({
+    metrics = {},
+    dailyTrend = [],
+    expenseBreakdown = [],
+    topStudents = [],
+    recentTransactions = [],
+    hasMealRate = false,
+    reconciliation = {},
+}) {
+    const money = useMoney();
+    const [expenseView, setExpenseView] = useState('doughnut');
+
+    const poolHealthy = (metrics.pool_balance ?? 0) >= 0;
+
+    /* --- Daily trend chart: meals as bars, money as a line --- */
+    const trendLabels = dailyTrend.map((d) => d.label);
+
+    const trendData = {
+        labels: trendLabels,
+        datasets: [
+            {
+                type: 'bar',
+                label: 'Meals',
+                data: dailyTrend.map((d) => d.meals),
+                backgroundColor: '#6366f1',
+                borderRadius: 4,
+                yAxisID: 'y',
+                order: 2,
+            },
+            {
+                type: 'line',
+                label: 'Spent',
+                data: dailyTrend.map((d) => d.expenses),
+                borderColor: '#f43f5e',
+                backgroundColor: 'rgba(244,63,94,0.08)',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 2.5,
+                yAxisID: 'y1',
+                order: 1,
+            },
+            {
+                type: 'line',
+                label: 'Deposited',
+                data: dailyTrend.map((d) => d.deposits),
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16,185,129,0.08)',
+                fill: true,
+                tension: 0.35,
+                pointRadius: 2.5,
+                yAxisID: 'y1',
+                order: 0,
+            },
+        ],
+    };
+
+    const trendOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    usePointStyle: true,
+                    padding: 16,
+                    font: { family: 'Inter, sans-serif', size: 11, weight: '500' },
+                    color: '#64748b',
+                },
+            },
+            tooltip: {
+                backgroundColor: '#0f172a',
+                padding: 12,
+                cornerRadius: 10,
+                callbacks: {
+                    label: (ctx) => {
+                        if (ctx.dataset.label === 'Meals') {
+                            return ` ${ctx.dataset.label}: ${ctx.parsed.y}`;
+                        }
+                        return ` ${ctx.dataset.label}: ${money(ctx.parsed.y, false)}`;
+                    },
+                },
+            },
+        },
+        scales: {
+            x: {
+                grid: { display: false },
+                ticks: { font: { size: 10 }, color: '#94a3b8' },
+            },
+            y: {
+                position: 'left',
+                beginAtZero: true,
+                grid: { color: '#f1f5f9' },
+                ticks: { font: { size: 10 }, color: '#94a3b8', precision: 0 },
+                title: { display: true, text: 'Meals', font: { size: 10 }, color: '#94a3b8' },
+            },
+            y1: {
+                position: 'right',
+                beginAtZero: true,
+                grid: { drawOnChartArea: false },
+                ticks: {
+                    font: { size: 10 },
+                    color: '#94a3b8',
+                    callback: (v) => money(v),
+                },
+                title: { display: true, text: 'Money', font: { size: 10 }, color: '#94a3b8' },
+            },
+        },
+    };
+
+    /* --- Expense breakdown --- */
+    const breakdownLabels = expenseBreakdown.map((e) => e.category);
+    const breakdownValues = expenseBreakdown.map((e) => e.total);
+
+    const breakdownPalette = [
+        '#6366f1', '#f43f5e', '#10b981', '#f59e0b',
+        '#0ea5e9', '#8b5cf6', '#14b8a6', '#64748b',
+    ];
+
+    const breakdownData = {
+        labels: breakdownLabels,
+        datasets: [
+            {
+                data: breakdownValues,
+                backgroundColor: breakdownPalette.slice(0, breakdownLabels.length),
+                borderWidth: 2,
+                borderColor: '#ffffff',
+            },
+        ],
+    };
+
+    const breakdownOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '68%',
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    usePointStyle: true,
+                    padding: 12,
+                    boxWidth: 8,
+                    font: { size: 11 },
+                    color: '#64748b',
+                },
+            },
+            tooltip: {
+                backgroundColor: '#0f172a',
+                padding: 12,
+                cornerRadius: 10,
+                callbacks: {
+                    label: (ctx) => ` ${ctx.label}: ${money(ctx.parsed, false)}`,
+                },
+            },
+        },
+    };
+
+    const totalBreakdown = breakdownValues.reduce((a, b) => a + b, 0);
 
     return (
         <AuthenticatedLayout
-            user={auth?.user}
             header={
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                    <div>
-                        <h2 className="font-bold text-2xl text-slate-900 tracking-tight">Dashboard Overview</h2>
-                        <p className="text-xs text-slate-500 font-medium">Track your income, expenses, and running account balances</p>
-                    </div>
+                <div>
+                    <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                        Dorm Meal Overview
+                    </h2>
+                    <p className="mt-0.5 text-xs font-medium text-slate-500">
+                        Shared pool, meal counts, and spending at a glance — {metrics.month_label}
+                    </p>
                 </div>
             }
         >
             <Head title="Dashboard" />
 
-            <div className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
-                {/* Summary Metric Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    <StatCard 
-                        title="Current Total Balance" 
-                        value={formatCurrencyValue(currentBalance, currency || { symbol: '$' })} 
-                        accent={currentBalance >= 0 ? 'green' : 'red'} 
-                    />
-                    <StatCard 
-                        title="This Month Expense" 
-                        value={`${formatCurrencyValue(-Number(monthExpense || 0), currency || { symbol: '$' })}`} 
-                        accent="red" 
-                    />
-                    <StatCard 
-                        title="This Month Revenue" 
-                        value={formatCurrencyValue(Number(monthIncome || 0), currency || { symbol: '$' })} 
-                        accent="green" 
-                    />
-                </div>
-
-                {/* Toast Notification Alert */}
-                {alert && (
-                    <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-xl shadow-2xl backdrop-blur-md flex items-center gap-3 transition-all duration-300 ${alert.type === 'success' ? 'bg-emerald-600/90 text-white shadow-emerald-500/20' : 'bg-rose-600/90 text-white shadow-rose-500/20'}`} role="status">
-                        <span className="text-sm font-semibold">{alert.message}</span>
+            <div className="space-y-6">
+                {/* Data reconciliation notice */}
+                {reconciliation.has_drift && (
+                    <div className="flex items-start gap-3 rounded-xl border-sky-200 bg-sky-50 p-4">
+                        <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                            <p className="text-sm font-semibold text-sky-800">
+                                Ledger and meal records differ
+                            </p>
+                            <p className="mt-0.5 text-xs leading-relaxed text-sky-700">
+                                The meal module has recorded{' '}
+                                <strong>{money(reconciliation.module_deposits ?? 0, false)}</strong> in deposits,
+                                but the transaction ledger holds{' '}
+                                <strong>{money(reconciliation.ledger_deposits ?? 0, false)}</strong>
+                                {' '}({reconciliation.unlinked_deposits ?? 0} deposit(s) are not linked to a
+                                transaction). Balances here reflect the ledger; meal reports reflect the module.
+                                Both are correct — they are different records.
+                            </p>
+                        </div>
                     </div>
                 )}
 
-                {/* Filter and Query Section */}
-                <div className="p-6 bg-white border border-slate-200/80 rounded-2xl shadow-sm transition-all duration-200 hover:shadow-md">
-                    <form onSubmit={handleFilterSubmit} className="space-y-5">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 items-end">
-                            {/* Search Field */}
-                            <div className="lg:col-span-2 space-y-1.5">
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Search Keywords</label>
-                                <div className="relative">
-                                    <input 
-                                        type="text" 
-                                        placeholder="Search item, category..." 
-                                        className="w-full pl-10 pr-4 py-2 text-sm border-slate-200 rounded-xl bg-slate-50/50 shadow-inner focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800 placeholder-slate-400 transition-all duration-200" 
-                                        value={filters.search} 
-                                        onChange={(e) => setFilter('search', e.target.value)} 
-                                    />
-                                    <svg className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                    </svg>
-                                </div>
-                            </div>
-
-                            {/* Date Range Inputs */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">From Date</label>
-                                <input type="date" className="w-full border-slate-200 rounded-xl bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200" value={filters.date_from} onChange={(e) => setFilter('date_from', e.target.value)} />
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">To Date</label>
-                                <input type="date" className="w-full border-slate-200 rounded-xl bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200" value={filters.date_to} onChange={(e) => setFilter('date_to', e.target.value)} />
-                            </div>
-
-                            {/* Type Selector */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Transaction Type</label>
-                                <select className="w-full border-slate-200 rounded-xl bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200" value={filters.type} onChange={(e) => setFilter('type', e.target.value)}>
-                                    <option value="all">All Types</option>
-                                    <option value="in">Cash In (+)</option>
-                                    <option value="out">Cash Out (-)</option>
-                                </select>
-                            </div>
-
-                            {/* Per Page Selector */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Rows Displayed</label>
-                                <select
-                                    className="w-full border-slate-200 rounded-xl bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200"
-                                    value={filters.per_page}
-                                    onChange={(e) => {
-                                        const newPer = e.target.value;
-                                        setFilter('per_page', newPer);
-                                        try { localStorage.setItem('per_page', String(newPer)); } catch (e) {}
-                                        setFilteringLoading(true);
-                                        Inertia.get(route('dashboard'), { ...getPaginationParams(), per_page: newPer, page: 1 }, {
-                                            preserveState: false,
-                                            preserveScroll: true,
-                                            onFinish: () => setFilteringLoading(false),
-                                            onCancel: () => setFilteringLoading(false),
-                                        });
-                                    }}
-                                >
-                                    <option value="5">5 Per Page</option>
-                                    <option value="10">10 Per Page</option>
-                                    <option value="50">50 Per Page</option>
-                                </select>
-                            </div>
+                {/* No-rate banner */}
+                {!hasMealRate && (
+                    <div className="flex items-start gap-3 rounded-xl border-amber-200 bg-amber-50 p-4">
+                        <svg className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        </svg>
+                        <div>
+                            <p className="text-sm font-semibold text-amber-800">No meal rate configured</p>
+                            <p className="mt-0.5 text-xs text-amber-700">
+                                Balances show as deposits only. Set a cost per meal so meal charges can be calculated.
+                            </p>
                         </div>
+                    </div>
+                )}
 
-                        <div className="flex flex-wrap items-center justify-between pt-4 border-t border-slate-100 gap-4">
-                            {/* Amount Range Filter */}
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Amount Filter:</span>
-                                <input type="number" placeholder="Min" step="0.01" className="w-24 border-slate-200 rounded-lg bg-slate-50/50 px-3 py-1.5 text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500" value={filters.amount_min} onChange={(e) => setFilter('amount_min', e.target.value)} />
-                                <span className="text-slate-300 font-bold">—</span>
-                                <input type="number" placeholder="Max" step="0.01" className="w-24 border-slate-200 rounded-lg bg-slate-50/50 px-3 py-1.5 text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500" value={filters.amount_max} onChange={(e) => setFilter('amount_max', e.target.value)} />
-                            </div>
-
-                            {/* Toolbar Buttons */}
-                            <div className="flex items-center gap-2.5">
-                                <button
-                                    type="button"
-                                    onClick={toggleBlurAmounts}
-                                    className={`p-2 rounded-xl border transition-all duration-200 ${blurAmounts ? 'bg-indigo-50/80 border-indigo-200 text-indigo-600 shadow-sm' : 'border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}
-                                    title={blurAmounts ? "Privacy Mode: Active (Click to Reveal)" : "Privacy Mode: Inactive"}
-                                >
-                                    {blurAmounts ? (
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858-5.908a8.962 8.962 0 013.682-.763c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m-4.092-4.092a3 3 0 11-4.243-4.243m4.242 4.242L3 3l18 18" />
-                                        </svg>
-                                    ) : (
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                    )}
-                                </button>
-                                <Button type="button" variant="secondary" className="h-9 px-4 text-xs font-semibold rounded-xl" onClick={handleClearFilters}>Reset</Button>
-                                <Button type="submit" className="h-9 px-5 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-md shadow-indigo-500/20 transition-all flex items-center gap-2" disabled={filteringLoading}>
-                                    {filteringLoading && (
-                                        <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                                        </svg>
-                                    )}
-                                    {filteringLoading ? 'Filtering...' : 'Apply Filters'}
-                                </Button>
-                            </div>
-                        </div>
-                    </form>
+                {/* Primary metrics */}
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                    <MetricCard
+                        label={poolHealthy ? 'Total Pool Balance' : 'Pool Shortfall'}
+                        value={money(Math.abs(metrics.pool_balance ?? 0), false)}
+                        tone={poolHealthy ? 'emerald' : 'rose'}
+                        hint={`${money(metrics.total_deposits ?? 0)} in · ${money(metrics.total_expenses ?? 0)} out`}
+                        icon="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                    />
+                    <MetricCard
+                        label="Meals This Month"
+                        value={metrics.month_meals ?? 0}
+                        tone="indigo"
+                        hint={`${metrics.week_meals ?? 0} this week · ${metrics.today_meals ?? 0} today`}
+                        icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                    />
+                    <MetricCard
+                        label="Spent This Month"
+                        value={money(metrics.month_expenses ?? 0, false)}
+                        tone="rose"
+                        hint={`Collected ${money(metrics.month_deposits ?? 0)}`}
+                        icon="M5 10l7-7m0 0l7 7m-7-7v18"
+                    />
+                    <MetricCard
+                        label="Active Students"
+                        value={metrics.active_students ?? 0}
+                        tone="slate"
+                        hint={`${metrics.total_students ?? 0} on the roster`}
+                        icon="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-6.93 4 4 0 004 6.93z"
+                    />
                 </div>
 
-                {/* Table Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
-                                    <th className="py-3.5 px-5">Date</th>
-                                    <th className="py-3.5 px-5">Description</th>
-                                    <th className="py-3.5 px-5">Category</th>
-                                    <th className="py-3.5 px-5">Method</th>
-                                    <th className="py-3.5 px-5">Payer / Beneficiary</th>
-                                    <th 
-                                        className="py-3.5 px-5 cursor-pointer select-none hover:text-slate-900 transition-colors" 
-                                        onClick={() => {
-                                            const next = filters.sort_amount === 'asc' ? 'desc' : (filters.sort_amount === 'desc' ? '' : 'asc');
-                                            setFilter('sort_amount', next);
-                                            const params = { ...getPaginationParams(), sort_amount: next || undefined };
-                                            setSortingLoading(true);
-                                            Inertia.get(route('dashboard'), params, {
-                                                preserveState: false,
-                                                preserveScroll: true,
-                                                onFinish: () => setSortingLoading(false),
-                                                onCancel: () => setSortingLoading(false),
-                                            });
-                                        }}
+                {/* Secondary metrics */}
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+                    <MetricCard
+                        label="Month Meal Cost"
+                        value={money(metrics.month_meal_cost ?? 0, false)}
+                        tone="indigo"
+                        hint={`${metrics.month_meals ?? 0} meals × ${money(metrics.cost_per_meal ?? 0, false)}`}
+                    />
+                    <MetricCard
+                        label="Students With Dues"
+                        value={metrics.students_with_dues ?? 0}
+                        tone={(metrics.students_with_dues ?? 0) > 0 ? 'rose' : 'emerald'}
+                        hint="Owe money to the mess"
+                    />
+                    <MetricCard
+                        label="Total Outstanding"
+                        value={money(metrics.total_dues ?? 0, false)}
+                        tone={(metrics.total_dues ?? 0) > 0 ? 'rose' : 'emerald'}
+                        hint="To be collected"
+                    />
+                </div>
+
+                {/* Trend chart */}
+                <div className="rounded-2xl border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900">Daily Meal & Money Trend</h3>
+                            <p className="text-xs text-slate-500">Meals eaten against money in and out, last 14 days</p>
+                        </div>
+                    </div>
+                    <div className="mt-4 h-72">
+                        <Bar data={trendData} options={trendOptions} />
+                    </div>
+                </div>
+
+                {/* Breakdown + top students */}
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+                    {/* Expense breakdown */}
+                    <div className="rounded-2xl border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">Expense Breakdown</h3>
+                                <p className="text-xs text-slate-500">This month by category</p>
+                            </div>
+                            <div className="inline-flex rounded-lg border-slate-200 bg-slate-50 p-0.5">
+                                {['doughnut', 'list'].map((view) => (
+                                    <button
+                                        key={view}
+                                        type="button"
+                                        onClick={() => setExpenseView(view)}
+                                        className={`rounded-md px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${
+                                            expenseView === view
+                                                ? 'bg-white text-slate-900 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
                                     >
-                                        <div className="flex items-center gap-1.5">
-                                            <span>Amount</span>
-                                            <span className="text-indigo-600 font-bold">{filters.sort_amount === 'asc' ? '↑' : (filters.sort_amount === 'desc' ? '↓' : '↕')}</span>
-                                            {sortingLoading && (
-                                                <svg className="animate-spin h-3 w-3 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                                                </svg>
-                                            )}
-                                        </div>
-                                    </th>
-                                    <th className="py-3.5 px-5">Running Balance</th>
+                                        {view}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {breakdownValues.length > 0 ? (
+                            expenseView === 'doughnut' ? (
+                                <div className="relative mt-4 h-64">
+                                    <Doughnut data={breakdownData} options={breakdownOptions} />
+                                </div>
+                            ) : (
+                                <ul className="mt-4 space-y-2">
+                                    {expenseBreakdown.map((row, index) => {
+                                        const pct = totalBreakdown > 0
+                                            ? Math.round((row.total / totalBreakdown) * 100)
+                                            : 0;
+
+                                        return (
+                                            <li key={row.category} className="space-y-1">
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className="flex items-center gap-2 font-semibold text-slate-700">
+                                                        <span
+                                                            className="h-2.5 w-2.5 rounded-full"
+                                                            style={{
+                                                                backgroundColor:
+                                                                    breakdownPalette[index % breakdownPalette.length],
+                                                            }}
+                                                        />
+                                                        {row.category}
+                                                    </span>
+                                                    <span className="font-bold text-slate-800">
+                                                        {money(row.total, false)}
+                                                        <span className="ml-1.5 font-normal text-slate-400">{pct}%</span>
+                                                    </span>
+                                                </div>
+                                                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                                                    <div
+                                                        className="h-full rounded-full"
+                                                        style={{
+                                                            width: `${pct}%`,
+                                                            backgroundColor:
+                                                                breakdownPalette[index % breakdownPalette.length],
+                                                        }}
+                                                    />
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            )
+                        ) : (
+                            <p className="mt-10 text-center text-xs italic text-slate-400">
+                                No expenses recorded this month.
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Top students by meals */}
+                    <div className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm lg:col-span-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">Student Balances</h3>
+                                <p className="text-xs text-slate-500">Top meal consumers this month</p>
+                            </div>
+                            <Link
+                                href={route('meals.students.index')}
+                                className="text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-800"
+                            >
+                                View all
+                            </Link>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-left">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                        <th className="px-6 py-2.5">Student</th>
+                                        <th className="px-4 py-2.5 text-right">Meals</th>
+                                        <th className="px-4 py-2.5 text-right">Deposited</th>
+                                        <th className="px-6 py-2.5 text-right">Balance</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-sm">
+                                    {topStudents.length > 0 ? (
+                                        topStudents.map((student) => (
+                                            <tr key={student.id} className="transition-colors hover:bg-slate-50/60">
+                                                <td className="px-6 py-3">
+                                                    <Link
+                                                        href={route('meals.students.show', student.id)}
+                                                        className="font-semibold text-slate-900 hover:text-indigo-600"
+                                                    >
+                                                        {student.name}
+                                                    </Link>
+                                                    <div className="text-[11px] text-slate-400">
+                                                        {student.roll || '—'}
+                                                        {student.department && ` · ${student.department}`}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-semibold text-slate-800">
+                                                    {student.meals}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-emerald-600">
+                                                    {money(student.deposited, false)}
+                                                </td>
+                                                <td className="px-6 py-3 text-right">
+                                                    <span
+                                                        className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-bold ${
+                                                            student.balance < 0
+                                                                ? 'border-rose-100 bg-rose-50 text-rose-700'
+                                                                : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                                                        }`}
+                                                    >
+                                                        {student.balance < 0 ? '−' : ''}
+                                                        {money(Math.abs(student.balance), false)}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan="4" className="py-10 text-center text-xs italic text-slate-400">
+                                                No students on the roster yet.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Recent activity */}
+                <div className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900">Recent Ledger Activity</h3>
+                            <p className="text-xs text-slate-500">Latest money in and out</p>
+                        </div>
+                        <span className="rounded-full border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-semibold text-slate-500">
+                            {recentTransactions.length} entries
+                        </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-left">
+                            <thead>
+                                <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                    <th className="px-6 py-2.5">Date</th>
+                                    <th className="px-6 py-2.5">Description</th>
+                                    <th className="px-6 py-2.5">Category</th>
+                                    <th className="px-6 py-2.5">Counterparty</th>
+                                    <th className="px-6 py-2.5 text-right">Amount</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {localTransactions.length > 0 ? (
-                                    localTransactions.map((t) => (
-                                        <tr
-                                            key={t.id}
-                                            className="hover:bg-slate-50/80 transition-colors duration-150"
-                                            style={{
-                                                transformOrigin: 'top',
-                                                transform: visibleIds.has(t.id) ? 'scaleY(1)' : 'scaleY(0)',
-                                                transition: 'transform 280ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms',
-                                                opacity: visibleIds.has(t.id) ? 1 : 0,
-                                            }}
-                                        >
-                                            <td className="py-4 px-5 text-xs font-medium text-slate-500 whitespace-nowrap">{t.created_at}</td>
-                                            <td className="py-4 px-5 text-sm font-semibold text-slate-800">{t.item}</td>
-                                            <td className="py-4 px-5 text-xs text-slate-500">
-                                                {t.category ? (
-                                                    <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">{t.category}</span>
+                            <tbody className="divide-y divide-slate-100 text-sm">
+                                {recentTransactions.length > 0 ? (
+                                    recentTransactions.map((tx) => (
+                                        <tr key={tx.id} className="transition-colors hover:bg-slate-50/60">
+                                            <td className="whitespace-nowrap px-6 py-3 text-xs text-slate-500">
+                                                {tx.date}
+                                            </td>
+                                            <td className="px-6 py-3 font-medium text-slate-800">{tx.item}</td>
+                                            <td className="px-6 py-3 text-xs text-slate-500">
+                                                {tx.category ? (
+                                                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 font-medium text-slate-600">
+                                                        {tx.category}
+                                                    </span>
                                                 ) : (
                                                     <span className="text-slate-300">—</span>
                                                 )}
                                             </td>
-                                            <td className="py-4 px-5 text-xs text-slate-500">{t.payment_method || '—'}</td>
-                                            <td className="py-4 px-5 text-xs text-slate-500">{t.by_whom || '—'}</td>
-                                            
-                                            {/* Amount Column */}
-                                            <td className="py-4 px-5 whitespace-nowrap">
-                                                <button
-                                                    type="button"
-                                                    className={`font-bold text-sm focus:outline-none rounded-lg px-2 py-0.5 transition-all ${t.type === 'in' ? 'text-emerald-600 hover:bg-emerald-50' : 'text-rose-600 hover:bg-rose-50'}`}
-                                                    aria-pressed={revealedAmountId === t.id}
-                                                    aria-label={revealedAmountId === t.id ? 'Hide amount' : 'Reveal amount'}
-                                                    onClick={() => setRevealedAmountId(revealedAmountId === t.id ? null : t.id)}
-                                                >
-                                                    <span style={{ filter: (blurAmounts && revealedAmountId !== t.id) ? 'blur(5px)' : 'none', transition: 'filter 150ms' }}>
-                                                        {t.type === 'in' ? `+${formatCurrencyValue(Math.abs(Number(t.amount)), currency)}` : `-${formatCurrencyValue(Math.abs(Number(t.amount)), currency)}`}
-                                                    </span>
-                                                </button>
+                                            <td className="px-6 py-3 text-xs text-slate-500">
+                                                {tx.type === 'in'
+                                                    ? tx.student || '—'
+                                                    : tx.payee || '—'}
                                             </td>
-
-                                            {/* Running Balance Column */}
-                                            <td className="py-4 px-5 whitespace-nowrap">
-                                                <button
-                                                    type="button"
-                                                    className="font-semibold text-sm text-slate-800 hover:bg-slate-100 focus:outline-none rounded-lg px-2 py-0.5 transition-all"
-                                                    aria-pressed={revealedBalanceId === t.id}
-                                                    aria-label={revealedBalanceId === t.id ? 'Hide balance' : 'Reveal balance'}
-                                                    onClick={() => setRevealedBalanceId(revealedBalanceId === t.id ? null : t.id)}
+                                            <td className="whitespace-nowrap px-6 py-3 text-right">
+                                                <span
+                                                    className={`font-bold ${
+                                                        tx.type === 'in' ? 'text-emerald-600' : 'text-rose-600'
+                                                    }`}
                                                 >
-                                                    <span style={{ filter: (blurAmounts && revealedBalanceId !== t.id) ? 'blur(5px)' : 'none', transition: 'filter 150ms' }}>
-                                                        {formatCurrencyValue(Number(t.running_balance || 0), currency)}
-                                                    </span>
-                                                </button>
+                                                    {tx.type === 'in' ? '+' : '−'}
+                                                    {money(tx.amount, false)}
+                                                </span>
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan="7" className="py-12 text-center">
-                                            <div className="flex flex-col items-center justify-center gap-2">
-                                                <svg className="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                                                </svg>
-                                                <p className="text-sm font-semibold text-slate-500">No transactions record found</p>
-                                                <p className="text-xs text-slate-400">Try adjusting your filters or date range</p>
-                                            </div>
+                                        <td colSpan="5" className="py-10 text-center text-xs italic text-slate-400">
+                                            No transactions recorded yet.
                                         </td>
                                     </tr>
                                 )}
@@ -406,114 +572,7 @@ export default function Dashboard({ auth, transactions, currentBalance, monthInc
                         </table>
                     </div>
                 </div>
-
-                {/* Pagination Controls */}
-                {/* Truncated Pagination Controls */}
-{paginationMeta.total > 0 && (
-    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 text-sm">
-        <div className="text-xs font-semibold text-slate-500">
-            Showing <span className="text-slate-800">{((paginationMeta.current_page - 1) * paginationMeta.per_page) + 1}</span> to <span className="text-slate-800">{Math.min(paginationMeta.total, paginationMeta.current_page * paginationMeta.per_page)}</span> of <span className="text-slate-800">{paginationMeta.total}</span> entries
-        </div>
-
-        <div className="flex items-center gap-1.5">
-            {/* Previous Button */}
-            <button
-                className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-xl bg-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 text-slate-700 transition-all"
-                disabled={paginationMeta.current_page <= 1}
-                onClick={() => Inertia.get(route('dashboard'), { ...getPaginationParams(), page: paginationMeta.current_page - 1 }, { preserveState: false })}
-            >
-                Previous
-            </button>
-
-            {/* Truncated Page Numbers */}
-            {(() => {
-                const current = paginationMeta.current_page;
-                const last = paginationMeta.last_page;
-                const delta = 1;
-                const range = [];
-
-                for (let i = Math.max(2, current - delta); i <= Math.min(last - 1, current + delta); i++) {
-                    range.push(i);
-                }
-
-                if (current - delta > 2) range.unshift('...');
-                if (current + delta < last - 1) range.push('...');
-
-                range.unshift(1);
-                if (last > 1) range.push(last);
-
-                return range.map((page, idx) => {
-                    if (page === '...') {
-                        return (
-                            <span key={`ellipsis-${idx}`} className="px-2 py-1 text-xs text-slate-400 font-bold select-none">
-                                ...
-                            </span>
-                        );
-                    }
-
-                    return (
-                        <button
-                            key={page}
-                            className={`px-3 py-1.5 text-xs font-semibold rounded-xl transition-all ${
-                                current === page 
-                                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20' 
-                                    : 'border border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
-                            }`}
-                            onClick={() => Inertia.get(route('dashboard'), { ...getPaginationParams(), page }, { preserveState: false })}
-                                        >
-                                            {page}
-                                        </button>
-                                    );
-                                });
-                            })()}
-
-                            {/* Next Button */}
-                            <button
-                                className="px-3 py-1.5 text-xs font-semibold border border-slate-200 rounded-xl bg-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 text-slate-700 transition-all"
-                                disabled={paginationMeta.current_page >= paginationMeta.last_page}
-                                onClick={() => Inertia.get(route('dashboard'), { ...getPaginationParams(), page: paginationMeta.current_page + 1 }, { preserveState: false })}
-                            >
-                                Next
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
         </AuthenticatedLayout>
     );
-}
-
-function useSyncTransactions(transactions, setLocalTransactions, computeRunningBalances, setVisibleIds, mountedRef, prevIdsRef) {
-    useEffect(() => {
-        const rawList = Array.isArray(transactions) ? transactions : (transactions?.data ?? []);
-        const list = [...rawList].slice().reverse();
-        const withBalance = computeRunningBalances(list);
-
-        const newIds = [];
-        const incomingIds = new Set(withBalance.map((t) => t.id));
-        const prevIds = prevIdsRef.current || new Set();
-
-        withBalance.forEach((t) => {
-            if (!prevIds.has(t.id)) newIds.push(t.id);
-        });
-
-        setLocalTransactions(withBalance);
-
-        if (!mountedRef.current) {
-            setVisibleIds(incomingIds);
-            mountedRef.current = true;
-        } else if (newIds.length > 0) {
-            setVisibleIds((prev) => new Set(prev));
-
-            setTimeout(() => {
-                setVisibleIds((prev) => {
-                    const next = new Set(prev);
-                    newIds.forEach((id) => next.add(id));
-                    return next;
-                });
-            }, 40);
-        }
-
-        prevIdsRef.current = incomingIds;
-    }, [transactions]);
 }
