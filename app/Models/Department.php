@@ -10,7 +10,7 @@ class Department extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug', 'description'];
+    protected $fillable = ['institution_id', 'name', 'slug', 'description'];
 
     /**
      * Use the slug in URLs so routes read /meals/departments/computer-science.
@@ -57,6 +57,11 @@ class Department extends Model
         }
 
         return $slug;
+    }
+
+    public function institution()
+    {
+        return $this->belongsTo(Institution::class);
     }
 
     public function students()

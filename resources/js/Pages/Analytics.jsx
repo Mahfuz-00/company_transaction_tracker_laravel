@@ -19,6 +19,167 @@ import { Doughnut, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Title, Tooltip, Legend);
 
+/**
+ * Percentage change between two values, rounded to a whole number.
+ * Returns null when there is no meaningful baseline, so the caller can omit
+ * the trend chip rather than rendering a misleading "+0%".
+ */
+function pctChange(previous, current) {
+    const prev = Number(previous || 0);
+    const curr = Number(current || 0);
+
+    if (prev === 0) return null;
+
+    return Math.round(((curr - prev) / Math.abs(prev)) * 100);
+}
+
+/**
+ * A summary metric card.
+ *
+ * The icon tile is `flex-shrink-0` and a FIXED size, so it can never be
+ * squashed by a long number. The value itself is `min-w-0` + `truncate`, so a
+ * large figure shortens gracefully rather than pushing the icon out of shape -
+ * which is exactly the bug the old inline markup had.
+ *
+ * The trend chip is `whitespace-nowrap flex-shrink-0` for the same reason.
+ */
+function MetricCard({ label, value, tone = 'slate', icon, trend, hint }) {
+    const tones = {
+        slate: { text: 'text-slate-800', tile: 'bg-slate-50 text-slate-500 border-slate-100' },
+        emerald: { text: 'text-emerald-600', tile: 'bg-emerald-50 text-emerald-600 border-emerald-100/60' },
+        rose: { text: 'text-rose-600', tile: 'bg-rose-50 text-rose-600 border-rose-100/60' },
+        sky: { text: 'text-sky-600', tile: 'bg-sky-50 text-sky-600 border-sky-100/60' },
+        amber: { text: 'text-amber-600', tile: 'bg-amber-50 text-amber-600 border-amber-100/60' },
+        accent: { text: 'text-[var(--accent)]', tile: 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent' },
+    }[tone] || tones?.slate;
+
+    // Trend is only rendered when explicitly supplied.
+    const trendUp = trend !== undefined && trend !== null && Number(trend) >= 0;
+
+    return (
+        <div className="flex items-start justify-between gap-4 rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+            {/* min-w-0 lets the text column shrink instead of forcing the
+                icon tile to give up space. */}
+            <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
+
+                <div className="mt-1 flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <h3 className={`truncate text-2xl font-extrabold ${tones.text}`} title={String(value)}>
+                        {value}
+                    </h3>
+
+                    {trend !== undefined && trend !== null && (
+                        <span
+                            className={`inline-flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-bold ${trendUp ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                }`}
+                        >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2.5"
+                                    d={trendUp ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'}
+                                />
+                            </svg>
+                            {trendUp ? '+' : ''}{trend}%
+                        </span>
+                    )}
+                </div>
+
+                {hint && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
+            </div>
+
+            {/* Fixed-size icon tile - never shrinks, never changes shape. */}
+            {icon && (
+                <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${tones.tile}`}>
+                    {icon}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/**
+ * The three-month predictive forecast panel.
+ *
+ * Explains its own maths, because a number a manager cannot reason about is
+ * a number they will not act on.
+ */
+function ForecastPanel({ forecast, money }) {
+    if (!forecast?.forecast) return null;
+
+    const f = forecast.forecast;
+    const a = forecast.assumptions || {};
+    const horizon = forecast.horizon || [];
+
+    return (
+        <div className="overflow-hidden rounded-2xl border-slate-200/80 bg-white shadow-sm">
+            <div className="flex flex-col gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h3 className="text-base font-bold text-slate-900">3-Month Predictive Forecast</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">{a.method}</p>
+                </div>
+                <span className="inline-flex flex-shrink-0 items-center rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-bold text-[var(--accent)]">
+                    Based on {a.lookback_months} months
+                </span>
+            </div>
+
+            {/* Headline projection for next month */}
+            <div className="grid grid-cols-2 gap-px bg-slate-100 lg:grid-cols-4">
+                {[
+                    { label: `Projected Meals`, value: f.projected_meals, hint: `${f.meal_growth_pct}% trend` },
+                    { label: 'Projected Cost', value: money(f.projected_cost, false), hint: `${f.expense_growth_pct}% cost trend` },
+                    { label: 'Subsidy Required', value: money(f.subsidy_required, false), hint: `${a.target_subsidy_ratio}% target` },
+                    { label: 'Members Fund', value: money(f.member_funded, false), hint: `${a.target_member_ratio}% target` },
+                ].map((cell) => (
+                    <div key={cell.label} className="bg-white px-5 py-4">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{cell.label}</div>
+                        <div className="mt-0.5 text-lg font-bold text-slate-800">{cell.value}</div>
+                        <div className="text-[11px] text-slate-400">{cell.hint}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Forward horizon table */}
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-140 border-collapse text-left">
+                    <thead>
+                        <tr className="border-y border-slate-100 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            <th className="px-5 py-3">Month</th>
+                            <th className="px-5 py-3 text-right">Meals</th>
+                            <th className="px-5 py-3 text-right">Cost</th>
+                            <th className="px-5 py-3 text-right">Per-Meal Rate</th>
+                            <th className="px-5 py-3 text-right">Subsidy Needed</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm">
+                        {horizon.map((row) => (
+                            <tr key={row.month} className="transition-colors hover:bg-slate-50/60">
+                                <td className="px-5 py-3 font-semibold text-slate-700">{row.label}</td>
+                                <td className="px-5 py-3 text-right text-slate-600">{row.projected_meals}</td>
+                                <td className="px-5 py-3 text-right text-slate-600">{money(row.projected_cost, false)}</td>
+                                <td className="px-5 py-3 text-right text-slate-600">{money(row.projected_rate, false)}</td>
+                                <td className="px-5 py-3 text-right font-bold text-sky-600">{money(row.subsidy_required, false)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* The ratio the forecast is anchored to. */}
+            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+                <p className="text-[11px] leading-relaxed text-slate-500">
+                    The forecast holds the institution's <strong className="font-semibold text-slate-700">
+                        {a.target_member_ratio}/{a.target_subsidy_ratio} rule</strong>: members are expected to
+                    cover {a.target_member_ratio}% of the meal cost and subsidies the remaining{' '}
+                    {a.target_subsidy_ratio}%. The "Subsidy Needed" column is the exact funding required
+                    next month to keep that split.
+                </p>
+            </div>
+        </div>
+    );
+}
+
 export default function Analytics({
     auth,
     totalIn = 0,
@@ -33,6 +194,11 @@ export default function Analytics({
     expenseByCategory = [],
     topExpenses = [],
     grouping = 'daily',
+    month = '',
+    months = [],
+    monthSnapshot = {},
+    subsidyTracking = {},
+    forecast = {},
 }) {
     const [currency] = useCurrencySettings();
     const { data, setData } = useForm({
@@ -362,7 +528,22 @@ export default function Analytics({
                     </div>
 
                     {/* Wider View Selector */}
-                    <div className="flex items-center gap-2 w-full md:w-auto">
+                    <div className="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
+                        {/* Month selector: the primary, month-scoped filter. */}
+                        <select
+                            value={month}
+                            onChange={(e) => router.get(route('analytics'), { month: e.target.value }, { preserveState: true, preserveScroll: true, replace: true })}
+                            aria-label="Report month"
+                            className="w-full border-slate-300 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm cursor-pointer focus:border-[var(--accent)] focus:ring-[var(--accent)] md:w-44"
+                        >
+                            {(months || []).map((m) => (
+                                <option key={m.value} value={m.value}>
+                                    {m.label}{m.current ? ' (current)' : ''}
+                                </option>
+                            ))}
+                        </select>
+
+                        <div className="flex items-center gap-2">
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                             View Mode:
                         </label>
@@ -374,17 +555,19 @@ export default function Analytics({
                             <option value="area">Area + Bars</option>
                             <option value="bar">Stacked Bars</option>
                         </select>
+                        </div>
                     </div>
                 </div>
 
-                {/* Metric Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* Metric summary cards. Icon tiles are fixed-size so a large
+                    number can never squash them - via MetricCard below. */}
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
                     {/* Total Cash In */}
                     <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Cash In</p>
                             <div className="flex items-center gap-3">
-                                <h3 className="text-2xl font-extrabold text-emerald-600 mt-1">
+                                <h3 className="truncate text-2xl font-extrabold text-emerald-600 mt-1">
                                     {formatCurrencyValue(Number(totalIn || 0), currency)}
                                 </h3>
                                 {previousPeriod && previousPeriod.totalIn !== undefined && (
@@ -400,7 +583,7 @@ export default function Analytics({
                                 )}
                             </div>
                         </div>
-                        <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100/60">
+                        <div className="h-12 w-12 flex-shrink-0 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100/60">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                             </svg>
@@ -412,7 +595,7 @@ export default function Analytics({
                         <div>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Cash Out</p>
                             <div className="flex items-center gap-3">
-                                <h3 className="text-2xl font-extrabold text-rose-600 mt-1">
+                                <h3 className="truncate text-2xl font-extrabold text-rose-600 mt-1">
                                     {formatCurrencyValue(Number(totalOut || 0), currency)}
                                 </h3>
                                 {previousPeriod && previousPeriod.totalOut !== undefined && (
@@ -428,7 +611,7 @@ export default function Analytics({
                                 )}
                             </div>
                         </div>
-                        <div className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100/60">
+                        <div className="h-12 w-12 flex-shrink-0 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100/60">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
                             </svg>
@@ -439,13 +622,13 @@ export default function Analytics({
                     <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Net Savings</p>
-                            <h3 className={`text-2xl font-extrabold mt-1 ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <h3 className={`truncate text-2xl font-extrabold mt-1 ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {formatCurrencyValue(Number(netBalance || 0), currency)}
                             </h3>
                         </div>
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${
-                            netBalance >= 0 
-                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100/60' 
+                            netBalance >= 0
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100/60'
                                 : 'bg-rose-50 text-rose-600 border-rose-100/60'
                         }`}>
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -458,7 +641,7 @@ export default function Analytics({
                     <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
                         <div>
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Current Balance</p>
-                            <h3 className={`text-2xl font-extrabold mt-1 ${currentBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <h3 className={`truncate text-2xl font-extrabold mt-1 ${currentBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {formatCurrencyValue(Number(currentBalance || 0), currency)}
                             </h3>
                         </div>
@@ -506,11 +689,71 @@ export default function Analytics({
                     </div>
 
                     <div className="rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Active Students</p>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Active Members</p>
                         <h3 className="mt-1 text-2xl font-extrabold text-slate-900">{dorm.active_students ?? 0}</h3>
                         <p className="mt-0.5 text-xs text-slate-400">Currently sharing meals</p>
                     </div>
                 </div>
+
+                {/* Subsidy tracking: each funder's target share vs what was
+                    actually recorded this month. */}
+                {(subsidyTracking.sources || []).length > 0 && (
+                    <div className="overflow-hidden rounded-2xl border-slate-200/80 bg-white shadow-sm">
+                        <div className="flex flex-col gap-1 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">Subsidy Tracking</h3>
+                                <p className="mt-0.5 text-xs text-slate-500">
+                                    Funding recorded this month, by source, against each source's target share.
+                                </p>
+                            </div>
+                            <span className="inline-flex flex-shrink-0 items-center rounded-full bg-sky-50 px-3 py-1 text-[11px] font-bold text-sky-700">
+                                {formatCurrencyValue(Number(subsidyTracking.total || 0), currency)} total
+                            </span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-left">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                        <th className="px-5 py-3">Source</th>
+                                        <th className="px-5 py-3 text-right">Recorded</th>
+                                        <th className="px-5 py-3 text-right">Target Share</th>
+                                        <th className="px-5 py-3 text-right">Actual Share</th>
+                                        <th className="px-5 py-3">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-sm">
+                                    {subsidyTracking.sources.map((src) => {
+                                        const target = Number(src.target_percentage || 0);
+                                        const actual = Number(src.actual_percentage || 0);
+                                        const onTrack = target === 0 || Math.abs(actual - target) <= 5;
+
+                                        return (
+                                            <tr key={src.key} className="transition-colors hover:bg-slate-50/60">
+                                                <td className="px-5 py-3 font-semibold text-slate-700">{src.name}</td>
+                                                <td className="px-5 py-3 text-right text-slate-600">
+                                                    {formatCurrencyValue(Number(src.total || 0), currency)}
+                                                </td>
+                                                <td className="px-5 py-3 text-right text-slate-600">{target}%</td>
+                                                <td className="px-5 py-3 text-right font-bold text-slate-800">{actual}%</td>
+                                                <td className="px-5 py-3">
+                                                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${onTrack ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                                        {onTrack ? 'On target' : 'Off target'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                {/* The three-month predictive engine. */}
+                <ForecastPanel
+                    forecast={forecast}
+                    money={(v) => formatCurrencyValue(Number(v || 0), currency)}
+                />
 
                 {/* Meal trend + expense breakdown */}
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">

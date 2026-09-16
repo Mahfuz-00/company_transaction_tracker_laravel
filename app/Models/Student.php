@@ -10,7 +10,9 @@ class Student extends Model
     use HasFactory;
 
     protected $fillable = [
+        'institution_id',
         'user_id',
+        'manager_id',
         'name',
         'roll',
         'department_id',
@@ -38,9 +40,32 @@ class Student extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * The user or meal manager responsible for maintaining this member record.
+     * Distinct from user_id (the member's own login, once invited).
+     */
+    public function manager()
+    {
+        return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    public function institution()
+    {
+        return $this->belongsTo(Institution::class);
+    }
+
     public function department()
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * The person who manages this record: the explicit manager, else the linked
+     * user account, else nothing.
+     */
+    public function getManagerLabelAttribute(): ?string
+    {
+        return $this->manager?->name ?? $this->user?->name;
     }
 
     public function deposits()
@@ -89,6 +114,30 @@ class Student extends Model
     public function balance(float $costPerMeal = 0): float
     {
         return round($this->total_deposits - ($this->total_meals * $costPerMeal), 2);
+    }
+
+    /**
+     * Subsidy-aware balance applying the strict rule: a member's own deposits
+     * are always spent first, and reserve subsidy credit only covers what is
+     * left over. Returns the effective balance plus the subsidy portion used.
+     */
+    public function balanceWithSubsidy(float $costPerMeal = 0): array
+    {
+        $mealCost = $this->total_meals * $costPerMeal;
+        $own = $this->total_deposits;
+        $raw = round($own - $mealCost, 2);
+
+        // Reserve subsidy tops up a shortfall only.
+        $subsidyCredit = $raw < 0
+            ? Subsidy::creditAvailableFor($own, $mealCost)
+            : 0.0;
+
+        return [
+            'own_deposits' => round($own, 2),
+            'meal_cost' => round($mealCost, 2),
+            'subsidy_credit' => $subsidyCredit,
+            'balance' => round($raw + $subsidyCredit, 2),
+        ];
     }
 
     public function getBalanceAttribute(): float

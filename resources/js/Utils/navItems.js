@@ -41,13 +41,8 @@ export const NAV_SECTIONS = [
                 icon: 'analytics',
                 permission: null,
             },
-            {
-                label: 'Add Transaction',
-                route: 'transactions.create',
-                icon: 'plus',
-                // Posting money is a real capability, not a browse action.
-                permission: 'transactions.create',
-            },
+            // The standalone "Add Transaction" entry is gone: money in is a
+            // Deposit and money out is an Expense, both inside Meal Management.
         ],
     },
     {
@@ -56,11 +51,19 @@ export const NAV_SECTIONS = [
             {
                 // termKey lets the label follow the institution type
                 // (Students / Employees / Boarders) with no code change.
-                label: 'Students',
+                label: 'Members',
                 termKey: 'members',
                 route: 'meals.students.index',
+                match: 'meals.students.*',
                 icon: 'users',
                 permission: 'students.view',
+            },
+            {
+                label: 'Subsidies',
+                route: 'meals.subsidies.index',
+                match: 'meals.subsidies.*',
+                icon: 'bank',
+                permission: 'subsidies.view',
             },
             {
                 label: 'Departments',
@@ -123,10 +126,25 @@ export const NAV_SECTIONS = [
                     {
                         label: 'Currency Manager',
                         route: 'settings.currency',
+                        match: 'settings.currency',
                         // The route itself is auth-only, but the Administration
                         // section is staff-only UI. users.view is the proxy for
-                        // "trusted staff", so Students never see this group.
+                        // "trusted staff", so members never see this group.
                         permission: 'users.view',
+                    },
+                    {
+                        label: 'Subsidy Sources',
+                        route: 'settings.subsidy-sources.index',
+                        match: 'settings.subsidy-sources.*',
+                        permission: 'subsidies.manage',
+                    },
+                    {
+                        // Software Super Admin only: every institution on the
+                        // platform, with its administrators.
+                        label: 'Institution Registry',
+                        route: 'settings.institutions.index',
+                        match: 'settings.institutions.*',
+                        permission: 'institutions.view',
                     },
                     {
                         label: 'Role Manager',
@@ -139,6 +157,15 @@ export const NAV_SECTIONS = [
                         route: 'settings.users.index',
                         match: 'settings.users.*',
                         permission: 'users.view',
+                    },
+                    {
+                        // Audit trail: visible to Software Super Admins (global)
+                        // and Institution Admins (their own institution).
+                        label: 'Activity Log',
+                        route: 'settings.activity.index',
+                        match: 'settings.activity.*',
+                        icon: 'clipboard',
+                        permission: 'audit.view',
                     },
                 ],
             },

@@ -19,6 +19,10 @@ class Vendor extends Model
         'email',
         'address',
         'category',
+        'is_institution_hub',
+        'recurrence',
+        'lead_time_days',
+        'recurring_amount',
         'opening_balance',
         'status',
         'notes',
@@ -26,6 +30,21 @@ class Vendor extends Model
 
     protected $casts = [
         'opening_balance' => 'decimal:2',
+        'recurring_amount' => 'decimal:2',
+        'is_institution_hub' => 'boolean',
+    ];
+
+    /**
+     * How often this supplier is typically bought from. Drives the recurring
+     * purchase view and expected spend forecasts.
+     */
+    public const RECURRENCES = [
+        'daily' => 'Daily',
+        'weekly' => 'Weekly',
+        'fortnightly' => 'Every two weeks',
+        'monthly' => 'Monthly',
+        'quarterly' => 'Quarterly',
+        'on_demand' => 'On demand',
     ];
 
     public const CATEGORIES = [
@@ -106,6 +125,37 @@ class Vendor extends Model
     public function scopeInCategory($query, $category)
     {
         return $category ? $query->where('category', $category) : $query;
+    }
+
+    /** Vendors with a recurring purchase cadence (excludes on-demand). */
+    public function scopeRecurring($query)
+    {
+        return $query->whereNotNull('recurrence')
+            ->whereNotIn('recurrence', ['on_demand']);
+    }
+
+    /** The institution's own primary vendor / hub row. */
+    public function scopeHubs($query)
+    {
+        return $query->where('is_institution_hub', true);
+    }
+
+    /**
+     * Expected spend per cycle for a recurring vendor, from the configured
+     * recurring amount (falling back to the historical average of expenses).
+     */
+    public function expectedRecurringSpend(): float
+    {
+        if ($this->recurring_amount !== null) {
+            return (float) $this->recurring_amount;
+        }
+
+        return round((float) $this->expenses()->avg('amount'), 2);
+    }
+
+    public function getRecurrenceLabelAttribute(): ?string
+    {
+        return $this->recurrence ? (self::RECURRENCES[$this->recurrence] ?? ucfirst($this->recurrence)) : null;
     }
 
     /* ------------------------------------------------------------------ *

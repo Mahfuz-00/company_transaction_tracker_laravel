@@ -1,16 +1,35 @@
 import { useState, useEffect } from 'react';
+import { usePage } from '@inertiajs/react';
 
+/**
+ * Global currency settings.
+ *
+ * The Software Super Admin configures these once; they arrive on every Inertia
+ * response via the shared `currency` prop, so every module formats money
+ * identically without a per-page lookup. localStorage is kept only as a
+ * fallback for the brief moment before the first response lands.
+ */
 export function useCurrencySettings() {
-    const [settings, setSettings] = useState({ sign: '৳', position: 'before' });
+    const { props } = usePage();
+    const shared = props?.currency;
 
-    useEffect(() => {
+    const [settings, setSettings] = useState(() => {
+        if (shared) return shared;
         try {
             const raw = localStorage.getItem('currency_settings');
-            if (raw) setSettings(JSON.parse(raw));
+            if (raw) return JSON.parse(raw);
         } catch (e) {
             // ignore
         }
-    }, []);
+        return { symbol: '৳', position: 'before' };
+    });
+
+    // Server value always wins once it is available.
+    useEffect(() => {
+        if (!shared) return;
+        setSettings(shared);
+        try { localStorage.setItem('currency_settings', JSON.stringify(shared)); } catch (e) {}
+    }, [shared]);
 
     const save = (next) => {
         const merged = { ...settings, ...next };

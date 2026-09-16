@@ -6,4 +6,84 @@
   body {
     font-family: 'Figtree', 'Hind Siliguri', sans-serif;
   }
+
+  /* Theme variables. Overwritten at runtime by ThemeProvider once the
+     institution's settings are known, so these are only the fallbacks. */
+  :root {
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --accent-ring: #4f46e533;
+    --radius: 0.75rem;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Motion
+ *
+ * A small, consistent set of animations. Kept here rather than scattered
+ * inline so timing stays uniform across the app.
+ * ------------------------------------------------------------------ */
+@layer utilities {
+  /* A page fades and lifts very slightly as it enters. */
+  .animate-page-in {
+    animation: page-in 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Fade only - for overlays and banners. */
+  .animate-in {
+    animation: fade-in 200ms ease-out;
+  }
+
+  /* Cards and rows rise into place. */
+  .animate-rise {
+    animation: rise 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Respect a user's reduced-motion preference. */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-page-in,
+    .animate-in,
+    .animate-rise {
+      animation: none;
+    }
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Themed focus rings instead of a hard-coded indigo. */
+@layer components {
+  .focus-theme:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
 }

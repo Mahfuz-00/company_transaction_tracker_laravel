@@ -23,13 +23,19 @@ class RolesAndPermissionsSeeder extends Seeder
                 'meals.deposit', 'meals.expense', 'meals.reports',
             ],
             'students' => [
-                'students.view', 'students.manage',
+                'students.view', 'students.manage', 'students.invite',
             ],
             'departments' => [
                 'departments.view', 'departments.manage',
             ],
             'vendors' => [
                 'vendors.view', 'vendors.manage',
+            ],
+            'subsidies' => [
+                'subsidies.view', 'subsidies.manage',
+            ],
+            'exports' => [
+                'exports.download',
             ],
             'institution' => [
                 'institution.view', 'institution.manage',
@@ -39,6 +45,19 @@ class RolesAndPermissionsSeeder extends Seeder
             ],
             'roles' => [
                 'roles.view', 'roles.manage'
+            ],
+            // Audit trail visibility. Institution Admins get this scoped to
+            // their own institution; Super Admins see everything.
+            'audit' => [
+                'audit.view',
+            ],
+            // Appearance + branding (logo, avatar, theme).
+            'appearance' => [
+                'appearance.view', 'appearance.manage',
+            ],
+            // The super-admin institution registry.
+            'institutions' => [
+                'institutions.view', 'institutions.manage',
             ],
         ];
 
@@ -52,33 +71,62 @@ class RolesAndPermissionsSeeder extends Seeder
             }
         }
 
-        // Create roles
-        $super = Role::firstOrCreate(['name' => 'Super Admin']);
+        /* -------------------------------------------------------------- *
+         * Two-tier admin structure
+         *
+         *  - Software Super Admin : global. Owns platform settings (currency,
+         *    institution type, roles) and sees every institution's audit trail.
+         *  - Institution Admin    : scoped to one institution. Runs members,
+         *    meals, deposits, subsidies and vendors for their own body, and
+         *    sees their own institution's audit trail.
+         * -------------------------------------------------------------- */
+        // Exactly four core roles - no legacy aliases. Any account still on a
+        // removed role was migrated by the streamline_core_roles migration.
+        $super = Role::firstOrCreate(['name' => 'Software Super Admin']);
+        $instAdmin = Role::firstOrCreate(['name' => 'Institution Admin']);
         $manager = Role::firstOrCreate(['name' => 'Meal Manager']);
-        $student = Role::firstOrCreate(['name' => 'Student']);
+        $member = Role::firstOrCreate(['name' => 'Member']);
 
-        // Super Admin gets all permissions
+        // Software Super Admin gets everything, globally.
         $super->syncPermissions($allPermissions);
 
-        // Meal Manager runs the mess: full transaction + meal rights, plus the
-        // ability to see the roster. Deliberately excludes roles.manage and
-        // users.create/delete so an admin can still revoke access.
+        // Institution Admin: everything operational, scoped to their body.
+        // Deliberately excludes nothing operational - they are the top authority
+        // *within* an institution - but they are scoped in the controllers.
+        $instAdminPerms = array_merge(
+            $definitions['transactions'],
+            $definitions['meals'],
+            $definitions['students'],
+            $definitions['departments'],
+            $definitions['vendors'],
+            $definitions['subsidies'],
+            $definitions['exports'],
+            $definitions['audit'],
+            $definitions['institution'],
+            $definitions['appearance'],
+            ['users.view', 'users.create', 'users.edit', 'roles.view']
+        );
+        $instAdmin->syncPermissions($instAdminPerms);
+
+        // Meal Manager runs the mess: transactions + meals + roster + vendors.
+        // Deliberately excludes roles.manage and users.create/delete so an
+        // admin can still revoke access. Sees subsidy data but does not manage it.
         $managerPerms = array_merge(
             $definitions['transactions'],
             $definitions['meals'],
             $definitions['students'],
             $definitions['departments'],
-            // Vendors are operational data a manager needs; institution
-            // configuration stays with Super Admin.
             $definitions['vendors'],
-            ['users.view', 'institution.view']
+            $definitions['exports'],
+            ['users.view', 'institution.view', 'subsidies.view', 'audit.view', 'appearance.view']
         );
         $manager->syncPermissions($managerPerms);
 
-        // Student gets limited view permissions only.
-        $student->syncPermissions(['meals.view', 'transactions.view']);
+        // Member: limited view permissions only - sees their own meals and
+        // deposits, nothing administrative.
+        $member->syncPermissions(['meals.view', 'transactions.view']);
 
-        // Assign Super Admin to first seed user (if exists)
+        // Assign the top role to the first seed user (if exists).
         $user = User::first();
         if ($user) {
             if (! $user->hasRole($super->name)) {

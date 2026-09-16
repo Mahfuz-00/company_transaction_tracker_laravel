@@ -1,13 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
+import useTerminology from '@/Utils/useTerminology';
+import { LoadingOverlay, Spinner } from '@/Components/UI/Loading';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 
 /**
  * Daily grid: one row per active student, three numeric inputs each.
  * Local state holds the whole day, submitted in a single request.
  */
-export default function Create({ date, students }) {
+export default function Create({ date, students, dayTotals }) {
     const { flash } = usePage().props;
+    const { t } = useTerminology();
+
+    // Meals already recorded for the selected day, straight from the server.
+    // Seeded into the grid below so an existing entry is editable in place.
+    const recorded = dayTotals || { breakfast: 0, lunch: 0, dinner: 0, total: 0 };
 
     const [day, setDay] = useState(date);
     const [rows, setRows] = useState(() =>
@@ -72,7 +79,7 @@ export default function Create({ date, students }) {
                 <div>
                     <h3 className="text-lg font-bold text-slate-900">Daily Meal Grid</h3>
                     <p className="mt-0.5 text-sm text-slate-500">
-                        Enter how many of each meal every student ate. Blank or 0 rows are skipped.
+                        Enter how many of each meal every {t('member', 'member').toLowerCase()} ate. Blank or 0 rows are skipped.
                     </p>
                 </div>
                 <Link
@@ -90,7 +97,7 @@ export default function Create({ date, students }) {
             )}
 
             <form onSubmit={submit} className="space-y-5">
-                {/* Date + day totals */}
+                {/* Date + current meal count for that date, shown up front */}
                 <div className="flex flex-col gap-4 rounded-xl border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <label htmlFor="date" className="mb-1.5 block text-sm font-semibold text-slate-700">
@@ -106,22 +113,46 @@ export default function Create({ date, students }) {
                         {errors.date && (
                             <p role="alert" className="mt-1 text-xs text-rose-500">{errors.date}</p>
                         )}
+
+                        {/* Existing total for this date, as a quiet inline hint.
+                            The full breakdown lives in the "Selected Date Meal"
+                            panel to the right of this picker. */}
+                        <p className="mt-2 text-[11px] text-slate-400">
+                            {recorded.total > 0
+                                ? `${recorded.total} meal(s) already recorded for this date`
+                                : 'Nothing recorded for this date yet'}
+                        </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        {[
-                            { label: 'Breakfast', value: totals.breakfast, tone: 'text-amber-600' },
-                            { label: 'Lunch', value: totals.lunch, tone: 'text-sky-600' },
-                            { label: 'Dinner', value: totals.dinner, tone: 'text-violet-600' },
-                            { label: 'Total', value: totals.total, tone: 'text-indigo-600' },
-                        ].map((item) => (
-                            <div key={item.label} className="rounded-lg border-slate-200 bg-slate-50 px-3 py-2">
-                                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                                    {item.label}
+                    <div className="flex-1 sm:max-w-2xl">
+                        {/* A clear title naming the date these counts belong to,
+                            so the numbers below always have an explicit anchor. */}
+                        <div className="mb-2 flex items-baseline justify-between gap-3">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                                Selected Date Meal
+                            </h4>
+                            <span className="text-xs font-semibold text-slate-500">
+                                {new Date(day).toLocaleDateString(undefined, {
+                                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                                })}
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            {[
+                                { label: 'Breakfast', value: totals.breakfast, tone: 'text-amber-600' },
+                                { label: 'Lunch', value: totals.lunch, tone: 'text-sky-600' },
+                                { label: 'Dinner', value: totals.dinner, tone: 'text-violet-600' },
+                                { label: 'Total', value: totals.total, tone: 'text-[var(--accent)]' },
+                            ].map((item) => (
+                                <div key={item.label} className="rounded-lg border-slate-200 bg-slate-50 px-3 py-2">
+                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                        {item.label}
+                                    </div>
+                                    <div className={`text-lg font-bold ${item.tone}`}>{item.value}</div>
                                 </div>
-                                <div className={`text-lg font-bold ${item.tone}`}>{item.value}</div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -131,7 +162,7 @@ export default function Create({ date, students }) {
                         <table className="w-full border-collapse text-left">
                             <thead>
                                 <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                                    <th className="px-6 py-3">Student</th>
+                                    <th className="px-6 py-3">{t('member', 'Member')}</th>
                                     {[
                                         { field: 'breakfast', label: 'Breakfast' },
                                         { field: 'lunch', label: 'Lunch' },
@@ -240,16 +271,13 @@ export default function Create({ date, students }) {
                         disabled={processing || rows.length === 0}
                         className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50"
                     >
-                        {processing && (
-                            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                                <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="opacity-90" />
-                            </svg>
-                        )}
+                        {processing && <Spinner className="h-4 w-4" />}
                         {processing ? 'Saving...' : `Save ${totals.total} meal(s)`}
                     </button>
                 </div>
             </form>
+
+            <LoadingOverlay show={processing} message="Saving meal entries..." />
         </MealsLayout>
     );
 }

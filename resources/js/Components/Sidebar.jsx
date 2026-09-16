@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import Icon from '@/Components/Icon';
 import useCan from '@/Utils/can';
@@ -18,21 +18,25 @@ const isRouteActive = (match, routeName) => {
     return Boolean(route().current(pattern));
 };
 
+/**
+ * Colours come from CSS variables written by the theme layer (see app.jsx),
+ * so changing a workspace accent repaints the sidebar with no code change.
+ */
 const topLevelClasses = (active) =>
-    `group relative flex w-full items-center justify-between gap-3 px-3.5 py-3 rounded-xl font-semibold text-sm transition-all duration-200 ${active
-        ? 'bg-slate-900 text-white shadow-md shadow-slate-900/10'
+    `group relative flex w-full items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl font-semibold text-sm transition-colors duration-150 ${active
+        ? 'bg-[var(--accent)] text-white shadow-sm'
         : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
     }`;
 
 const childClasses = (active) =>
-    `flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-200 ${active
-        ? 'bg-indigo-50 text-indigo-600 font-bold'
+    `flex items-center gap-3 px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors duration-150 ${active
+        ? 'bg-[var(--accent-soft)] text-[var(--accent)] font-bold'
         : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
     }`;
 
 const iconToneClasses = (active, nested = false) => {
     if (active) {
-        return nested ? 'text-indigo-500' : 'text-white';
+        return nested ? 'text-[var(--accent)]' : 'text-white';
     }
     return 'text-slate-400 group-hover:text-slate-700';
 };
@@ -41,9 +45,14 @@ const iconToneClasses = (active, nested = false) => {
  * Sidebar
  * ------------------------------------------------------------------ */
 
-export default function Sidebar({ user }) {
+export default function Sidebar({ user, onNavigate }) {
     const { can, hasRole } = useCan();
     const { t, institution } = useTerminology();
+    const { auth } = usePage().props;
+
+    // The freshest avatar lives on the shared auth prop, so a profile-picture
+    // change reflects immediately without a full reload.
+    const avatarUrl = auth?.user?.avatar_url || user?.avatar_url || null;
 
     // Resolve a nav item's visible label: an explicit termKey follows the
     // institution type, otherwise the static label stands.
@@ -96,6 +105,10 @@ export default function Sidebar({ user }) {
         });
     }, [sections]);
 
+    /**
+     * Toggle a group: explicitly flips the boolean stored for this label, so
+     * the group both opens (down) and closes (up) reliably.
+     */
     const toggleGroup = (label) =>
         setOpenGroups((current) => ({ ...current, [label]: !current[label] }));
 
@@ -109,23 +122,32 @@ export default function Sidebar({ user }) {
         : 'U';
 
     return (
-        <aside className="w-72 flex-shrink-0 h-screen sticky top-0 left-0 flex flex-col justify-between px-4 py-6 bg-white border-r border-slate-200/80 shadow-xs z-30 overflow-hidden">
-            {/* Brand + navigation (Scrollable Area) */}
-            <div className="flex-1 min-h-0 space-y-6 overflow-y-auto pr-1">
+        <aside className="flex h-screen w-72 max-w-80 flex-shrink-0 h-screen sticky top-0 left-0 flex flex-col justify-between px-4 py-6 bg-white border-r border-slate-200/80 shadow-xs z-30 overflow-hidden">
+            {/* ---- Sticky brand header ---- */}
+            <div className="sticky top-0 z-10 flex-shrink-0 border-b border-slate-100 bg-white px-4 pb-4 pt-6">
                 <div className="flex items-center gap-3.5 px-2">
-                    <ApplicationLogo className="h-10 w-10 object-contain" />
+                    {institution?.logo_url ? (
+                        <img
+                            src={institution.logo_url}
+                            alt={institution.name}
+                            className="h-10 w-10 flex-shrink-0 rounded-lg object-contain"
+                        />
+                    ) : (
+                        <ApplicationLogo className="h-10 w-10 object-contain" />
+                    )}
                     <div className="min-w-0">
-                        <h1 className="text-base font-bold text-slate-900 leading-tight truncate">
+                        <h1 className="truncate text-base font-bold leading-tight text-slate-900">
                             {institution?.name || 'Meal Manager'}
                         </h1>
                         <p className="truncate text-xs font-medium text-slate-400">
-                            {institution?.type_label || 'Shared meals, tracked'}
+                            {institution?.subtitle || institution?.type_label || 'Shared meals, tracked'}
                         </p>
                     </div>
                 </div>
+            </div>
 
-                <hr className="border-slate-100" />
-
+            {/* ---- Scrollable navigation ---- */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
                 <nav aria-label="Main navigation" className="space-y-5">
                     {sections.map((section, sectionIndex) => (
                         <div key={section.heading || sectionIndex} className="space-y-1.5">
@@ -165,8 +187,16 @@ export default function Sidebar({ user }) {
                                                 />
                                             </button>
 
-                                            {isOpen && (
-                                                <div className="ml-4 pl-3 mt-1.5 border-l-2 border-slate-100 space-y-1">
+                                            {/* Animates open/close with a
+                                                grid-rows transition, so the
+                                                toggle is smooth both ways. */}
+                                            <div
+                                                className={`grid transition-all duration-200 ease-out ${isOpen
+                                                    ? 'grid-rows-[1fr] opacity-100'
+                                                    : 'grid-rows-[0fr] opacity-0'
+                                                    }`}
+                                            >
+                                                <div className="ml-4 mt-1 space-y-1 overflow-hidden border-l-2 border-slate-100 pl-3">
                                                     {item.children.map((child) => {
                                                         const active = isRouteActive(
                                                             child.match,
@@ -177,6 +207,7 @@ export default function Sidebar({ user }) {
                                                             <Link
                                                                 key={child.route}
                                                                 href={route(child.route)}
+                                                                onClick={onNavigate}
                                                                 className={childClasses(active)}
                                                             >
                                                                 <span>{child.label}</span>
@@ -184,7 +215,7 @@ export default function Sidebar({ user }) {
                                                         );
                                                     })}
                                                 </div>
-                                            )}
+                                            </div>
                                         </div>
                                     );
                                 }
@@ -196,6 +227,7 @@ export default function Sidebar({ user }) {
                                     <Link
                                         key={item.route}
                                         href={route(item.route)}
+                                        onClick={onNavigate}
                                         className={topLevelClasses(active)}
                                         aria-current={active ? 'page' : undefined}
                                     >
@@ -214,30 +246,51 @@ export default function Sidebar({ user }) {
                 </nav>
             </div>
 
-            {/* Account footer (Pinned to Bottom) */}
-            <div className="flex-shrink-0 space-y-3 pt-4 border-t border-slate-100 bg-white">
-                <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50/80 border-slate-100">
-                    <div className="h-10 w-10 flex-shrink-0 rounded-lg bg-indigo-600 flex items-center justify-center text-xs font-bold text-white">
-                        {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="text-xs font-bold text-slate-800 truncate">
-                            {user?.name || 'User'}
-                        </div>
-                        <div className="text-[11px] font-medium text-slate-400 truncate">
-                            {user?.email}
-                        </div>
-                    </div>
-                </div>
+            {/* ---- Compact pinned profile footer ----
+                Profile info on the left, a logout icon button to its side, so
+                the whole block stays one row tall instead of stacking. */}
+            <div className="flex-shrink-0 border-t border-slate-100 bg-white p-3">
+                <div className="flex items-center gap-2 rounded-xl bg-slate-50/80 p-2">
+                    <Link
+                        href={route('profile.edit')}
+                        onClick={onNavigate}
+                        className="flex min-w-0 flex-1 items-center gap-2.5"
+                        title="Open profile"
+                    >
+                        {avatarUrl ? (
+                            <img
+                                src={avatarUrl}
+                                alt={user?.name || 'Profile'}
+                                className="h-8 w-8 flex-shrink-0 rounded-lg object-cover"
+                            />
+                        ) : (
+                            <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] text-[11px] font-bold text-white">
+                                {initials}
+                            </span>
+                        )}
+                        <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-bold text-slate-800">
+                                {user?.name || 'User'}
+                            </span>
+                            <span className="block truncate text-[10px] font-medium text-slate-400">
+                                {user?.designation || user?.email || ''}
+                            </span>
+                        </span>
+                    </Link>
 
-                <Link
-                    href={route('logout')}
-                    method="post"
-                    as="button"
-                    className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 font-semibold text-xs transition-colors"
-                >
-                    <span>Log Out</span>
-                </Link>
+                    <Link
+                        href={route('logout')}
+                        method="post"
+                        as="button"
+                        aria-label="Log out"
+                        title="Log out"
+                        className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                    >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </Link>
+                </div>
             </div>
         </aside>
     );

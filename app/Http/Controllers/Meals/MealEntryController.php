@@ -65,6 +65,9 @@ class MealEntryController extends Controller
         return Inertia::render('Meals/Entries/Create', [
             'date' => $date,
             'students' => $students,
+            // Shown prominently beside the date: how many meals are already
+            // recorded for this day, so the manager has immediate clarity.
+            'dayTotals' => $this->dayTotals($date),
         ]);
     }
 

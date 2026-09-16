@@ -197,7 +197,9 @@ class UserController extends Controller
         }
 
         $stillActive = $status === 'active';
-        $keepsRole = collect($roles)->contains(fn ($name) => in_array(strtolower($name), ['super admin', 'superadmin'], true));
+        $keepsRole = collect($roles)->contains(
+            fn ($name) => strtolower($name) === 'software super admin'
+        );
 
         if ($stillActive && $keepsRole) {
             return false;
@@ -211,6 +213,9 @@ class UserController extends Controller
      */
     protected function activeSuperAdminCount(): int
     {
-        return User::role('Super Admin')->where('status', 'active')->count();
+        return User::query()
+            ->where('status', 'active')
+            ->whereHas('roles', fn ($q) => $q->where('name', 'Software Super Admin'))
+            ->count();
     }
 }

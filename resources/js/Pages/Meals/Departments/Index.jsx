@@ -3,6 +3,7 @@ import MealsLayout from '@/Layouts/MealsLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
+import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 
 /* ------------------------------------------------------------------ *
@@ -46,7 +47,7 @@ function EmptyState({ search, canManage, onCreate }) {
             <p className="mt-1 text-xs text-slate-400">
                 {search
                     ? 'Try a different term.'
-                    : 'Departments group students by their field of study.'}
+                    : `${t('departments', 'Groups')} group ${t('members', 'members').toLowerCase()} together.`}
             </p>
             {!search && canManage && (
                 <button
@@ -80,6 +81,7 @@ const slugify = (value) =>
 
 export default function Index({ departments, filters }) {
     const { can } = useCan();
+    const { t } = useTerminology();
     const { flash } = usePage().props;
     const canManage = can('departments.manage');
 
@@ -166,8 +168,8 @@ export default function Index({ departments, filters }) {
 
     return (
         <MealsLayout
-            title="Departments"
-            description="Group students by their field of study so meal costs can be attributed accurately."
+            title={t('departments', 'Groups')}
+            description={`Group ${t('members', 'members').toLowerCase()} so meal costs can be attributed accurately.`}
             actions={
                 canManage && (
                     <button
@@ -225,7 +227,7 @@ export default function Index({ departments, filters }) {
                             <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
                                 <th className="px-6 py-3">Department</th>
                                 <th className="px-6 py-3">Slug</th>
-                                <th className="px-6 py-3">Students</th>
+                                <th className="px-6 py-3">{t('members', 'Members')}</th>
                                 <th className="px-6 py-3 text-right">Actions</th>
                             </tr>
                         </thead>

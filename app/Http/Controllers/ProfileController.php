@@ -18,26 +18,46 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user = $request->user();
+
         return Inertia::render('Profile/Edit', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+            'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => session('status'),
+            'avatarUrl' => $user->avatarUrl(),
+            'designation' => $user->designation,
         ]);
     }
 
     /**
-     * Update the user's profile information.
+     * Update the user's profile information, including their profile picture.
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
+        $data = $request->safe()->only(['name', 'email']);
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $user->fill($data);
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        // --- Profile picture -------------------------------------------
+        if ($request->boolean('remove_avatar') && $user->avatar_path) {
+            \Storage::disk('public')->delete($user->avatar_path);
+            $user->avatar_path = null;
+        }
 
-        return Redirect::route('profile.edit');
+        if ($request->hasFile('avatar')) {
+            if ($user->avatar_path) {
+                \Storage::disk('public')->delete($user->avatar_path);
+            }
+            $user->avatar_path = $request->file('avatar')->store('avatars', 'public');
+        }
+
+        $user->save();
+
+        return Redirect::route('profile.edit')->with('success', 'Profile updated.');
     }
 
     /**

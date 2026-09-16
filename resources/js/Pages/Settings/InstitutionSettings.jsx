@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
+import { Spinner } from '@/Components/UI/Loading';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 
 /* ------------------------------------------------------------------ *
@@ -51,13 +52,14 @@ function TerminologyPreview({ terms, effect }) {
  * Page
  * ------------------------------------------------------------------ */
 
-export default function InstitutionSettings({ institution, types = [], termKeys = [] }) {
+export default function InstitutionSettings({ institution, types = [], termKeys = [], themes = [] }) {
     const { can } = useCan();
     const { flash } = usePage().props;
     const canManage = can('institution.manage');
 
     const { data, setData, put, processing, errors, clearErrors } = useForm({
         name: institution?.name || '',
+        subtitle: institution?.subtitle || '',
         type: institution?.type || 'general_mess',
         currency_code: institution?.currency_code || '',
         timezone: institution?.timezone || 'UTC',
@@ -65,7 +67,18 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
         contact_email: institution?.contact_email || '',
         contact_phone: institution?.contact_phone || '',
         terminology: institution?.terminology || {},
+        // Theme customisation.
+        theme: institution?.theme || { accent: 'indigo', mode: 'light', radius: 'lg', density: 'comfortable' },
+        // Branding images (file inputs).
+        logo: null,
+        banner: null,
+        remove_logo: false,
+        remove_banner: false,
     });
+
+    // Local preview URLs so a chosen image shows before it is uploaded.
+    const [logoPreview, setLogoPreview] = useState(institution?.logo_url || null);
+    const [bannerPreview, setBannerPreview] = useState(institution?.banner_url || null);
 
     const [showOverrides, setShowOverrides] = useState(false);
 
@@ -119,7 +132,30 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
     const submit = (event) => {
         event.preventDefault();
         clearErrors();
-        put(route('settings.institution.update'), { preserveScroll: true });
+
+        // forceFormData is required because logo/banner ride along as files.
+        put(route('settings.institution.update'), {
+            preserveScroll: true,
+            forceFormData: true,
+        });
+    };
+
+    const setTheme = (key, value) => setData('theme', { ...data.theme, [key]: value });
+
+    const onLogoChange = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        setData('logo', file);
+        setData('remove_logo', false);
+        setLogoPreview(URL.createObjectURL(file));
+    };
+
+    const onBannerChange = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        setData('banner', file);
+        setData('remove_banner', false);
+        setBannerPreview(URL.createObjectURL(file));
     };
 
     return (
@@ -195,6 +231,16 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
                                 placeholder="Street, city"
                                 onChange={(event) => setData('address', event.target.value)}
                             />
+
+                            <Field
+                                label="Subtitle"
+                                name="subtitle"
+                                value={data.subtitle}
+                                error={errors.subtitle}
+                                placeholder="e.g. Shared meals, tracked"
+                                hint="Shown under the institution name in the sidebar and on the login screen."
+                                onChange={(event) => setData('subtitle', event.target.value)}
+                            />
                         </div>
                     </section>
 
@@ -249,6 +295,137 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
                         {errors.type && (
                             <p role="alert" className="mt-2 text-xs text-rose-500">{errors.type}</p>
                         )}
+                    </section>
+
+                    {/* Theme customiser */}
+                    <section className="rounded-xl border-slate-200 bg-white p-6 shadow-sm">
+                        <h3 className="text-lg font-bold text-slate-900">Theme</h3>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                            Colour and shape of this workspace. Applies instantly across the app.
+                        </p>
+
+                        {/* Accent swatches */}
+                        <div className="mt-5">
+                            <span className="mb-2 block text-xs font-semibold text-slate-600">Accent colour</span>
+                            <div className="flex flex-wrap gap-2.5">
+                                {themes.map((theme) => {
+                                    const active = (data.theme?.accent || 'indigo') === theme.value;
+
+                                    return (
+                                        <button
+                                            key={theme.value}
+                                            type="button"
+                                            disabled={!canManage}
+                                            onClick={() => setTheme('accent', theme.value)}
+                                            title={theme.label}
+                                            aria-label={theme.label}
+                                            className={`h-9 w-9 rounded-full border-2 transition-transform disabled:opacity-60 ${active ? 'scale-110 border-slate-800' : 'border-transparent hover:scale-105'}`}
+                                            style={{ backgroundColor: theme.hex }}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                            <Field
+                                label="Corner radius"
+                                name="theme_radius"
+                                type="select"
+                                value={data.theme?.radius || 'lg'}
+                                options={[
+                                    { value: 'sm', label: 'Sharp' },
+                                    { value: 'md', label: 'Slightly rounded' },
+                                    { value: 'lg', label: 'Rounded' },
+                                    { value: 'xl', label: 'Very rounded' },
+                                ]}
+                                onChange={(e) => setTheme('radius', e.target.value)}
+                            />
+                            <Field
+                                label="Density"
+                                name="theme_density"
+                                type="select"
+                                value={data.theme?.density || 'comfortable'}
+                                options={[
+                                    { value: 'compact', label: 'Compact' },
+                                    { value: 'comfortable', label: 'Comfortable' },
+                                    { value: 'spacious', label: 'Spacious' },
+                                ]}
+                                onChange={(e) => setTheme('density', e.target.value)}
+                            />
+                        </div>
+                    </section>
+
+                    {/* Branding images */}
+                    <section className="rounded-xl border-slate-200 bg-white p-6 shadow-sm">
+                        <h3 className="text-lg font-bold text-slate-900">Branding</h3>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                            Logo and banner shown in the sidebar and on the login screen.
+                        </p>
+
+                        <div className="mt-5 space-y-5">
+                            {/* Logo */}
+                            <div>
+                                <span className="mb-2 block text-xs font-semibold text-slate-600">Institution logo</span>
+                                <div className="flex items-center gap-4">
+                                    {logoPreview ? (
+                                        <img src={logoPreview} alt="Logo" className="h-14 w-14 flex-shrink-0 rounded-lg border-slate-200 object-contain" />
+                                    ) : (
+                                        <span className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-400">
+                                            None
+                                        </span>
+                                    )}
+                                    <div className="flex flex-col gap-2">
+                                        <input
+                                            type="file"
+                                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                                            disabled={!canManage}
+                                            onChange={onLogoChange}
+                                            className="block text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:opacity-90 disabled:opacity-60"
+                                        />
+                                        {logoPreview && canManage && (
+                                            <button
+                                                type="button"
+                                                onClick={() => { setLogoPreview(null); setData('logo', null); setData('remove_logo', true); }}
+                                                className="w-fit text-xs font-semibold text-rose-500 hover:text-rose-700"
+                                            >
+                                                Remove logo
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                {errors.logo && <p className="mt-1 text-xs text-rose-500">{errors.logo}</p>}
+                            </div>
+
+                            {/* Banner */}
+                            <div>
+                                <span className="mb-2 block text-xs font-semibold text-slate-600">Login banner</span>
+                                {bannerPreview ? (
+                                    <img src={bannerPreview} alt="Banner" className="mb-3 h-24 w-full rounded-lg border-slate-200 object-cover" />
+                                ) : (
+                                    <div className="mb-3 flex h-24 w-full items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-400">
+                                        No banner uploaded
+                                    </div>
+                                )}
+                                <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp"
+                                    disabled={!canManage}
+                                    onChange={onBannerChange}
+                                    className="block text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:opacity-90 disabled:opacity-60"
+                                />
+                                {bannerPreview && canManage && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setBannerPreview(null); setData('banner', null); setData('remove_banner', true); }}
+                                        className="mt-2 text-xs font-semibold text-rose-500 hover:text-rose-700"
+                                    >
+                                        Remove banner
+                                    </button>
+                                )}
+                                {errors.banner && <p className="mt-1 text-xs text-rose-500">{errors.banner}</p>}
+                            </div>
+                        </div>
                     </section>
 
                     {/* Terminology overrides */}

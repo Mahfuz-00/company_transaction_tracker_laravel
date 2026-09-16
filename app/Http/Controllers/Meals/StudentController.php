@@ -4,37 +4,32 @@ namespace App\Http\Controllers\Meals;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
-use App\Models\MealRate;
+use App\Models\Institution;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\FinanceCalculator;
+use App\Support\Money;
+use App\Support\ReportExporter;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class StudentController extends Controller
 {
-    /**
-     * Per-meal rate used for balance maths. Falls back to the custom rate
-     * rather than guessing, so figures are never silently wrong.
-     */
-    protected function currentCostPerMeal(): float
-    {
-        $rate = MealRate::query()
-            ->whereNotNull('cost_per_meal')
-            ->orderByDesc('to_date')
-            ->orderByDesc('created_at')
-            ->first();
-
-        return (float) ($rate?->cost_per_meal ?? 0);
-    }
-
     public function index(Request $request)
     {
         $search = trim((string) $request->query('search', ''));
         $department = (string) $request->query('department', '');
         $status = (string) $request->query('status', '');
+        $month = FinanceCalculator::resolveMonth($request->query('month'));
+        $institution = Institution::current();
 
-        $students = Student::withStats()
+        $students = Student::query()
+            // Scope to the active institution in a multi-tenant deployment.
+            ->when($institution, fn ($q) => $q->where(function ($sub) use ($institution) {
+                $sub->where('institution_id', $institution->id)
+                    ->orWhereNull('institution_id');
+            }))
             ->when($search !== '', function ($query) use ($search) {
                 $term = '%'.$search.'%';
                 $query->where(function ($q) use ($term) {
@@ -48,12 +43,31 @@ class StudentController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-        // Map in the balance using the live rate, so the table shows real figures.
-        $costPerMeal = $this->currentCostPerMeal();
+        /* -------------------------------------------------------------- *
+         * Month-scoped figures.
+         *
+         * Meals and balances are for the SELECTED MONTH, not lifetime - the
+         * roster shows the current period by default.
+         * -------------------------------------------------------------- */
+        $finance = new FinanceCalculator();
+        $breakdown = $finance->memberBreakdown($month)->keyBy('id');
+        $costPerMeal = $finance->perMealRate($month);
 
-        $students->through(function (Student $student) use ($costPerMeal) {
-            $student->setAttribute('balance', $student->balance($costPerMeal));
+        $students->through(function (Student $student) use ($breakdown, $costPerMeal) {
+            $row = $breakdown->get($student->id);
+
+            $student->setAttribute('month_meals', (int) ($row['meals'] ?? 0));
+            $student->setAttribute('breakfast', (int) ($row['breakfast'] ?? 0));
+            $student->setAttribute('lunch', (int) ($row['lunch'] ?? 0));
+            $student->setAttribute('dinner', (int) ($row['dinner'] ?? 0));
+            $student->setAttribute('total_meals', (int) ($row['meals'] ?? 0));
+            $student->setAttribute('total_deposits', (float) ($row['deposited'] ?? 0));
+            $student->setAttribute('meal_cost', (float) ($row['meal_cost'] ?? 0));
+            $student->setAttribute('subsidy_share', (float) ($row['subsidy_share'] ?? 0));
+            $student->setAttribute('balance', (float) ($row['balance'] ?? 0));
             $student->setAttribute('cost_per_meal', $costPerMeal);
+            $student->setAttribute('manager_name', $student->manager_label);
+            $student->setAttribute('is_invited', (bool) $student->user_id);
 
             return $student;
         });
@@ -63,12 +77,59 @@ class StudentController extends Controller
             'departments' => Department::orderBy('name')->get(['id', 'name', 'slug']),
             'users' => $this->linkableUsers(),
             'costPerMeal' => $costPerMeal,
+            'month' => $month,
+            'months' => $this->monthOptions(),
+            'rateBreakdown' => $this->rateBreakdown($finance, $month),
+            'managers' => $this->managerOptions(),
             'filters' => [
                 'search' => $search,
                 'department' => $department,
                 'status' => $status,
+                'month' => $month,
             ],
         ]);
+    }
+
+    /**
+     * The per-meal rate calculation, exposed in pieces so the UI can explain
+     * exactly how the number was reached:
+     *
+     *     rate = total expense / total meals
+     */
+    protected function rateBreakdown(FinanceCalculator $finance, string $month): array
+    {
+        $snapshot = $finance->monthSnapshot($month);
+
+        return [
+            'total_expense' => $snapshot['expenses'],
+            'total_meals' => $snapshot['meals'],
+            'per_meal_rate' => $snapshot['per_meal_rate'],
+            'daily_meals' => $snapshot['daily_meals'],
+            'daily_cost' => $snapshot['daily_cost'],
+            'meals_per_member' => $snapshot['meals_per_member'],
+            'cost_per_member' => $snapshot['cost_per_member'],
+            'subsidy_coverage_pct' => $snapshot['subsidy_coverage_pct'],
+            'member_funded_pct' => $snapshot['member_funded_pct'],
+            'month_label' => $snapshot['label'],
+        ];
+    }
+
+    /** The last 18 months, for the month selector. */
+    protected function monthOptions(): array
+    {
+        $options = [];
+        $cursor = now()->startOfMonth();
+
+        for ($i = 0; $i < 18; $i++) {
+            $options[] = [
+                'value' => $cursor->format('Y-m'),
+                'label' => $cursor->format('F Y'),
+                'current' => $i === 0,
+            ];
+            $cursor->subMonth();
+        }
+
+        return $options;
     }
 
     /**
@@ -83,26 +144,137 @@ class StudentController extends Controller
     {
         $data = $request->validate($this->rules());
 
+        // Stamp the active institution so the record is scoped correctly.
+        $data['institution_id'] = Institution::current()?->id;
+
         $student = Student::create($data);
 
+        // Redirect back to the INDEX (not create), so the roster table - the
+        // list view - is what the user sees after adding a member. This is the
+        // fix for "adding members only shows the form, not the list".
         return redirect()
             ->route('meals.students.index')
-            ->with('success', "Student \"{$student->name}\" added.");
+            ->with('success', "{$student->name} added to the roster.");
     }
 
-    public function show(Student $student)
+    public function show(Request $request, Student $student)
     {
-        $student->load(['department:id,name,slug', 'user:id,name,email', 'deposits' => fn ($q) => $q->latest()->limit(20), 'entries' => fn ($q) => $q->orderByDesc('date')->limit(30)]);
+        $student->load([
+            'department:id,name,slug',
+            'user:id,name,email',
+            'manager:id,name,email',
+        ]);
 
-        $costPerMeal = $this->currentCostPerMeal();
+        // Everything on the detail page is month-scoped, matching the roster.
+        $month = FinanceCalculator::resolveMonth($request->query('month'));
+        $finance = new FinanceCalculator();
+        $costPerMeal = $finance->perMealRate($month);
+
+        $row = $finance->memberBreakdown($month)->firstWhere('id', $student->id);
+
+        // Recent activity for context, independent of the month figures.
+        $student->load([
+            'deposits' => fn ($q) => $q->latest()->limit(20),
+            'entries' => fn ($q) => $q->orderByDesc('date')->limit(30),
+        ]);
 
         return Inertia::render('Meals/Students/Show', [
             'student' => $student,
+            'managerName' => $student->manager_label,
+            'month' => $month,
+            'months' => $this->monthOptions(),
             'costPerMeal' => $costPerMeal,
-            'balance' => $student->balance($costPerMeal),
-            'totalMeals' => $student->total_meals,
-            'totalDeposits' => $student->total_deposits,
+            'balance' => (float) ($row['balance'] ?? 0),
+            'breakdown' => $row ?? [
+                'meals' => 0, 'meal_cost' => 0, 'deposited' => 0,
+                'subsidy_share' => 0, 'balance' => 0, 'breakfast' => 0,
+                'lunch' => 0, 'dinner' => 0,
+            ],
+            'totalMeals' => (int) ($row['meals'] ?? 0),
+            'totalDeposits' => (float) ($row['deposited'] ?? 0),
         ]);
+    }
+
+    /**
+     * Excel / PDF export of the member roster for a month.
+     */
+    public function export(Request $request)
+    {
+        $month = FinanceCalculator::resolveMonth($request->query('month'));
+        $finance = new FinanceCalculator();
+        $costPerMeal = $finance->perMealRate($month);
+
+        $rows = $finance->memberBreakdown($month)->map(fn ($row) => [
+            'name' => $row['name'],
+            'roll' => $row['roll'],
+            'department' => $row['department'],
+            'status' => ucfirst((string) $row['status']),
+            'meals' => $row['meals'],
+            'meal_cost' => $row['meal_cost'],
+            'deposited' => $row['deposited'],
+            'balance' => $row['balance'],
+        ]);
+
+        $format = $request->query('format', 'excel');
+
+        $exporter = new ReportExporter(
+            filename: 'members-'.$month.'-'.now()->format('Ymd'),
+            title: 'Member Roster',
+            columns: [
+                'name' => 'Name',
+                'roll' => 'Roll ID',
+                'department' => 'Group',
+                'status' => 'Status',
+                'meals' => 'Meals',
+                'meal_cost' => 'Meal Cost',
+                'deposited' => 'Deposited',
+                'balance' => 'Balance',
+            ],
+            rows: $rows,
+            meta: [
+                'Institution' => Institution::current()?->name ?? '-',
+                'Period' => \Carbon\Carbon::createFromFormat('Y-m', $month)->format('F Y'),
+                'Members' => $rows->count(),
+                'Per-meal rate' => Money::format($costPerMeal, null, false),
+            ],
+            formatter: fn ($value, $key) => in_array($key, ['meal_cost', 'deposited', 'balance'], true)
+                ? Money::format((float) $value)
+                : $value,
+        );
+
+        \App\Http\Controllers\ActivityLogController::recordExport($request, 'Member Roster', ['format' => $format]);
+
+        return $format === 'pdf' ? $exporter->pdf() : $exporter->excel();
+    }
+
+    /**
+     * Invite a member to create their own login. Creates no password - it sends
+     * a signed email link so the member sets their own.
+     */
+    public function invite(Request $request, Student $student)
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        if ($student->user_id) {
+            return back()->with('error', 'This member already has a linked account.');
+        }
+
+        if (User::where('email', $data['email'])->exists()) {
+            return back()->with('error', 'A user with that email already exists.');
+        }
+
+        // Reuse the shared invitation flow, scoped to this member record.
+        $invitationController = app(\App\Http\Controllers\MemberInvitationController::class);
+
+        return $invitationController->store($request->merge([
+            'email' => $data['email'],
+            'name' => $student->name,
+            'student_id' => $student->id,
+            // Members get the view-only role by default.
+            'role' => 'Member',
+        ]));
     }
 
     public function edit(Student $student)
@@ -114,11 +286,16 @@ class StudentController extends Controller
     {
         $data = $request->validate($this->rules($student));
 
+        // Backfill institution scope for records created before multi-tenancy.
+        if (blank($student->institution_id)) {
+            $data['institution_id'] = Institution::current()?->id;
+        }
+
         $student->update($data);
 
         return redirect()
             ->route('meals.students.index')
-            ->with('success', "Student \"{$student->name}\" updated.");
+            ->with('success', "{$student->name} updated.");
     }
 
     public function destroy(Student $student)
@@ -152,6 +329,8 @@ class StudentController extends Controller
                 // One login should not back two student records.
                 Rule::unique('students', 'user_id')->ignore($student?->id),
             ],
+            // Who owns/manages this member record (manager or member account).
+            'manager_id' => ['nullable', 'exists:users,id'],
             'name' => ['required', 'string', 'max:255'],
             'roll' => ['nullable', 'string', 'max:100'],
             'department_id' => ['nullable', 'exists:departments,id'],
@@ -173,6 +352,29 @@ class StudentController extends Controller
 
         return User::query()
             ->whereNotIn('id', $takenIds)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
+    }
+
+    /**
+     * Users who can be named as a member's manager: anyone trusted with the
+     * roster (Institution Admin, Meal Manager), so a member record points at a
+     * real responsible party.
+     */
+    protected function managerOptions()
+    {
+        return User::query()
+            ->where(function ($q) {
+                $q->whereHas('roles', function ($r) {
+                    $r->whereIn('name', [
+                        'Software Super Admin',
+                        'Institution Admin',
+                        'Meal Manager',
+                    ]);
+                })
+                // Include already-assigned managers even if their role changed.
+                ->orWhereIn('id', Student::query()->whereNotNull('manager_id')->pluck('manager_id'));
+            })
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
     }

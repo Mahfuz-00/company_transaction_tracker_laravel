@@ -2,8 +2,10 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
+import { Spinner } from '@/Components/UI/Loading';
 import { Transition } from '@headlessui/react';
 import { Link, useForm, usePage } from '@inertiajs/react';
+import { useState } from 'react';
 
 export default function UpdateProfileInformation({
     mustVerifyEmail,
@@ -16,12 +18,26 @@ export default function UpdateProfileInformation({
         useForm({
             name: user.name,
             email: user.email,
+            avatar: null,
+            remove_avatar: false,
         });
+
+    // Preview the chosen image straight away, before the upload round-trip.
+    const [avatarPreview, setAvatarPreview] = useState(user.avatar_url || null);
+
+    const onAvatarChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setData('avatar', file);
+        setData('remove_avatar', false);
+        setAvatarPreview(URL.createObjectURL(file));
+    };
 
     const submit = (e) => {
         e.preventDefault();
 
-        patch(route('profile.update'));
+        // The avatar rides along as a file, so the request must be multipart.
+        patch(route('profile.update'), { forceFormData: true });
     };
 
     return (
@@ -37,6 +53,48 @@ export default function UpdateProfileInformation({
             </header>
 
             <form onSubmit={submit} className="mt-6 space-y-6">
+                {/* Profile picture */}
+                <div>
+                    <InputLabel value="Profile picture" />
+                    <div className="mt-2 flex items-center gap-4">
+                        {avatarPreview ? (
+                            <img
+                                src={avatarPreview}
+                                alt="Profile picture"
+                                className="h-16 w-16 flex-shrink-0 rounded-full object-cover"
+                            />
+                        ) : (
+                            <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-lg font-bold text-[var(--accent)]">
+                                {user.name.slice(0, 2).toUpperCase()}
+                            </span>
+                        )}
+
+                        <div className="flex flex-col gap-2">
+                            <input
+                                id="avatar"
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                onChange={onAvatarChange}
+                                className="block text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent)] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:opacity-90"
+                            />
+                            {avatarPreview && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setAvatarPreview(null);
+                                        setData('avatar', null);
+                                        setData('remove_avatar', true);
+                                    }}
+                                    className="w-fit text-xs font-semibold text-rose-500 hover:text-rose-700"
+                                >
+                                    Remove picture
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    <InputError className="mt-2" message={errors.avatar} />
+                </div>
+
                 <div>
                     <InputLabel htmlFor="name" value="Name" />
 
@@ -93,7 +151,10 @@ export default function UpdateProfileInformation({
                 )}
 
                 <div className="flex items-center gap-4">
-                    <PrimaryButton disabled={processing}>Save</PrimaryButton>
+                    <PrimaryButton disabled={processing} className="inline-flex items-center gap-2">
+                        {processing && <Spinner className="h-4 w-4" />}
+                        {processing ? 'Saving...' : 'Save'}
+                    </PrimaryButton>
 
                     <Transition
                         show={recentlySuccessful}

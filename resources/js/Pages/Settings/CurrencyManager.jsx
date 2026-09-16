@@ -1,64 +1,58 @@
 import SettingsLayout from '@/Layouts/SettingsLayout';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import { useCurrencySettings } from '@/Utils/useCurrency';
 import formatNumber from '@/Utils/numberFormatter';
 import Button from '@/Components/UI/Button';
 import Input from '@/Components/UI/Input';
 import Card from '@/Components/UI/Card';
+import { Spinner } from '@/Components/UI/Loading';
 
-export default function Settings({ auth, currencies, userSettings }) {
+export default function Settings({ auth, currencies, currencySettings, canManage }) {
+    const { props } = usePage();
+    const source = currencySettings || props?.currency || {};
+
     const { data, setData, post, processing } = useForm({
-        currency_code: userSettings?.currency_code || '',
-        symbol_position: userSettings?.symbol_position || 'before',
-        decimal_separator: userSettings?.decimal_separator || '.',
-        thousands_separator: userSettings?.thousands_separator || ',',
-        decimal_precision: userSettings?.decimal_precision ?? 2,
-        numbering_system: userSettings?.numbering_system || 'short',
-        abbreviations: userSettings?.abbreviations ?? true,
+        currency_code: source.currency_code || props?.institution?.currency_code || '',
+        symbol: source.symbol || '',
+        symbol_position: source.symbol_position || 'before',
+        decimal_separator: source.decimal_separator || '.',
+        thousands_separator: source.thousands_separator || ',',
+        decimal_precision: source.decimal_precision ?? 2,
+        numbering_system: source.numbering_system || 'short',
+        abbreviations: source.abbreviations ?? true,
     });
 
-    const [settings, saveLocal] = useCurrencySettings();
+    const [, saveLocal] = useCurrencySettings();
     const [previewValue, setPreviewValue] = useState(1234567.89);
 
+    // Keep the local cache in step so formatting is correct on the very next
+    // paint, then the server share takes over permanently.
     useEffect(() => {
         try {
-            const symbol = currencies?.find((c) => c.code === data.currency_code)?.symbol || data.symbol || data.sign || '$';
-            const position = data.symbol_position || data.position || 'before';
-            const normalized = {
+            const symbol = data.symbol || currencies?.find((c) => c.code === data.currency_code)?.symbol || '৳';
+            localStorage.setItem('currency_settings', JSON.stringify({
+                symbol,
                 sign: symbol,
-                position,
+                position: data.symbol_position,
+                symbol_position: data.symbol_position,
                 decimal_separator: data.decimal_separator,
                 thousands_separator: data.thousands_separator,
                 decimal_precision: data.decimal_precision,
                 numbering_system: data.numbering_system,
                 abbreviations: data.abbreviations,
                 currency_code: data.currency_code,
-            };
-            localStorage.setItem('currency_settings', JSON.stringify(normalized));
+            }));
         } catch (e) {}
     }, [data, currencies]);
 
     const handleSave = (e) => {
         e.preventDefault();
-        post(route('settings.store'), {
-            data,
+        post(route('settings.currency.store'), {
             onSuccess: () => {
                 try {
-                    const symbol = currencies?.find((c) => c.code === data.currency_code)?.symbol || data.symbol || data.sign || '$';
-                    const position = data.symbol_position || data.position || 'before';
-                    const normalized = {
-                        sign: symbol,
-                        position,
-                        decimal_separator: data.decimal_separator,
-                        thousands_separator: data.thousands_separator,
-                        decimal_precision: data.decimal_precision,
-                        numbering_system: data.numbering_system,
-                        abbreviations: data.abbreviations,
-                        currency_code: data.currency_code,
-                    };
-                    localStorage.setItem('currency_settings', JSON.stringify(normalized));
-                    try { saveLocal(normalized); } catch (e) {}
+                    const symbol = data.symbol || currencies?.find((c) => c.code === data.currency_code)?.symbol || '৳';
+                    saveLocal({ symbol, sign: symbol, position: data.symbol_position, symbol_position: data.symbol_position });
                 } catch (e) {}
             }
         });
@@ -67,13 +61,28 @@ export default function Settings({ auth, currencies, userSettings }) {
     const separatorsConflict = data.decimal_separator === data.thousands_separator;
 
     return (
-        <SettingsLayout 
-            user={auth?.user} 
+        <SettingsLayout
+            user={auth?.user}
             header={<h2 className="font-semibold text-xl text-gray-800 leading-tight">System Settings</h2>}
         >
             <Head title="Settings" />
 
             <div className="py-8 px-6 max-w-7xl mx-auto space-y-6">
+                {!canManage && (
+                    <div className="rounded-lg border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-700">
+                        Only a Software Super Admin can change global currency settings. You can view them here.
+                    </div>
+                )}
+                {props?.flash?.success && (
+                    <div role="status" className="rounded-lg border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
+                        {props.flash.success}
+                    </div>
+                )}
+                {props?.flash?.error && (
+                    <div role="status" className="rounded-lg border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700">
+                        {props.flash.error}
+                    </div>
+                )}
                 <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                     
                     {/* Settings Input Form */}
@@ -86,7 +95,7 @@ export default function Settings({ auth, currencies, userSettings }) {
                         {/* Section 1: Currency & Symbol */}
                         <div className="space-y-4 pt-2">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600">1. Currency Details</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 <div>
                                     <label htmlFor="currency_code" className="block text-xs font-semibold text-gray-600 mb-1">
                                         Active Currency
@@ -94,8 +103,16 @@ export default function Settings({ auth, currencies, userSettings }) {
                                     <select 
                                         id="currency_code" 
                                         value={data.currency_code} 
-                                        onChange={(e) => setData('currency_code', e.target.value)} 
-                                        className="w-full border-gray-300 rounded-lg shadow-sm text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
+                                        disabled={!canManage}
+                                        onChange={(e) => {
+                                            const code = e.target.value;
+                                            setData((prev) => ({
+                                                ...prev,
+                                                currency_code: code,
+                                                symbol: currencies?.find((c) => c.code === code)?.symbol || prev.symbol,
+                                            }));
+                                        }}
+                                        className="w-full border-gray-300 rounded-lg shadow-sm text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500 transition-colors disabled:bg-gray-50"
                                     >
                                         <option value="">-- Select currency --</option>
                                         {currencies.map((c) => (
@@ -105,13 +122,32 @@ export default function Settings({ auth, currencies, userSettings }) {
                                 </div>
 
                                 <div>
+                                    <label htmlFor="symbol" className="block text-xs font-semibold text-gray-600 mb-1">
+                                        Currency Symbol
+                                    </label>
+                                    <input
+                                        id="symbol"
+                                        type="text"
+                                        value={data.symbol}
+                                        disabled={!canManage}
+                                        maxLength={12}
+                                        onChange={(e) => setData('symbol', e.target.value)}
+                                        placeholder="e.g. ৳ / $ / € / ¥"
+                                        className="w-full border-gray-300 rounded-lg shadow-sm text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500 transition-colors disabled:bg-gray-50"
+                                    />
+                                    <p className="mt-1 text-[11px] text-gray-400">
+                                        Shown across every module, report and dashboard.
+                                    </p>
+                                </div>
+
+                                <div>
                                     <label htmlFor="symbol_position" className="block text-xs font-semibold text-gray-600 mb-1">
                                         Symbol Placement
                                     </label>
-                                    <select 
-                                        id="symbol_position" 
-                                        value={data.symbol_position} 
-                                        onChange={(e) => setData('symbol_position', e.target.value)} 
+                                    <select
+                                        id="symbol_position"
+                                        value={data.symbol_position}
+                                        onChange={(e) => setData('symbol_position', e.target.value)}
                                         className="w-full border-gray-300 rounded-lg shadow-sm text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                                     >
                                         <option value="before">Before ($100)</option>
@@ -133,10 +169,10 @@ export default function Settings({ auth, currencies, userSettings }) {
                                     <label htmlFor="decimal_separator" className="block text-xs font-semibold text-gray-600 mb-1">
                                         Decimal Separator
                                     </label>
-                                    <select 
-                                        id="decimal_separator" 
-                                        value={data.decimal_separator} 
-                                        onChange={(e) => setData('decimal_separator', e.target.value)} 
+                                    <select
+                                        id="decimal_separator"
+                                        value={data.decimal_separator}
+                                        onChange={(e) => setData('decimal_separator', e.target.value)}
                                         className="w-full border-gray-300 rounded-lg shadow-sm text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                                     >
                                         <option value=".">Period (.)</option>
@@ -148,10 +184,10 @@ export default function Settings({ auth, currencies, userSettings }) {
                                     <label htmlFor="thousands_separator" className="block text-xs font-semibold text-gray-600 mb-1">
                                         Thousands Separator
                                     </label>
-                                    <select 
-                                        id="thousands_separator" 
-                                        value={data.thousands_separator} 
-                                        onChange={(e) => setData('thousands_separator', e.target.value)} 
+                                    <select
+                                        id="thousands_separator"
+                                        value={data.thousands_separator}
+                                        onChange={(e) => setData('thousands_separator', e.target.value)}
                                         className="w-full border-gray-300 rounded-lg shadow-sm text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                                     >
                                         <option value=",">Comma (,)</option>
@@ -162,13 +198,13 @@ export default function Settings({ auth, currencies, userSettings }) {
                                 </div>
 
                                 <div>
-                                    <Input 
-                                        id="decimal_precision" 
-                                        label="Decimal Precision" 
-                                        type="number" 
-                                        min={0} 
-                                        value={data.decimal_precision} 
-                                        onChange={(e) => setData('decimal_precision', Number(e.target.value))} 
+                                    <Input
+                                        id="decimal_precision"
+                                        label="Decimal Precision"
+                                        type="number"
+                                        min={0}
+                                        value={data.decimal_precision}
+                                        onChange={(e) => setData('decimal_precision', Number(e.target.value))}
                                     />
                                 </div>
                             </div>
@@ -193,10 +229,10 @@ export default function Settings({ auth, currencies, userSettings }) {
                                     <label htmlFor="numbering_system" className="block text-xs font-semibold text-gray-600 mb-1">
                                         Numbering Scale
                                     </label>
-                                    <select 
-                                        id="numbering_system" 
-                                        value={data.numbering_system} 
-                                        onChange={(e) => setData('numbering_system', e.target.value)} 
+                                    <select
+                                        id="numbering_system"
+                                        value={data.numbering_system}
+                                        onChange={(e) => setData('numbering_system', e.target.value)}
                                         className="w-full border-gray-300 rounded-lg shadow-sm text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
                                     >
                                         <option value="short">Short scale (Million, Billion)</option>
@@ -207,12 +243,12 @@ export default function Settings({ auth, currencies, userSettings }) {
                                 </div>
 
                                 <div className="flex items-center gap-2.5 pt-5">
-                                    <input 
-                                        id="abbreviations" 
-                                        type="checkbox" 
-                                        checked={data.abbreviations} 
-                                        onChange={(e) => setData('abbreviations', e.target.checked)} 
-                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 transition-colors" 
+                                    <input
+                                        id="abbreviations"
+                                        type="checkbox"
+                                        checked={data.abbreviations}
+                                        onChange={(e) => setData('abbreviations', e.target.checked)}
+                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 transition-colors"
                                     />
                                     <label htmlFor="abbreviations" className="text-sm font-medium text-gray-700 select-none">
                                         Enable compact scale labels (e.g. 1.5 Mil)
@@ -223,7 +259,8 @@ export default function Settings({ auth, currencies, userSettings }) {
 
                         {/* Form Submit */}
                         <div className="pt-4 flex justify-end">
-                            <Button type="submit" disabled={processing || separatorsConflict} className="px-6 py-2.5 text-sm font-semibold shadow-sm">
+                            <Button type="submit" disabled={processing || separatorsConflict || !canManage} className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold shadow-sm">
+                                {processing && <Spinner className="h-4 w-4" />}
                                 {processing ? 'Saving...' : 'Save Settings'}
                             </Button>
                         </div>

@@ -4,9 +4,12 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
+import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, useForm } from '@inertiajs/react';
 
 export default function Login({ status, canResetPassword }) {
+    const { t } = useTerminology();
+
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
@@ -24,7 +27,7 @@ export default function Login({ status, canResetPassword }) {
     return (
         <GuestLayout
             heading="Welcome back"
-            subheading="Sign in to manage your dorm meals, deposits, and expenses."
+            subheading={`Sign in to manage your ${t('institution', 'institution').toLowerCase()} meals, deposits, and expenses.`}
         >
             <Head title="Log in" />
 

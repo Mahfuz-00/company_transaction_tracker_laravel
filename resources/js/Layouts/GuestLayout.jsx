@@ -1,7 +1,10 @@
 import ApplicationLogo from '@/Components/ApplicationLogo';
+import useTerminology from '@/Utils/useTerminology';
 import { Link } from '@inertiajs/react';
 
 export default function GuestLayout({ children, heading, subheading }) {
+    const { institution } = useTerminology();
+
     return (
         <div className="min-h-screen bg-gradient-to-b from-indigo-50/80 via-white to-white">
             <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-8 sm:px-6 lg:px-8">
@@ -11,7 +14,7 @@ export default function GuestLayout({ children, heading, subheading }) {
                         <ApplicationLogo className="h-9 w-9 rounded-lg object-contain" />
                         <span className="flex flex-col leading-tight">
                             <span className="text-sm font-bold text-slate-900">
-                                Dorm Meal Manager
+                                {institution?.name || 'Meal Manager'}
                             </span>
                             <span className="text-[11px] font-medium text-slate-400">
                                 Shared meals, tracked

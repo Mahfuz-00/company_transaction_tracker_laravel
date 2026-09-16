@@ -13,10 +13,23 @@ const EMPTY_FORM = {
     email: '',
     address: '',
     category: '',
+    recurrence: '',
+    lead_time_days: '',
+    recurring_amount: '',
     opening_balance: '',
     status: 'active',
     notes: '',
 };
+
+const recurrenceLabel = (value) =>
+    ({
+        daily: 'Daily',
+        weekly: 'Weekly',
+        fortnightly: 'Every two weeks',
+        monthly: 'Monthly',
+        quarterly: 'Quarterly',
+        on_demand: 'On demand',
+    }[value] || value || '');
 
 const categoryLabel = (value) =>
     value
@@ -50,11 +63,12 @@ function Flash({ success, error }) {
     );
 }
 
-export default function Index({ vendors, categories = [], filters, totals = {} }) {
+export default function Index({ vendors, categories = [], recurrences = [], filters, totals = {} }) {
     const { can } = useCan();
     const { flash } = usePage().props;
     const money = useMoney();
     const canManage = can('vendors.manage');
+    const canExport = can('exports.download');
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
@@ -92,6 +106,9 @@ export default function Index({ vendors, categories = [], filters, totals = {} }
             email: vendor.email || '',
             address: vendor.address || '',
             category: vendor.category || '',
+            recurrence: vendor.recurrence || '',
+            lead_time_days: vendor.lead_time_days ?? '',
+            recurring_amount: vendor.recurring_amount ?? '',
             opening_balance: vendor.opening_balance ?? '',
             status: vendor.status || 'active',
             notes: vendor.notes || '',
@@ -140,20 +157,28 @@ export default function Index({ vendors, categories = [], filters, totals = {} }
     return (
         <MealsLayout
             title="Vendors & Suppliers"
-            description="Who the institution buys from, and how much has been spent with each."
+            description="Who the institution buys from - including the institution itself as the primary hub - and how much has been spent with each."
             actions={
-                canManage && (
-                    <button
-                        type="button"
-                        onClick={openCreate}
-                        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800"
-                    >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Add Vendor
-                    </button>
-                )
+                <div className="flex flex-wrap items-center gap-2">
+                    {canExport && (
+                        <div className="flex overflow-hidden rounded-lg border-slate-300">
+                            <a href={`${route('meals.vendors.export')}?format=excel`} className="border-r border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">Excel</a>
+                            <a href={`${route('meals.vendors.export')}?format=pdf`} target="_blank" rel="noreferrer" className="bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">PDF</a>
+                        </div>
+                    )}
+                    {canManage && (
+                        <button
+                            type="button"
+                            onClick={openCreate}
+                            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800"
+                        >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Vendor
+                        </button>
+                    )}
+                </div>
             }
         >
             <Head title="Vendors" />
@@ -170,6 +195,9 @@ export default function Index({ vendors, categories = [], filters, totals = {} }
                         {totals.vendors ?? 0}
                         <span className="ml-2 text-xs font-medium text-emerald-600">
                             {totals.active ?? 0} active
+                        </span>
+                        <span className="ml-2 text-xs font-medium text-sky-600">
+                            {totals.recurring ?? 0} recurring
                         </span>
                     </div>
                 </div>
@@ -248,28 +276,36 @@ export default function Index({ vendors, categories = [], filters, totals = {} }
 
                 {/* Desktop table (hidden on small screens) */}
                 <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full border-collapse text-left">
+                    <table className="w-full min-w-180 border-collapse text-left">
                         <thead>
                             <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                                <th className="px-6 py-3">Vendor</th>
-                                <th className="px-6 py-3">Category</th>
-                                <th className="px-6 py-3">Contact</th>
-                                <th className="px-6 py-3 text-right">Purchased</th>
-                                <th className="px-6 py-3 text-right">Outstanding</th>
-                                <th className="px-6 py-3">Status</th>
-                                <th className="px-6 py-3 text-right">Actions</th>
+                                <th className="px-4 py-3 sm:px-6">Vendor</th>
+                                <th className="px-4 py-3 sm:px-6">Category</th>
+                                <th className="px-4 py-3 sm:px-6">Recurrence</th>
+                                <th className="px-4 py-3 sm:px-6">Contact</th>
+                                <th className="px-4 py-3 text-right sm:px-6">Purchased</th>
+                                <th className="px-4 py-3 text-right sm:px-6">Outstanding</th>
+                                <th className="px-4 py-3 sm:px-6">Status</th>
+                                <th className="px-4 py-3 text-right sm:px-6">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-sm">
                             {rows.map((vendor) => (
-                                <tr key={vendor.id} className="transition-colors hover:bg-slate-50/60">
-                                    <td className="px-6 py-4">
-                                        <div className="font-semibold text-slate-900">{vendor.name}</div>
+                                <tr key={vendor.id} className={`transition-colors hover:bg-slate-50/60 ${vendor.is_institution_hub ? 'bg-indigo-50/40' : ''}`}>
+                                    <td className="px-4 py-4 sm:px-6">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="font-semibold text-slate-900">{vendor.name}</span>
+                                            {vendor.is_institution_hub && (
+                                                <span className="inline-flex items-center rounded-full border-indigo-200 bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">
+                                                    Hub
+                                                </span>
+                                            )}
+                                        </div>
                                         {vendor.address && (
                                             <div className="truncate text-xs text-slate-400">{vendor.address}</div>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="px-4 py-4 sm:px-6">
                                         {vendor.category ? (
                                             <span className="inline-flex rounded-full border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700">
                                                 {vendor.category_label}
@@ -278,14 +314,23 @@ export default function Index({ vendors, categories = [], filters, totals = {} }
                                             <span className="text-slate-300">—</span>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4 text-xs text-slate-600">
+                                    <td className="px-4 py-4 sm:px-6">
+                                        {vendor.recurrence ? (
+                                            <span className="inline-flex items-center rounded-full border-sky-100 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">
+                                                {recurrenceLabel(vendor.recurrence)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs italic text-slate-400">One-off</span>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-4 text-xs text-slate-600 sm:px-6">
                                         <div className="font-medium">{vendor.contact_person || '—'}</div>
                                         {vendor.phone && <div className="text-slate-400">{vendor.phone}</div>}
                                     </td>
-                                    <td className="px-6 py-4 text-right font-semibold text-slate-800">
+                                    <td className="px-4 py-4 text-right font-semibold text-slate-800 sm:px-6">
                                         {money(vendor.total_purchased ?? 0, false)}
                                     </td>
-                                    <td className="px-6 py-4 text-right">
+                                    <td className="px-4 py-4 text-right sm:px-6">
                                         {Number(vendor.outstanding_balance) > 0 ? (
                                             <span className="font-bold text-amber-600">
                                                 {money(vendor.outstanding_balance, false)}
@@ -557,6 +602,45 @@ export default function Index({ vendors, categories = [], filters, totals = {} }
                             hint="Amount already owed at setup."
                             onChange={(event) => setData('opening_balance', event.target.value)}
                         />
+                    </div>
+
+                    {/* Recurring purchase settings */}
+                    <div className="rounded-lg border-slate-200 bg-slate-50 p-4">
+                        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">
+                            Recurring Purchases
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            <Field
+                                label="Buys From"
+                                name="recurrence"
+                                type="select"
+                                value={data.recurrence}
+                                error={errors.recurrence}
+                                options={[{ value: '', label: '— One-off —' }, ...recurrences]}
+                                onChange={(event) => setData('recurrence', event.target.value)}
+                            />
+                            <Field
+                                label="Lead Time (days)"
+                                name="lead_time_days"
+                                type="number"
+                                min="0"
+                                value={data.lead_time_days}
+                                error={errors.lead_time_days}
+                                placeholder="e.g. 2"
+                                onChange={(event) => setData('lead_time_days', event.target.value)}
+                            />
+                            <Field
+                                label="Typical Order Value"
+                                name="recurring_amount"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={data.recurring_amount}
+                                error={errors.recurring_amount}
+                                placeholder="e.g. 8000"
+                                onChange={(event) => setData('recurring_amount', event.target.value)}
+                            />
+                        </div>
                     </div>
 
                     <Field

@@ -2,158 +2,133 @@
 
 namespace App\Http\Controllers\Meals;
 
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\Controller;
-use App\Models\Deposit;
-use App\Models\MealEntry;
-use App\Models\MealRate;
-use App\Models\Student;
+use App\Models\Institution;
+use App\Support\FinanceCalculator;
+use App\Support\Money;
+use App\Support\ReportExporter;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class MealReportController extends Controller
 {
+    /**
+     * Reports default strictly to the CURRENT MONTH. A Month selector replaces
+     * the old from/to range, which is what a mess manager actually reasons in.
+     */
     public function index(Request $request)
     {
-        $from = $request->input('from');
-        $to = $request->input('to');
+        $month = FinanceCalculator::resolveMonth($request->input('month'));
+        $finance = new FinanceCalculator();
 
-        /* -------------------------------------------------------------- *
-         * Totals
-         *
-         * Each aggregate needs its own builder. Previously one $query was
-         * reused across three sum() calls, and the date filters were applied
-         * to it repeatedly - the numbers were wrong as soon as a range was set.
-         * -------------------------------------------------------------- */
-
-        // Meals eaten = SUM(breakfast + lunch + dinner), not COUNT(rows).
-        $mealTotals = $this->mealEntryQuery($from, $to)
-            ->selectRaw('COALESCE(SUM(breakfast), 0) as breakfast')
-            ->selectRaw('COALESCE(SUM(lunch), 0) as lunch')
-            ->selectRaw('COALESCE(SUM(dinner), 0) as dinner')
-            ->first();
-
-        $breakfastTotal = (int) ($mealTotals->breakfast ?? 0);
-        $lunchTotal = (int) ($mealTotals->lunch ?? 0);
-        $dinnerTotal = (int) ($mealTotals->dinner ?? 0);
-        $totalMeals = $breakfastTotal + $lunchTotal + $dinnerTotal;
-
-        $totalDeposits = (float) Deposit::query()
-            ->when($from, fn ($q) => $q->whereDate('created_at', '>=', $from))
-            ->when($to, fn ($q) => $q->whereDate('created_at', '<=', $to))
-            ->sum('amount');
-
-        $totalExpenses = (float) \App\Models\Transaction::query()
-            ->where('type', 'out')
-            ->when($from, fn ($q) => $q->whereDate('created_at', '>=', $from))
-            ->when($to, fn ($q) => $q->whereDate('created_at', '<=', $to))
-            ->sum('amount');
-
-        /* -------------------------------------------------------------- *
-         * Meal rate
-         *
-         * Prefer a configured rate. If none exists, fall back to the figure
-         * the mess actually spent per meal - deposits are money pooled, not
-         * money spent, so dividing deposits by meals would overstate the rate.
-         * -------------------------------------------------------------- */
-        $rate = MealRate::query()
-            ->whereNotNull('cost_per_meal')
-            ->when($from, fn ($q) => $q->where('to_date', '>=', $from))
-            ->orderByDesc('to_date')
-            ->orderByDesc('created_at')
-            ->first();
-
-        $costPerMeal = $rate
-            ? (float) $rate->cost_per_meal
-            : ($totalMeals > 0 ? round($totalExpenses / $totalMeals, 4) : 0.0);
-
-        /* -------------------------------------------------------------- *
-         * Per-student breakdown
-         *
-         * One grouped query for meal counts + one for deposits, then stitch
-         * them together - avoids N+1 across the roster.
-         * -------------------------------------------------------------- */
-        $mealCounts = $this->mealEntryQuery($from, $to)
-            ->select('student_id')
-            ->selectRaw('COALESCE(SUM(breakfast), 0) as breakfast')
-            ->selectRaw('COALESCE(SUM(lunch), 0) as lunch')
-            ->selectRaw('COALESCE(SUM(dinner), 0) as dinner')
-            ->selectRaw('COALESCE(SUM(breakfast + lunch + dinner), 0) as total_meals')
-            ->groupBy('student_id')
-            ->get()
-            ->keyBy('student_id');
-
-        $depositTotals = Deposit::query()
-            ->when($from, fn ($q) => $q->whereDate('created_at', '>=', $from))
-            ->when($to, fn ($q) => $q->whereDate('created_at', '<=', $to))
-            ->select('student_id')
-            ->selectRaw('COALESCE(SUM(amount), 0) as total_deposits')
-            ->groupBy('student_id')
-            ->get()
-            ->keyBy('student_id');
-
-        $students = Student::query()
-            ->with('department:id,name,slug')
-            ->orderBy('name')
-            ->get()
-            ->map(function (Student $student) use ($mealCounts, $depositTotals, $costPerMeal) {
-                $meals = $mealCounts->get($student->id);
-                $deposited = (float) ($depositTotals->get($student->id)->total_deposits ?? 0);
-
-                $totalMeals = (int) ($meals->total_meals ?? 0);
-                $mealCost = round($totalMeals * $costPerMeal, 2);
-                $balance = round($deposited - $mealCost, 2);
-
-                return [
-                    'id' => $student->id,
-                    'name' => $student->name,
-                    'roll' => $student->roll,
-                    'status' => $student->status,
-                    'department' => $student->department?->name,
-                    'breakfast' => (int) ($meals->breakfast ?? 0),
-                    'lunch' => (int) ($meals->lunch ?? 0),
-                    'dinner' => (int) ($meals->dinner ?? 0),
-                    'total_meals' => $totalMeals,
-                    'total_deposits' => $deposited,
-                    'meal_cost' => $mealCost,
-                    'balance' => $balance,
-                    // Negative balance = this student still owes the mess.
-                    'is_due' => $balance < 0,
-                ];
-            })
-            // Most meals first - the manager usually wants the top consumers.
-            ->sortByDesc('total_meals')
-            ->values();
-
-        $totalMealCost = round($students->sum('meal_cost'), 2);
+        $snapshot = $finance->monthSnapshot($month);
+        $members = $finance->memberBreakdown($month);
 
         return Inertia::render('Meals/Reports/Index', [
-            'summary' => [
-                'total_meals' => $totalMeals,
-                'breakfast' => $breakfastTotal,
-                'lunch' => $lunchTotal,
-                'dinner' => $dinnerTotal,
-                'total_deposits' => $totalDeposits,
-                'total_expenses' => $totalExpenses,
-                'total_meal_cost' => $totalMealCost,
-                'cost_per_meal' => $costPerMeal,
-                'pool_balance' => round($totalDeposits - $totalExpenses, 2),
-                'students_with_dues' => $students->where('is_due', true)->count(),
-                'total_dues' => round($students->where('is_due', true)->sum(fn ($s) => abs($s['balance'])), 2),
-            ],
-            'students' => $students,
-            'filters' => ['from' => $from, 'to' => $to],
+            'summary' => $this->summaryPayload($snapshot, $members),
+            'students' => $members,
+            'months' => $this->monthOptions(),
+            'filters' => ['month' => $month],
         ]);
     }
 
     /**
-     * A fresh MealEntry query with the date range applied.
-     * Deliberately a new instance per call so aggregates can't share state.
+     * Shape the finance snapshot into the field names the report UI expects.
      */
-    protected function mealEntryQuery(?string $from, ?string $to)
+    protected function summaryPayload(array $snapshot, $members): array
     {
-        return MealEntry::query()
-            ->when($from, fn ($q) => $q->whereDate('date', '>=', $from))
-            ->when($to, fn ($q) => $q->whereDate('date', '<=', $to));
+        $duesTotal = $members->where('is_due', true)
+            ->sum(fn ($m) => abs($m['balance']));
+
+        return [
+            'total_meals' => $snapshot['meals'],
+            'breakfast' => (int) $members->sum('breakfast'),
+            'lunch' => (int) $members->sum('lunch'),
+            'dinner' => (int) $members->sum('dinner'),
+            'total_deposits' => $snapshot['deposits'],
+            'total_subsidies' => $snapshot['subsidies'],
+            'total_expenses' => $snapshot['expenses'],
+            'total_meal_cost' => $snapshot['meal_cost'],
+            'cost_per_meal' => $snapshot['per_meal_rate'],
+            'pool_balance' => $snapshot['pool_balance'],
+            'subsidy_coverage_pct' => $snapshot['subsidy_coverage_pct'],
+            'students_with_dues' => $members->where('is_due', true)->count(),
+            'total_dues' => round($duesTotal, 2),
+            'daily_meals' => $snapshot['daily_meals'],
+            'daily_cost' => $snapshot['daily_cost'],
+            'month_label' => $snapshot['label'],
+        ];
+    }
+
+    /**
+     * PDF / Excel export of exactly the figures the screen shows.
+     */
+    public function export(Request $request)
+    {
+        $month = FinanceCalculator::resolveMonth($request->input('month'));
+        $finance = new FinanceCalculator();
+
+        $snapshot = $finance->monthSnapshot($month);
+        $students = $finance->memberBreakdown($month);
+        $summary = $this->summaryPayload($snapshot, $students);
+        $label = $snapshot['label'];
+        $format = $request->input('format', 'excel');
+
+        $exporter = new ReportExporter(
+            filename: 'meal-report-'.$month,
+            title: 'Meal Report - '.$label,
+            columns: [
+                'name' => 'Name',
+                'roll' => 'Roll ID',
+                'department' => 'Group',
+                'breakfast' => 'Breakfast',
+                'lunch' => 'Lunch',
+                'dinner' => 'Dinner',
+                'meals' => 'Total Meals',
+                'meal_cost' => 'Meal Cost',
+                'deposited' => 'Deposited',
+                'subsidy_share' => 'Subsidy Share',
+                'balance' => 'Balance',
+            ],
+            rows: $students,
+            meta: [
+                'Institution' => Institution::current()?->name ?? '-',
+                'Period' => $label,
+                'Total meals' => $summary['total_meals'],
+                'Per-meal rate' => Money::format($summary['cost_per_meal'], null, false),
+                'Total spent' => Money::format($summary['total_expenses']),
+                'Total deposited' => Money::format($summary['total_deposits']),
+                'Subsidies' => Money::format($summary['total_subsidies']),
+            ],
+            formatter: fn ($value, $key) => in_array($key, ['meal_cost', 'deposited', 'subsidy_share', 'balance'], true)
+                ? Money::format((float) $value)
+                : $value,
+        );
+
+        ActivityLogController::recordExport($request, 'Meal Report - '.$label, [
+            'month' => $month,
+            'format' => $format,
+        ]);
+
+        return $format === 'pdf' ? $exporter->pdf() : $exporter->excel();
+    }
+
+    /** The last 18 months, newest first, for the selector. */
+    protected function monthOptions(): array
+    {
+        $options = [];
+        $cursor = now()->startOfMonth();
+
+        for ($i = 0; $i < 18; $i++) {
+            $options[] = [
+                'value' => $cursor->format('Y-m'),
+                'label' => $cursor->format('F Y'),
+                'current' => $i === 0,
+            ];
+            $cursor->subMonth();
+        }
+
+        return $options;
     }
 }

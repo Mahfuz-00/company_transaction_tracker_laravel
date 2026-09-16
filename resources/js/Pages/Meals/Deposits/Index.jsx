@@ -4,6 +4,8 @@ import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
+import useTerminology from '@/Utils/useTerminology';
+import { Spinner } from '@/Components/UI/Loading';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 
 const EMPTY_FORM = {
@@ -48,11 +50,13 @@ function Flash({ success, error }) {
     );
 }
 
-export default function Index({ deposits, students, filteredTotal, filters }) {
+export default function Index({ deposits, students, kinds, filteredTotal, personalTotal, subsidyAllocated, subsidyGrants, filters }) {
     const { can } = useCan();
+    const { t } = useTerminology();
     const { flash } = usePage().props;
     const money = useMoney();
     const canRecord = can('meals.deposit');
+    const canExport = can('exports.download');
 
     const [modalOpen, setModalOpen] = useState(false);
     const [search, setSearch] = useState(filters?.search || '');
@@ -104,39 +108,77 @@ export default function Index({ deposits, students, filteredTotal, filters }) {
     const hasFilters =
         Boolean(filters?.search) ||
         Boolean(filters?.student) ||
+        Boolean(filters?.kind) ||
         Boolean(filters?.from) ||
         Boolean(filters?.to);
+
+    const exportUrl = (format) => {
+        const params = new URLSearchParams({ format });
+        if (filters?.from) params.set('from', filters.from);
+        if (filters?.to) params.set('to', filters.to);
+        if (filters?.kind) params.set('kind', filters.kind);
+        if (filters?.student) params.set('student', filters.student);
+        return `${route('meals.deposits.export')}?${params.toString()}`;
+    };
 
     return (
         <MealsLayout
             title="Deposits"
             description="Money each student pays into the common pool. Every deposit is also recorded as a cash-in transaction."
             actions={
-                canRecord && (
-                    <button
-                        type="button"
-                        onClick={openModal}
-                        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800"
-                    >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                        Record Deposit
-                    </button>
-                )
+                <div className="flex flex-wrap items-center gap-2">
+                    {canExport && (
+                        <div className="flex overflow-hidden rounded-lg border-slate-300">
+                            <a href={exportUrl('excel')} className="border-r border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">Excel</a>
+                            <a href={exportUrl('pdf')} target="_blank" rel="noreferrer" className="bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">PDF</a>
+                        </div>
+                    )}
+                    {canRecord && (
+                        <button
+                            type="button"
+                            onClick={openModal}
+                            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800"
+                        >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Record Deposit
+                        </button>
+                    )}
+                </div>
             }
         >
             <Head title="Deposits" />
 
             <Flash success={flash?.success} error={flash?.error} />
 
-            {/* Filtered total */}
-            <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    {hasFilters ? 'Total for current filter' : 'Total collected (all time)'}
+            {/* Totals: personal deposits and subsidies reported separately. */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        {hasFilters ? 'Total for current filter' : 'Total collected (all time)'}
+                    </div>
+                    <div className="mt-1 text-2xl font-bold text-emerald-600">
+                        {money(filteredTotal, false)}
+                    </div>
                 </div>
-                <div className="mt-1 text-2xl font-bold text-emerald-600">
-                    {money(filteredTotal, false)}
+                <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        Personal Deposits
+                    </div>
+                    <div className="mt-1 text-2xl font-bold text-slate-800">
+                        {money(personalTotal ?? 0, false)}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-slate-400">Paid in by {t('members', 'members').toLowerCase()}</div>
+                </div>
+                <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        Institutional Subsidies
+                    </div>
+                    <div className="mt-1 text-2xl font-bold text-sky-600">
+                        {money(subsidyGrants ?? subsidyAllocated ?? 0, false)}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-slate-400">Injected by an authority - tracked separately</div>
                 </div>
             </div>
 
@@ -179,6 +221,17 @@ export default function Index({ deposits, students, filteredTotal, filters }) {
                         ))}
                     </select>
 
+                    <select
+                        value={filters?.kind || ''}
+                        onChange={(event) => applyFilters({ kind: event.target.value })}
+                        className="rounded-lg border-slate-300 text-sm text-slate-900 focus:border-indigo-500 focus:ring-indigo-500"
+                    >
+                        <option value="">All types</option>
+                        {(kinds || []).map((k) => (
+                            <option key={k.value} value={k.value}>{k.label}</option>
+                        ))}
+                    </select>
+
                     <input
                         type="date"
                         value={filters?.from || ''}
@@ -214,8 +267,9 @@ export default function Index({ deposits, students, filteredTotal, filters }) {
                     <table className="w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                                <th className="px-6 py-3">Student</th>
+                                <th className="px-6 py-3">{t('member', 'Member')}</th>
                                 <th className="px-6 py-3">Amount</th>
+                                <th className="px-6 py-3">Type</th>
                                 <th className="px-6 py-3">Method</th>
                                 <th className="px-6 py-3">Recorded By</th>
                                 <th className="px-6 py-3">Date</th>
@@ -246,8 +300,13 @@ export default function Index({ deposits, students, filteredTotal, filters }) {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 font-bold text-emerald-600">
+                                        <td className={`px-6 py-4 font-bold ${deposit.kind === 'subsidy' ? 'text-sky-600' : 'text-emerald-600'}`}>
                                             +{money(deposit.amount, false)}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${deposit.kind === 'subsidy' ? 'border-sky-100 bg-sky-50 text-sky-700' : 'border-emerald-100 bg-emerald-50 text-emerald-700'}`}>
+                                                {deposit.kind === 'subsidy' ? 'Subsidy' : deposit.kind === 'credit' ? 'Credit' : 'Personal'}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 text-slate-600">
                                             {deposit.payment_method || 'Cash'}
@@ -265,13 +324,18 @@ export default function Index({ deposits, students, filteredTotal, filters }) {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="6" className="py-14 text-center">
+                                    <td colSpan="7" className="py-14 text-center">
                                         <p className="text-sm font-semibold text-slate-600">
                                             {hasFilters ? 'No deposits match these filters.' : 'No deposits recorded yet.'}
                                         </p>
                                         <p className="mt-1 text-xs text-slate-400">
-                                            Deposits are what students pay into the shared meal fund.
+                                            Deposits are what {t('members', 'members').toLowerCase()} pay into the shared fund.
                                         </p>
+                                        {!hasFilters && (
+                                            <Link href={route('meals.subsidies.index')} className="mt-3 inline-block text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                                Managing institutional subsidies? Open the Subsidies module →
+                                            </Link>
+                                        )}
                                     </td>
                                 </tr>
                             )}
@@ -327,12 +391,7 @@ export default function Index({ deposits, students, filteredTotal, filters }) {
                             disabled={processing}
                             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50"
                         >
-                            {processing && (
-                                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                                    <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="opacity-90" />
-                                </svg>
-                            )}
+                            {processing && <Spinner className="h-4 w-4" />}
                             {processing ? 'Saving...' : 'Record Deposit'}
                         </button>
                     </>

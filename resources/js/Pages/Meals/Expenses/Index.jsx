@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
@@ -10,8 +10,18 @@ const EMPTY_FORM = {
     amount: '',
     description: '',
     category: 'Groceries',
+    // Vendors are linked directly, so recurring shopping is attributed to the
+    // right supplier without retyping the name each time.
+    vendor_id: '',
+    payment_status: 'paid',
     notes: '',
 };
+
+const PAYMENT_STATUSES = [
+    { value: 'paid', label: 'Paid in full' },
+    { value: 'partial', label: 'Partially paid' },
+    { value: 'unpaid', label: 'Unpaid (on credit)' },
+];
 
 const CATEGORY_OPTIONS = [
     'Groceries',
@@ -41,7 +51,7 @@ function Flash({ success, error }) {
     );
 }
 
-export default function Index({ expenses, categories, filteredTotal, filters }) {
+export default function Index({ expenses, categories, vendors, filteredTotal, byVendor, months, month, filters }) {
     const { can } = useCan();
     const { flash } = usePage().props;
     const money = useMoney();
@@ -54,6 +64,24 @@ export default function Index({ expenses, categories, filteredTotal, filters }) 
         useForm({ ...EMPTY_FORM });
 
     const rows = expenses?.data || [];
+
+    // Vendor options: the institution hub comes first (it is the primary
+    // supplier), then the rest alphabetically.
+    const vendorOptions = useMemo(
+        () => [
+            { value: '', label: '— No vendor —' },
+            ...(vendors || []).map((v) => ({
+                value: String(v.id),
+                label: v.is_institution_hub ? `${v.name} (hub)` : v.name,
+            })),
+        ],
+        [vendors]
+    );
+
+    const categoryOptions = useMemo(
+        () => CATEGORY_OPTIONS.map((c) => ({ value: c, label: c })),
+        []
+    );
 
     const openModal = () => {
         clearErrors();
@@ -86,8 +114,8 @@ export default function Index({ expenses, categories, filteredTotal, filters }) 
     const hasFilters =
         Boolean(filters?.search) ||
         Boolean(filters?.category) ||
-        Boolean(filters?.from) ||
-        Boolean(filters?.to);
+        Boolean(filters?.vendor) ||
+        Boolean(filters?.month);
 
     return (
         <MealsLayout
@@ -112,13 +140,37 @@ export default function Index({ expenses, categories, filteredTotal, filters }) 
 
             <Flash success={flash?.success} error={flash?.error} />
 
-            {/* Filtered total */}
-            <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    {hasFilters ? 'Total for current filter' : 'Total spent (all time)'}
+            {/* Month-scoped total, plus recurring spend per vendor. */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        {hasFilters ? 'Total for current filter' : 'Total spent this month'}
+                    </div>
+                    <div className="mt-1 text-2xl font-bold text-rose-600">
+                        {money(filteredTotal, false)}
+                    </div>
                 </div>
-                <div className="mt-1 text-2xl font-bold text-rose-600">
-                    {money(filteredTotal, false)}
+
+                {/* Recurring shopping: how much went to each vendor this month. */}
+                <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm lg:col-span-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                        Spend by Vendor This Month
+                    </div>
+                    {(byVendor || []).length > 0 ? (
+                        <div className="mt-2 flex-wrap gap-2">
+                            {byVendor.slice(0, 6).map((v) => (
+                                <span key={v.name} className="inline-flex items-center gap-1.5 rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-xs">
+                                    <span className="font-semibold text-slate-700">{v.name}</span>
+                                    <span className="font-bold text-rose-600">{money(v.total, false)}</span>
+                                    <span className="text-slate-400">· {v.count} order(s)</span>
+                                </span>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="mt-1.5 text-xs text-slate-400">
+                            Link a vendor when recording an expense to track recurring shopping here.
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -140,6 +192,20 @@ export default function Index({ expenses, categories, filteredTotal, filters }) 
                         />
                     </form>
 
+                    {/* Month filter replaces the old date range. */}
+                    <select
+                        value={month || ''}
+                        onChange={(event) => applyFilters({ month: event.target.value })}
+                        aria-label="Report month"
+                        className="rounded-lg border-slate-300 text-sm font-semibold text-slate-900 focus:border-[var(--accent)] focus:ring-[var(--accent-ring)]"
+                    >
+                        {(months || []).map((m) => (
+                            <option key={m.value} value={m.value}>
+                                {m.label}{m.current ? ' (current)' : ''}
+                            </option>
+                        ))}
+                    </select>
+
                     <select
                         value={filters?.category || ''}
                         onChange={(event) => applyFilters({ category: event.target.value })}
@@ -153,21 +219,18 @@ export default function Index({ expenses, categories, filteredTotal, filters }) 
                         ))}
                     </select>
 
-                    <input
-                        type="date"
-                        value={filters?.from || ''}
-                        onChange={(event) => applyFilters({ from: event.target.value })}
+                    {/* Vendor filter - surfaces a specific supplier's spend. */}
+                    <select
+                        value={filters?.vendor || ''}
+                        onChange={(event) => applyFilters({ vendor: event.target.value })}
+                        aria-label="Filter by vendor"
                         className="rounded-lg border-slate-300 text-sm text-slate-900 focus:border-indigo-500 focus:ring-indigo-500"
-                        aria-label="From date"
-                    />
-
-                    <input
-                        type="date"
-                        value={filters?.to || ''}
-                        onChange={(event) => applyFilters({ to: event.target.value })}
-                        className="rounded-lg border-slate-300 text-sm text-slate-900 focus:border-indigo-500 focus:ring-indigo-500"
-                        aria-label="To date"
-                    />
+                    >
+                        <option value="">All vendors</option>
+                        {(vendors || []).map((v) => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                        ))}
+                    </select>
 
                     {hasFilters && (
                         <button
@@ -328,11 +391,34 @@ export default function Index({ expenses, categories, filteredTotal, filters }) 
                             type="select"
                             value={data.category}
                             error={errors.category}
-                            options={CATEGORY_OPTIONS.map((category) => ({
-                                value: category,
-                                label: category,
-                            }))}
+                            options={categoryOptions}
                             onChange={(event) => setData('category', event.target.value)}
+                        />
+                    </div>
+
+                    {/* Vendor + payment status: links recurring shopping to the
+                        supplier and flags anything bought on credit. */}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <Field
+                            label="Vendor"
+                            name="vendor_id"
+                            type="select"
+                            value={data.vendor_id}
+                            error={errors.vendor_id}
+                            hint="Pick the supplier for recurring shopping."
+                            options={vendorOptions}
+                            onChange={(event) => setData('vendor_id', event.target.value)}
+                        />
+
+                        <Field
+                            label="Payment Status"
+                            name="payment_status"
+                            type="select"
+                            value={data.payment_status}
+                            error={errors.payment_status}
+                            hint="Unpaid amounts count toward the vendor's balance."
+                            options={PAYMENT_STATUSES}
+                            onChange={(event) => setData('payment_status', event.target.value)}
                         />
                     </div>
 

@@ -49,8 +49,15 @@ export default function useCan() {
      * this is normally redundant - but it keeps the UI correct if a new
      * permission is added to the code before it is seeded.
      */
+    // Prefer the authoritative server flag; fall back to the role list so the
+    // UI still works if the share is ever missing.
     const isSuperAdmin =
-        roles.includes('Super Admin') || roles.includes('superadmin');
+        props?.auth?.user?.is_super_admin === true ||
+        roles.includes('Software Super Admin') ||
+        roles.includes('Super Admin') ||
+        roles.includes('superadmin');
+
+    const isInstitutionAdmin = roles.includes('Institution Admin');
 
     return {
         can,
@@ -58,6 +65,7 @@ export default function useCan() {
         canAll,
         hasRole,
         isSuperAdmin,
+        isInstitutionAdmin,
         permissions,
         roles,
     };

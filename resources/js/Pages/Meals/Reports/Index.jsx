@@ -1,6 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
+import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
+import useTerminology from '@/Utils/useTerminology';
+import { LoadingOverlay } from '@/Components/UI/Loading';
 import { Head, router } from '@inertiajs/react';
 
 /* ------------------------------------------------------------------ *
@@ -23,14 +26,18 @@ function SummaryCard({ label, value, tone = 'text-slate-900', hint }) {
  * Page
  * ------------------------------------------------------------------ */
 
-export default function Index({ summary, students, filters }) {
+export default function Index({ summary, students, months, filters }) {
     const money = useMoney();
+    const { t } = useTerminology();
+    const { can } = useCan();
+    const canExport = can('exports.download');
 
-    // Default the range to the current month so the first load is meaningful.
-    const [from, setFrom] = useState(filters?.from || '');
-    const [to, setTo] = useState(filters?.to || '');
+    // The backend already defaults to the current month; we simply hold the
+    // selected month here and re-request on change.
+    const [month, setMonth] = useState(filters?.month || '');
     const [onlyDues, setOnlyDues] = useState(false);
     const [search, setSearch] = useState('');
+    const [exporting, setExporting] = useState(null);
 
     const rows = useMemo(() => {
         let list = students || [];
@@ -51,15 +58,22 @@ export default function Index({ summary, students, filters }) {
         return list;
     }, [students, onlyDues, search]);
 
-    const applyRange = (next) => {
+    const applyMonth = (next) => {
+        setMonth(next);
         router.get(
             route('meals.reports.index'),
-            { ...filters, ...next },
+            { month: next },
             { preserveState: true, preserveScroll: true, replace: true }
         );
     };
 
-    const hasRange = Boolean(from || to);
+    const runExport = (format) => {
+        setExporting(format);
+        // A plain navigation opens/downloads the file; the overlay gives the
+        // "report is being built" feedback the export triggers deserve.
+        window.location.href = `${route('meals.reports.export')}?month=${month}&format=${format}`;
+        setTimeout(() => setExporting(null), 1400);
+    };
 
     // Pool affordability: are the deposits on hand enough for the meals eaten?
     const poolBalance = summary?.pool_balance ?? 0;
@@ -72,70 +86,60 @@ export default function Index({ summary, students, filters }) {
         >
             <Head title="Meal Report" />
 
-            {/* Date range */}
-            <div className="flex flex-col gap-3 rounded-xl border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-end sm:justify-between">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                    <div>
-                        <label htmlFor="from" className="mb-1.5 block text-sm font-semibold text-slate-700">
-                            From
-                        </label>
-                        <input
-                            id="from"
-                            type="date"
-                            value={from}
-                            onChange={(event) => setFrom(event.target.value)}
-                            className="rounded-lg border-slate-300 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                        />
-                    </div>
-
-                    <div>
-                        <label htmlFor="to" className="mb-1.5 block text-sm font-semibold text-slate-700">
-                            To
-                        </label>
-                        <input
-                            id="to"
-                            type="date"
-                            value={to}
-                            onChange={(event) => setTo(event.target.value)}
-                            className="rounded-lg border-slate-300 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                        />
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => applyRange({ from, to })}
-                        className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800"
+            {/* Month filter + export. Reports default to the CURRENT MONTH. */}
+            <div className="flex flex-col gap-4 rounded-xl border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <label htmlFor="month" className="mb-1.5 block text-sm font-semibold text-slate-700">
+                        Report Month
+                    </label>
+                    <select
+                        id="month"
+                        value={month}
+                        onChange={(event) => applyMonth(event.target.value)}
+                        className="w-full rounded-lg border-slate-300 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 sm:w-64"
                     >
-                        Apply range
-                    </button>
-
-                    {hasRange && (
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setFrom('');
-                                setTo('');
-                                router.get(route('meals.reports.index'), {}, { replace: true });
-                            }}
-                            className="text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-800"
-                        >
-                            All time
-                        </button>
-                    )}
+                        {(months || []).map((m) => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                    </select>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                        Defaults to the current month - no lifetime totals.
+                    </p>
                 </div>
 
-                <div className="text-right">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        Cost per meal
-                    </div>
-                    <div className="text-sm font-bold text-slate-800">
-                        {money(summary?.cost_per_meal ?? 0, false)}
+                <div className="flex flex-wrap items-end gap-4">
+                    {canExport && (
+                        <div className="flex overflow-hidden rounded-lg border-slate-300">
+                            <button
+                                type="button"
+                                onClick={() => runExport('excel')}
+                                className="border-r border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                            >
+                                Export Excel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => runExport('pdf')}
+                                className="bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                            >
+                                Export PDF
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="text-right">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            Cost per meal
+                        </div>
+                        <div className="text-sm font-bold text-slate-800">
+                            {money(summary?.cost_per_meal ?? 0, false)}
+                        </div>
                     </div>
                 </div>
             </div>
 
             {/* Summary */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <SummaryCard
                     label="Total Meals"
                     value={summary?.total_meals ?? 0}
@@ -146,7 +150,13 @@ export default function Index({ summary, students, filters }) {
                     label="Total Deposited"
                     value={money(summary?.total_deposits ?? 0, false)}
                     tone="text-emerald-600"
-                    hint="Money pooled by students"
+                    hint={`${t('members', 'Members')}' personal funds`}
+                />
+                <SummaryCard
+                    label="Institutional Subsidy"
+                    value={money(summary?.total_subsidies ?? 0, false)}
+                    tone="text-sky-600"
+                    hint="Tracked separately"
                 />
                 <SummaryCard
                     label="Total Spent"
@@ -154,22 +164,22 @@ export default function Index({ summary, students, filters }) {
                     tone="text-rose-600"
                     hint="Groceries & supplies"
                 />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <SummaryCard
                     label={poolHealthy ? 'Pool Balance' : 'Pool Shortfall'}
                     value={money(Math.abs(poolBalance), false)}
                     tone={poolHealthy ? 'text-emerald-600' : 'text-rose-600'}
                     hint={poolHealthy ? 'Deposits cover spending' : 'Spending exceeds deposits'}
                 />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
                 <SummaryCard
                     label="Total Meal Cost"
                     value={money(summary?.total_meal_cost ?? 0, false)}
                     hint="Meals eaten × cost per meal"
                 />
                 <SummaryCard
-                    label="Students With Dues"
+                    label={`${t('members', 'Members')} With Dues`}
                     value={summary?.students_with_dues ?? 0}
                     tone={(summary?.students_with_dues ?? 0) > 0 ? 'text-rose-600' : 'text-slate-900'}
                 />
@@ -177,15 +187,17 @@ export default function Index({ summary, students, filters }) {
                     label="Total Outstanding"
                     value={money(summary?.total_dues ?? 0, false)}
                     tone={(summary?.total_dues ?? 0) > 0 ? 'text-rose-600' : 'text-slate-900'}
-                    hint="Still owed to the mess"
+                    hint={`Still owed to the ${t('institution', 'mess').toLowerCase()}`}
                 />
             </div>
+
+            <LoadingOverlay show={Boolean(exporting)} message="Building your report..." />
 
             {/* Per-student table */}
             <div className="overflow-hidden rounded-xl border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <h4 className="text-sm font-bold text-slate-900">
-                        Per-Student Breakdown
+                        Per-{t('member', 'Member')} Breakdown
                         <span className="ml-2 font-normal text-slate-400">
                             {rows.length} of {(students || []).length}
                         </span>
@@ -215,8 +227,8 @@ export default function Index({ summary, students, filters }) {
                     <table className="w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                                <th className="px-6 py-3">Student</th>
-                                <th className="px-6 py-3">Department</th>
+                                <th className="px-6 py-3">{t('member', 'Member')}</th>
+                                <th className="px-6 py-3">{t('department', 'Group')}</th>
                                 <th className="px-3 py-3 text-center">B</th>
                                 <th className="px-3 py-3 text-center">L</th>
                                 <th className="px-3 py-3 text-center">D</th>
@@ -235,7 +247,7 @@ export default function Index({ summary, students, filters }) {
                                                 {student.name}
                                             </div>
                                             {student.roll && (
-                                                <div className="text-xs text-slate-400">{student.roll}</div>
+                                                <div className="text-xs text-slate-400">Roll: {student.roll}</div>
                                             )}
                                         </td>
                                         <td className="px-6 py-3 text-xs text-slate-500">
@@ -273,8 +285,8 @@ export default function Index({ summary, students, filters }) {
                                     <td colSpan="9" className="py-14 text-center">
                                         <p className="text-sm font-semibold text-slate-600">
                                             {onlyDues
-                                                ? 'No students currently owe anything.'
-                                                : 'No data for this range.'}
+                                                ? `No ${t('members', 'members').toLowerCase()} currently owe anything.`
+                                                : 'No data for this month.'}
                                         </p>
                                         <p className="mt-1 text-xs text-slate-400">
                                             Record deposits and meal entries to populate the report.
@@ -287,7 +299,7 @@ export default function Index({ summary, students, filters }) {
                             <tfoot>
                                 <tr className="border-t border-slate-200 bg-slate-50 font-bold text-slate-800">
                                     <td className="px-6 py-3" colSpan="5">
-                                        Totals ({rows.length} students)
+                                        Totals ({rows.length} {t('members', 'members').toLowerCase()})
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         {rows.reduce((sum, student) => sum + student.total_meals, 0)}

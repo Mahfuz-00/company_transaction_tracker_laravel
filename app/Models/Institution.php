@@ -12,23 +12,68 @@ class Institution extends Model
 
     protected $fillable = [
         'name',
+        'subtitle',
         'slug',
         'type',
         'currency_code',
+        'currency_settings',
+        'theme',
+        'logo_path',
+        'banner_path',
         'timezone',
         'address',
         'contact_email',
         'contact_phone',
         'terminology',
         'settings',
+        'subsidy_mode',
         'is_active',
     ];
 
     protected $casts = [
         'terminology' => 'array',
         'settings' => 'array',
+        'currency_settings' => 'array',
+        'theme' => 'array',
         'is_active' => 'boolean',
-        'opening_balance' => 'decimal:2',
+    ];
+
+    /**
+     * Accent colours a workspace can pick from. Each entry supplies the
+     * Tailwind classes and the raw hex the theme layer injects as CSS
+     * variables, so every component themes itself without change.
+     */
+    public const THEMES = [
+        'indigo' => ['label' => 'Indigo', 'hex' => '#4f46e5', 'soft' => '#eef2ff'],
+        'emerald' => ['label' => 'Emerald', 'hex' => '#059669', 'soft' => '#ecfdf5'],
+        'sky' => ['label' => 'Sky', 'hex' => '#0284c7', 'soft' => '#e0f2fe'],
+        'violet' => ['label' => 'Violet', 'hex' => '#7c3aed', 'soft' => '#f5f3ff'],
+        'rose' => ['label' => 'Rose', 'hex' => '#e11d48', 'soft' => '#fff1f2'],
+        'amber' => ['label' => 'Amber', 'hex' => '#d97706', 'soft' => '#fffbeb'],
+        'slate' => ['label' => 'Slate', 'hex' => '#334155', 'soft' => '#f1f5f9'],
+        'teal' => ['label' => 'Teal', 'hex' => '#0d9488', 'soft' => '#f0fdfa'],
+    ];
+
+    /** Default theme when an institution has not chosen one. */
+    public const DEFAULT_THEME = [
+        'accent' => 'indigo',
+        'mode' => 'light',
+        'radius' => 'lg',
+        'density' => 'comfortable',
+    ];
+
+    /**
+     * Default global currency settings. Used until the Software Super Admin
+     * configures their own, so formatting never renders without a symbol.
+     */
+    public const DEFAULT_CURRENCY_SETTINGS = [
+        'symbol' => '৳',
+        'symbol_position' => 'before',
+        'decimal_separator' => '.',
+        'thousands_separator' => ',',
+        'decimal_precision' => 2,
+        'numbering_system' => 'short',
+        'abbreviations' => true,
     ];
 
     /**
@@ -43,6 +88,8 @@ class Institution extends Model
             'terms' => [
                 'member' => 'Employee',
                 'members' => 'Employees',
+                'participant' => 'Employee',
+                'participants' => 'Employees',
                 'department' => 'Team',
                 'departments' => 'Teams',
                 'deposit' => 'Contribution',
@@ -59,6 +106,8 @@ class Institution extends Model
             'terms' => [
                 'member' => 'Student',
                 'members' => 'Students',
+                'participant' => 'Student',
+                'participants' => 'Students',
                 'department' => 'Department',
                 'departments' => 'Departments',
                 'deposit' => 'Deposit',
@@ -66,7 +115,7 @@ class Institution extends Model
                 'meal' => 'Meal',
                 'meals' => 'Meals',
                 'meal_manager' => 'Hall Manager',
-                'institution' => 'Hall',
+                'institution' => 'Institution',
             ],
         ],
         'college_dorm' => [
@@ -75,6 +124,8 @@ class Institution extends Model
             'terms' => [
                 'member' => 'Boarder',
                 'members' => 'Boarders',
+                'participant' => 'Boarder',
+                'participants' => 'Boarders',
                 'department' => 'Faculty',
                 'departments' => 'Faculties',
                 'deposit' => 'Deposit',
@@ -82,7 +133,7 @@ class Institution extends Model
                 'meal' => 'Meal',
                 'meals' => 'Meals',
                 'meal_manager' => 'Mess Manager',
-                'institution' => 'Hostel',
+                'institution' => 'Institution',
             ],
         ],
         'general_mess' => [
@@ -91,6 +142,8 @@ class Institution extends Model
             'terms' => [
                 'member' => 'Member',
                 'members' => 'Members',
+                'participant' => 'Participant',
+                'participants' => 'Participants',
                 'department' => 'Group',
                 'departments' => 'Groups',
                 'deposit' => 'Deposit',
@@ -98,7 +151,7 @@ class Institution extends Model
                 'meal' => 'Meal',
                 'meals' => 'Meals',
                 'meal_manager' => 'Mess Manager',
-                'institution' => 'Mess',
+                'institution' => 'Institution',
             ],
         ],
     ];
@@ -165,5 +218,116 @@ class Institution extends Model
     public function vendors()
     {
         return $this->hasMany(Vendor::class);
+    }
+
+    public function departments()
+    {
+        return $this->hasMany(Department::class);
+    }
+
+    public function students()
+    {
+        return $this->hasMany(Student::class);
+    }
+
+    public function subsidies()
+    {
+        return $this->hasMany(Subsidy::class);
+    }
+
+    public function subsidySources()
+    {
+        return $this->hasMany(SubsidySource::class);
+    }
+
+    public function mealRateSetting()
+    {
+        return $this->hasOne(MealRateSetting::class);
+    }
+
+    /** Users whose primary affiliation is this institution. */
+    public function users()
+    {
+        return $this->hasMany(User::class);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Theme + branding
+     * ------------------------------------------------------------------ */
+
+    /**
+     * The effective theme: defaults overlaid with saved choices.
+     */
+    public function themeSettings(): array
+    {
+        return array_merge(self::DEFAULT_THEME, $this->theme ?? []);
+    }
+
+    /** Resolved accent palette (hex + soft) for the current theme. */
+    public function accentPalette(): array
+    {
+        $accent = $this->themeSettings()['accent'];
+
+        return self::THEMES[$accent] ?? self::THEMES[self::DEFAULT_THEME['accent']];
+    }
+
+    /** Public URL for the logo, or null when none has been uploaded. */
+    public function logoUrl(): ?string
+    {
+        return $this->logo_path ? \Storage::disk('public')->url($this->logo_path) : null;
+    }
+
+    public function bannerUrl(): ?string
+    {
+        return $this->banner_path ? \Storage::disk('public')->url($this->banner_path) : null;
+    }
+
+    /**
+     * Admins attached to this institution, for the super-admin registry view.
+     */
+    public function admins()
+    {
+        return $this->hasMany(User::class)->role(['Institution Admin']);
+    }
+
+    public function activityLogs()
+    {
+        return $this->hasMany(ActivityLog::class);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Currency
+     * ------------------------------------------------------------------ */
+
+    /**
+     * The effective global currency settings: saved config merged over the
+     * defaults, so a missing key never renders a blank symbol.
+     */
+    public function currencySettings(): array
+    {
+        return array_merge(self::DEFAULT_CURRENCY_SETTINGS, $this->currency_settings ?? []);
+    }
+
+    /**
+     * The vendor row that represents this institution acting as its own
+     * primary supplier / hub in the multi-vendor ecosystem.
+     */
+    public function hubVendor(): ?Vendor
+    {
+        return $this->vendors()->where('is_institution_hub', true)->first();
+    }
+
+    /**
+     * Ensure the institution has a hub vendor, creating it on first use.
+     */
+    public function ensureHubVendor(): Vendor
+    {
+        return $this->hubVendor() ?? $this->vendors()->create([
+            'name' => $this->name.' (Central)',
+            'category' => 'other',
+            'is_institution_hub' => true,
+            'status' => 'active',
+            'notes' => 'Institution acting as the primary vendor / supply hub.',
+        ]);
     }
 }
