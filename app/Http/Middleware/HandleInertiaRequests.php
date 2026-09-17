@@ -94,6 +94,18 @@ class HandleInertiaRequests extends Middleware
                 'status' => fn () => $request->session()->get('status'),
             ],
 
+            // Tenant context: whether the current user is viewing a workspace via
+            // an SSA "switched view" (so the UI can show / clear it).
+            'tenant' => fn () => [
+                'active_id' => $this->institution()?->id,
+                // True only when a session tenant is set AND it differs from the
+                // user's own institution - i.e. an SSA is looking at another
+                // workspace and can "exit" back to the platform view.
+                'switched' => Institution::sessionTenantId() !== null
+                    && Institution::sessionTenantId() !== $request->user()?->institution_id,
+                'can_switch' => (bool) $request->user()?->isSuperAdmin(),
+            ],
+
             // Institution identity + resolved terminology, so any component can
             // render "Employees" instead of "Students" without its own lookup.
             'institution' => fn () => $this->institution()

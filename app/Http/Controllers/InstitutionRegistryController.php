@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
-use Spatie\Permission\Models\Role;
 
 /**
  * Software Super Admin only: a registry of every institution on the platform,
@@ -174,10 +173,11 @@ class InstitutionRegistryController extends Controller
                 'designation' => 'Institution Admin',
             ]);
 
-            // Assign the role if it exists (seeded in production).
-            if (Role::where('name', 'Institution Admin')->exists()) {
-                $admin->assignRole('Institution Admin');
-            }
+            // SAFE ROLE ASSIGNMENT: route through the whitelist guard so the new
+            // institution admin can only ever receive an institution-scoped role
+            // (here explicitly Institution Admin). It can never become a global
+            // Software Super Admin through this path.
+            $admin->assignInstitutionRole('Institution Admin');
 
             AuditLogger::log('created', "created institution \"{$institution->name}\" with admin {$admin->name}", $institution, [
                 'type' => $institution->type,
@@ -193,30 +193,61 @@ class InstitutionRegistryController extends Controller
     }
 
     /**
-     * Switch the Software Super Admin into an institution's workspace so they
-     * can review or manage it directly. The chosen institution becomes the
-     * active one (Institution::current() resolves the active row).
+     * Switch the Software Super Admin into an institution's workspace.
+     *
+     * THE FIX for the 404 / mismatched-institution bug:
+     * the active tenant is stored in THIS USER'S SESSION, not by flipping a
+     * global `is_active` column. Consequences:
+     *   - switching never deactivates any other institution,
+     *   - two SSAs (or an SSA and an admin) can view different workspaces at
+     *     once without clobbering each other,
+     *   - Institution::current() reads the same session value, so every module
+     *     filters to exactly this institution's rows.
+     *
+     * Only an SSA may switch at all; a hard-bound user is refused.
      */
     public function switchTo(Request $request, Institution $institution)
     {
-        // Only one institution is "active" at a time; flipping the flag is what
-        // routes every module to this workspace.
-        DB::transaction(function () use ($institution) {
-            Institution::query()->where('is_active', true)
-                ->whereKeyNot($institution->id)
-                ->update(['is_active' => false]);
+        $user = $request->user();
 
-            $institution->update(['is_active' => true]);
-        });
+        // Tenancy guard: only the global Super Admin may enter another workspace.
+        if (! $user->isSuperAdmin()) {
+            return back()->with('error', 'Only a Software Super Admin can switch between institutions.');
+        }
 
-        AuditLogger::log('updated', "switched into institution \"{$institution->name}\"", $institution, [], [
+        // The workspace must actually exist and be reachable. (Route-model
+        // binding already resolved it; this is a defensive, explicit check.)
+        if (! $institution->exists) {
+            return back()->with('error', 'That institution no longer exists.');
+        }
+
+        // Session-scoped switch: ephemeral, per-user, no DB mutation.
+        $request->session()->put('tenant_id', $institution->id);
+        $request->session()->save();
+
+        AuditLogger::log('updated', "switched view into institution \"{$institution->name}\"", $institution, [], [
             'subject_label' => $institution->name,
             'institution_id' => $institution->id,
         ]);
 
+        // Land on the roster for the workspace just entered. The route exists for
+        // every institution, so a freshly-created one no longer 404s.
         return redirect()
             ->route('meals.students.index')
             ->with('success', "Now viewing \"{$institution->name}\".");
+    }
+
+    /**
+     * Return the Software Super Admin to the global (platform) view by clearing
+     * the session tenant. Institution::current() then falls back to the default.
+     */
+    public function exitTenant(Request $request)
+    {
+        $request->session()->forget('tenant_id');
+
+        return redirect()
+            ->route('settings.institutions.index')
+            ->with('success', 'Returned to the platform view.');
     }
 
     /** Toggle an institution's active state. */

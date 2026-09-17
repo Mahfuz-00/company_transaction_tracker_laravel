@@ -252,10 +252,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/settings/institutions/{institution}/toggle', [InstitutionRegistryController::class, 'toggle'])
         ->name('settings.institutions.toggle')
         ->middleware('permission:institutions.manage');
-    // Switch the SSA into a specific institution's workspace.
+    // Switch the SSA into a specific institution's workspace (session-scoped).
     Route::patch('/settings/institutions/{institution}/switch', [InstitutionRegistryController::class, 'switchTo'])
         ->name('settings.institutions.switch')
         ->middleware('permission:institutions.manage');
+    // Return the SSA to the global platform view (clears the session tenant).
+    Route::post('/settings/institutions/exit', [InstitutionRegistryController::class, 'exitTenant'])
+        ->name('settings.institutions.exit');
 
     // Profile Routes
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

@@ -1,7 +1,7 @@
 import '../css/app.css';
 import './bootstrap';
 
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp, router } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import GlobalLoadingIndicator from '@/Components/GlobalLoadingIndicator';
@@ -10,24 +10,36 @@ import { FeedbackProvider } from '@/Components/Feedback/FeedbackProvider';
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 /**
- * Apply the workspace theme before React mounts.
+ * Apply the workspace theme as CSS custom properties on :root.
  *
- * Inertia hands us the page props on first render, so we can set the CSS
- * variables synchronously - this avoids a flash of the default accent colour
- * between paint and the ThemeProvider's effect running.
+ * Called twice:
+ *   1. BEFORE React mounts (initial paint) - no flash of the default accent.
+ *   2. On EVERY Inertia navigation (see router.on('success') below) - so saving
+ *      the theme in Settings, or an SSA switching institutions, repaints the
+ *      whole app immediately WITHOUT a hard reload.
+ *
+ * This is the client counterpart to the server-side injection in app.blade.php;
+ * both write the same token names, so they can never disagree.
  */
-function applyInitialTheme(props) {
-    const institution = props?.initialPage?.props?.institution;
+function applyTheme(institution) {
     const accent = institution?.accent;
     const theme = institution?.theme;
-
-    if (!accent) return;
-
     const root = document.documentElement;
-    root.style.setProperty('--accent', accent.hex || '#4f46e5');
-    root.style.setProperty('--accent-soft', accent.soft || '#eef2ff');
-    root.style.setProperty('--accent-ring', `${accent.hex || '#4f46e5'}33`);
+
+    const hex = accent?.hex || '#4f46e5';
+    const soft = accent?.soft || '#eef2ff';
+
+    root.style.setProperty('--accent', hex);
+    root.style.setProperty('--accent-soft', soft);
+    root.style.setProperty('--accent-ring', `${hex}33`);
+    root.style.setProperty('--primary-color', hex);
+    root.style.setProperty('--primary-soft', soft);
+
+    const radius = { sm: '0.375rem', md: '0.5rem', lg: '0.75rem', xl: '1rem' }[theme?.radius] || '0.75rem';
+    root.style.setProperty('--radius', radius);
+
     root.setAttribute('data-theme-mode', theme?.mode || 'light');
+    root.style.colorScheme = theme?.mode === 'dark' ? 'dark' : 'light';
 }
 
 createInertiaApp({
@@ -38,7 +50,15 @@ createInertiaApp({
             import.meta.glob('./Pages/**/*.jsx'),
         ),
     setup({ el, App, props }) {
-        applyInitialTheme(props);
+        // 1. Initial paint: apply the theme before React mounts (no flash).
+        applyTheme(props?.initialPage?.props?.institution);
+
+        // 2. Re-apply on every successful visit. This is what makes a saved
+        //    theme, or an SSA institution switch, reflect globally at once -
+        //    the shared `institution` prop changes and the CSS vars repaint.
+        router.on('success', (event) => {
+            applyTheme(event.detail.page.props.institution);
+        });
 
         const root = createRoot(el);
 

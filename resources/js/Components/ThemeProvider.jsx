@@ -23,12 +23,16 @@ export default function ThemeProvider({ children }) {
     useEffect(() => {
         const root = document.documentElement;
 
-        // Accent colours.
+        // Accent colours. Both the internal (--accent*) and the semantic
+        // (--primary*) token names are set, so components can use either and the
+        // theme is one source of truth.
         root.style.setProperty('--accent', accentHex);
         root.style.setProperty('--accent-soft', accentSoft);
         // A translucent ring colour derived from the accent, used for focus
         // states so they match the theme rather than always being indigo.
         root.style.setProperty('--accent-ring', `${accentHex}33`);
+        root.style.setProperty('--primary-color', accentHex);
+        root.style.setProperty('--primary-soft', accentSoft);
 
         // Corner radius, chosen from sm/md/lg/xl.
         const radius = { sm: '0.375rem', md: '0.5rem', lg: '0.75rem', xl: '1rem' }[theme.radius] || '0.75rem';

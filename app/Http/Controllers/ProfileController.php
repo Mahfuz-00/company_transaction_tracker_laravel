@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Support\MemberProfileSynchronizer;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -57,6 +58,18 @@ class ProfileController extends Controller
 
         if ($user->isDirty('email')) {
             $user->email_verified_at = null;
+        }
+
+        /*
+         * SINGLE SOURCE OF TRUTH for the name.
+         *
+         * A member is stored twice (users.name + students.name). When the user
+         * edits their name here it must propagate to their linked Member roster
+         * record, otherwise the roster keeps the admin's placeholder name. The
+         * synchroniser updates both (and any pending invitation) atomically.
+         */
+        if ($user->isDirty('name')) {
+            MemberProfileSynchronizer::syncName($user, $user->name, save: false);
         }
 
         // --- Profile picture -------------------------------------------

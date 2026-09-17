@@ -1,44 +1,12 @@
 import React, { useState } from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
-import Modal from '@/Components/UI/Modal';
-import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-
-const EMPTY_FORM = {
-    name: '',
-    contact_person: '',
-    phone: '',
-    email: '',
-    address: '',
-    category: '',
-    recurrence: '',
-    lead_time_days: '',
-    recurring_amount: '',
-    opening_balance: '',
-    status: 'active',
-    notes: '',
-};
-
-const recurrenceLabel = (value) =>
-    ({
-        daily: 'Daily',
-        weekly: 'Weekly',
-        fortnightly: 'Every two weeks',
-        monthly: 'Monthly',
-        quarterly: 'Quarterly',
-        on_demand: 'On demand',
-    }[value] || value || '');
-
-const categoryLabel = (value) =>
-    value
-        ? value
-            .split('_')
-            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-            .join(' ')
-        : '';
+import VendorFormModal from './VendorFormModal';
+import PurchaseHistoryModal from './PurchaseHistoryModal';
+import { categoryLabel, recurrenceLabel } from './vendorLabels';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 
 function Flash({ success, error }) {
     if (!success && !error) return null;
@@ -76,73 +44,25 @@ export default function Index({ vendors, categories = [], recurrences = [], filt
     const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters?.search || '');
 
-    // Purchase History drawer: which vendor, its history, and load state.
+    // Which vendor's purchase history is open (the modal fetches its own data).
     const [historyVendor, setHistoryVendor] = useState(null);
-    const [history, setHistory] = useState(null);
-    const [historyLoading, setHistoryLoading] = useState(false);
-
-    const { data, setData, post, put, processing, errors, reset, clearErrors } =
-        useForm({ ...EMPTY_FORM });
 
     const rows = vendors?.data || [];
-    const isEditing = Boolean(editing);
 
-    const categoryOptions = [
-        { value: '', label: '— No category —' },
-        ...categories.map((category) => ({
-            value: category,
-            label: categoryLabel(category),
-        })),
-    ];
-
+    // The form modal owns its own state; the page only tracks open/which record.
     const openCreate = () => {
-        clearErrors();
-        reset();
-        setData({ ...EMPTY_FORM });
         setEditing(null);
         setModalOpen(true);
     };
 
     const openEdit = (vendor) => {
-        clearErrors();
         setEditing(vendor);
-        setData({
-            name: vendor.name || '',
-            contact_person: vendor.contact_person || '',
-            phone: vendor.phone || '',
-            email: vendor.email || '',
-            address: vendor.address || '',
-            category: vendor.category || '',
-            recurrence: vendor.recurrence || '',
-            lead_time_days: vendor.lead_time_days ?? '',
-            recurring_amount: vendor.recurring_amount ?? '',
-            opening_balance: vendor.opening_balance ?? '',
-            status: vendor.status || 'active',
-            notes: vendor.notes || '',
-        });
         setModalOpen(true);
     };
 
     const closeModal = () => {
         setModalOpen(false);
         setEditing(null);
-        reset();
-    };
-
-    const submit = (event) => {
-        event.preventDefault();
-
-        if (isEditing) {
-            put(route('meals.vendors.update', editing.slug), {
-                preserveScroll: true,
-                onSuccess: () => closeModal(),
-            });
-        } else {
-            post(route('meals.vendors.store'), {
-                preserveScroll: true,
-                onSuccess: () => closeModal(),
-            });
-        }
     };
 
     const remove = async (vendor) => {
@@ -157,26 +77,8 @@ export default function Index({ vendors, categories = [], recurrences = [], filt
         router.delete(route('meals.vendors.destroy', vendor.slug), { preserveScroll: true });
     };
 
-    // Open the Purchase History tab for a vendor and fetch its ledger.
-    const openHistory = async (vendor) => {
-        setHistoryVendor(vendor);
-        setHistory(null);
-        setHistoryLoading(true);
-
-        try {
-            const { data } = await window.axios.get(route('meals.vendors.history', vendor.slug));
-            setHistory(data);
-        } catch (e) {
-            alert({
-                title: 'Could not load history',
-                message: 'Please try again in a moment.',
-                tone: 'error',
-            });
-            setHistoryVendor(null);
-        } finally {
-            setHistoryLoading(false);
-        }
-    };
+    // The history modal fetches its own data; we just pass the selected vendor.
+    const openHistory = (vendor) => setHistoryVendor(vendor);
 
     const applyFilters = (next) => {
         router.get(
@@ -540,258 +442,21 @@ export default function Index({ vendors, categories = [], recurrences = [], filt
                 )}
             </div>
 
-            {/* Create / Edit modal */}
-            <Modal
+            {/* Create / Edit modal (self-contained form component). */}
+            <VendorFormModal
                 open={modalOpen}
                 onClose={closeModal}
-                title={isEditing ? `Edit ${editing?.name}` : 'Add Vendor'}
-                description={
-                    isEditing
-                        ? 'Update supplier details and status.'
-                        : 'Register a supplier the institution buys from.'
-                }
-                footer={
-                    <>
-                        <button
-                            type="button"
-                            onClick={closeModal}
-                            className="rounded-lg border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            form="vendor-form"
-                            disabled={processing}
-                            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50"
-                        >
-                            {processing && (
-                                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                                    <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="opacity-90" />
-                                </svg>
-                            )}
-                            {processing ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Vendor'}
-                        </button>
-                    </>
-                }
-            >
-                <form id="vendor-form" onSubmit={submit} className="space-y-4">
-                    <Field
-                        label="Vendor Name"
-                        name="name"
-                        required
-                        value={data.name}
-                        error={errors.name}
-                        placeholder="e.g. Rahim General Store"
-                        onChange={(event) => setData('name', event.target.value)}
-                    />
+                editing={editing}
+                categories={categories}
+                recurrences={recurrences}
+            />
 
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                            label="Category"
-                            name="category"
-                            type="select"
-                            value={data.category}
-                            error={errors.category}
-                            options={categoryOptions}
-                            onChange={(event) => setData('category', event.target.value)}
-                        />
-                        <Field
-                            label="Status"
-                            name="status"
-                            type="select"
-                            required
-                            value={data.status}
-                            error={errors.status}
-                            options={[
-                                { value: 'active', label: 'Active' },
-                                { value: 'inactive', label: 'Inactive' },
-                            ]}
-                            onChange={(event) => setData('status', event.target.value)}
-                        />
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                            label="Contact Person"
-                            name="contact_person"
-                            value={data.contact_person}
-                            error={errors.contact_person}
-                            placeholder="e.g. Rahim Uddin"
-                            onChange={(event) => setData('contact_person', event.target.value)}
-                        />
-                        <Field
-                            label="Phone"
-                            name="phone"
-                            value={data.phone}
-                            error={errors.phone}
-                            placeholder="+8801XXXXXXXXX"
-                            onChange={(event) => setData('phone', event.target.value)}
-                        />
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                            label="Email"
-                            name="email"
-                            type="email"
-                            value={data.email}
-                            error={errors.email}
-                            placeholder="vendor@example.com"
-                            onChange={(event) => setData('email', event.target.value)}
-                        />
-                        <Field
-                            label="Opening Balance"
-                            name="opening_balance"
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={data.opening_balance}
-                            error={errors.opening_balance}
-                            placeholder="0.00"
-                            hint="Amount already owed at setup."
-                            onChange={(event) => setData('opening_balance', event.target.value)}
-                        />
-                    </div>
-
-                    {/* Recurring purchase settings */}
-                    <div className="rounded-lg border-slate-200 bg-slate-50 p-4">
-                        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-500">
-                            Recurring Purchases
-                        </p>
-                        <div className="grid gap-4 sm:grid-cols-3">
-                            <Field
-                                label="Buys From"
-                                name="recurrence"
-                                type="select"
-                                value={data.recurrence}
-                                error={errors.recurrence}
-                                options={[{ value: '', label: '— One-off —' }, ...recurrences]}
-                                onChange={(event) => setData('recurrence', event.target.value)}
-                            />
-                            <Field
-                                label="Lead Time (days)"
-                                name="lead_time_days"
-                                type="number"
-                                min="0"
-                                value={data.lead_time_days}
-                                error={errors.lead_time_days}
-                                placeholder="e.g. 2"
-                                onChange={(event) => setData('lead_time_days', event.target.value)}
-                            />
-                            <Field
-                                label="Typical Order Value"
-                                name="recurring_amount"
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={data.recurring_amount}
-                                error={errors.recurring_amount}
-                                placeholder="e.g. 8000"
-                                onChange={(event) => setData('recurring_amount', event.target.value)}
-                            />
-                        </div>
-                    </div>
-
-                    <Field
-                        label="Address"
-                        name="address"
-                        value={data.address}
-                        error={errors.address}
-                        placeholder="Market, city"
-                        onChange={(event) => setData('address', event.target.value)}
-                    />
-
-                    <Field
-                        label="Notes"
-                        name="notes"
-                        type="textarea"
-                        value={data.notes}
-                        error={errors.notes}
-                        placeholder="Payment terms, delivery days, etc."
-                        onChange={(event) => setData('notes', event.target.value)}
-                    />
-                </form>
-            </Modal>
-
-            {/* Purchase History - every purchase tied to this vendor. */}
-            <Modal
+            {/* Purchase History (self-fetching component). */}
+            <PurchaseHistoryModal
                 open={Boolean(historyVendor)}
-                onClose={() => { setHistoryVendor(null); setHistory(null); }}
-                title={historyVendor ? `Purchase History - ${historyVendor.name}` : 'Purchase History'}
-                description="Every recorded purchase tied to this supplier, newest first."
-                maxWidth="max-w-3xl"
-                footer={
-                    <button
-                        type="button"
-                        onClick={() => { setHistoryVendor(null); setHistory(null); }}
-                        className="rounded-lg border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
-                    >
-                        Close
-                    </button>
-                }
-            >
-                {historyLoading ? (
-                    <div className="py-10 text-center text-sm text-slate-400">Loading purchase history...</div>
-                ) : history ? (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-3 gap-3">
-                            {[
-                                { label: 'Orders', value: history.totals.orders },
-                                { label: 'Total Purchased', value: money(history.totals.purchased, false) },
-                                { label: 'Outstanding', value: money(history.totals.outstanding, false) },
-                            ].map((cell) => (
-                                <div key={cell.label} className="rounded-lg border-slate-200 bg-slate-50 p-3">
-                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{cell.label}</div>
-                                    <div className="mt-0.5 text-lg font-bold text-slate-800">{cell.value}</div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {history.history.length > 0 ? (
-                            <div className="overflow-x-auto rounded-lg border-slate-200">
-                                <table className="w-full text-left text-sm">
-                                    <thead>
-                                        <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                                            <th className="px-4 py-2.5">Date</th>
-                                            <th className="px-4 py-2.5">Item</th>
-                                            <th className="px-4 py-2.5">Category</th>
-                                            <th className="px-4 py-2.5">Status</th>
-                                            <th className="px-4 py-2.5 text-right">Amount</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {history.history.map((row) => (
-                                            <tr key={row.id}>
-                                                <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-500">{row.date}</td>
-                                                <td className="px-4 py-2.5 font-medium text-slate-800">{row.description}</td>
-                                                <td className="px-4 py-2.5 text-xs text-slate-500">{row.category || '—'}</td>
-                                                <td className="px-4 py-2.5">
-                                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${row.payment_status === 'paid'
-                                                        ? 'bg-emerald-50 text-emerald-700'
-                                                        : row.payment_status === 'partial'
-                                                            ? 'bg-amber-50 text-amber-700'
-                                                            : 'bg-rose-50 text-rose-700'}`}>
-                                                        {row.payment_status || 'paid'}
-                                                    </span>
-                                                </td>
-                                                <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold text-rose-600">
-                                                    −{money(row.amount, false)}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ) : (
-                            <p className="py-8 text-center text-sm italic text-slate-400">
-                                No purchases recorded with this vendor yet.
-                            </p>
-                        )}
-                    </div>
-                ) : null}
-            </Modal>
+                vendor={historyVendor}
+                onClose={() => setHistoryVendor(null)}
+            />
         </MealsLayout>
     );
 }

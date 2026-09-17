@@ -6,6 +6,7 @@ use App\Models\MemberInvitation;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\MemberProfileSynchronizer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
@@ -156,9 +157,9 @@ class PasswordSetupController extends Controller
             }
 
             // Link the member record to this login, if the invite targeted one.
+            // Only a same-institution member record may be attached (no
+            // cross-tenant linking).
             if ($invitation->student_id) {
-                // Only link a member record that belongs to the same institution, so
-                // an invite can never attach a user to a mismatched member.
                 Student::query()
                     ->whereKey($invitation->student_id)
                     ->when(
@@ -171,12 +172,18 @@ class PasswordSetupController extends Controller
                     ->update(['user_id' => $user->id]);
             }
 
-            // Record the confirmed name back on the invitation too, so the admin's
-            // list shows the final name and no stale placeholder lingers.
-            $invitation->update([
-                'accepted_at' => now(),
-                'name' => $name,
-            ]);
+            /*
+             * NAME SYNC (single source of truth).
+             *
+             * The member set their REAL name here; it must land on BOTH the user
+             * account AND the linked Member roster record (and the invitation), so
+             * the roster never keeps the admin's placeholder. The synchroniser
+             * does exactly that, atomically, and also heals the user_id link.
+             */
+            MemberProfileSynchronizer::syncName($user, $name);
+
+            // Retire the invitation now that setup is complete.
+            $invitation->update(['accepted_at' => now()]);
 
             return $user;
         });

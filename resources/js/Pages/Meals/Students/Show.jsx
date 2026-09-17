@@ -1,7 +1,7 @@
 import React from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
 import useCan from '@/Utils/can';
-import formatNumber from '@/Utils/numberFormatter';
+import useMoney from '@/Utils/useMoney';
 import { Head, Link } from '@inertiajs/react';
 
 const initials = (name) =>
@@ -29,6 +29,7 @@ function StatCard({ label, value, tone = 'text-slate-900', hint }) {
 
 export default function Show({ student, costPerMeal, balance, totalMeals, totalDeposits }) {
     const { can } = useCan();
+    const money = useMoney();
     const canManage = can('students.manage');
 
     const deposits = student.deposits || [];
@@ -91,22 +92,22 @@ export default function Show({ student, costPerMeal, balance, totalMeals, totalD
                 <StatCard label="Total Meals" value={totalMeals ?? 0} hint="Breakfast + lunch + dinner" />
                 <StatCard
                     label="Total Deposited"
-                    value={formatNumber(totalDeposits ?? 0)}
+                    value={money(totalDeposits ?? 0, false)}
                     tone="text-emerald-600"
                 />
                 <StatCard
                     label={owed ? 'Amount Due' : 'Credit Balance'}
-                    value={formatNumber(Math.abs(Number(balance || 0)))}
+                    value={money(Math.abs(Number(balance || 0)), false)}
                     tone={owed ? 'text-rose-600' : 'text-emerald-600'}
                     hint={
                         costPerMeal
-                            ? `Priced at ${formatNumber(costPerMeal)} per meal`
+                            ? `Priced at ${money(costPerMeal, false)} per meal`
                             : 'No meal rate set yet'
                     }
                 />
                 <StatCard
                     label="Meal Rate"
-                    value={costPerMeal ? formatNumber(costPerMeal) : '—'}
+                    value={costPerMeal ? money(costPerMeal, false) : '—'}
                     hint="Current cost per meal"
                 />
             </div>
@@ -123,7 +124,7 @@ export default function Show({ student, costPerMeal, balance, totalMeals, totalD
                                 <li key={deposit.id} className="flex items-center justify-between px-5 py-3">
                                     <div>
                                         <div className="text-sm font-semibold text-slate-800">
-                                            {formatNumber(deposit.amount)}
+                                            {money(deposit.amount, false)}
                                         </div>
                                         <div className="text-xs text-slate-400">
                                             {deposit.payment_method || 'Cash'}

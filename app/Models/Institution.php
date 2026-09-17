@@ -160,9 +160,31 @@ class Institution extends Model
         ],
     ];
 
-       public function getRouteKeyName(): string
+    /**
+     * Institutions are addressed by slug in URLs (readable, stable).
+     */
+    public function getRouteKeyName(): string
     {
         return 'slug';
+    }
+
+    /**
+     * Resolve an institution from EITHER a slug or a numeric id.
+     *
+     * Route-model binding uses the slug above, but older links / callers that
+     * pass an id would fail to bind and 404. Accepting both here makes every
+     * institution route (switch, toggle, dashboard) robust regardless of which
+     * identifier is supplied.
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        $query = static::query();
+
+        if (ctype_digit((string) $value)) {
+            return $query->whereKey($value)->first();
+        }
+
+        return $query->where('slug', $value)->first();
     }
 
     protected static function booted(): void
@@ -210,13 +232,79 @@ class Institution extends Model
      * ------------------------------------------------------------------ */
 
     /**
-     * The active institution. Single-tenant today; the query is centralised so
-     * a request-scoped resolver can replace it later without touching callers.
+     * The ACTIVE institution for THIS request, resolved in priority order:
+     *
+     *   1. The session tenant ("switched view") - set when a Software Super
+     *      Admin uses "Access Dashboard" to enter a workspace. This is what makes
+     *      tenant switching work per-user WITHOUT mutating a global flag.
+     *   2. The signed-in user's own institution - an Institution Admin / Meal
+     *      Manager / Member is permanently bound to their workspace.
+     *   3. The first active institution (a safe default for a brand-new install).
+     *
+     * WHY THIS REPLACED THE GLOBAL is_active FLAG:
+     * The previous resolver flipped a single global `is_active` column on switch.
+     * That is shared across EVERY user and session, so switching deactivated all
+     * other institutions and produced 404s / mismatched workspaces. The session
+     * scope fixes that: each user gets their own view; the DB row is untouched.
      */
     public static function current(): ?static
     {
+        // 1. An explicit, session-scoped tenant (SSA "switched view").
+        $tenantId = static::sessionTenantId();
+        if ($tenantId) {
+            $tenant = static::query()->whereKey($tenantId)->first();
+            if ($tenant) {
+                return $tenant;
+            }
+        }
+
+        // 2. The signed-in user's own institution.
+        $userInstitutionId = auth()->user()?->institution_id;
+        if ($userInstitutionId) {
+            $tenant = static::query()->whereKey($userInstitutionId)->first();
+            if ($tenant) {
+                return $tenant;
+            }
+        }
+
+        // 3. Fallback: the first active institution (fresh install / guests).
         return static::query()->where('is_active', true)->orderBy('id')->first()
             ?? static::query()->orderBy('id')->first();
+    }
+
+    /**
+     * The session tenant id, if one is set and we are in a web (session) context.
+     * Guarded so the model can still be used from console/queue contexts where no
+     * session exists.
+     */
+    public static function sessionTenantId(): ?int
+    {
+        try {
+            if (! app()->bound('session')) {
+                return null;
+            }
+
+            $value = app('session')->get('tenant_id');
+
+            return $value ? (int) $value : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * The id of the institution the given user is HARD-BOUND to (their own),
+     * ignoring any session switch. Super Admins return null (global reach).
+     */
+    public static function boundInstitutionId(?User $user = null): ?int
+    {
+        $user ??= auth()->user();
+
+        if (! $user || $user->isSuperAdmin()) {
+            return null;
+        }
+
+        return $user->institution_id ? (int) $user->institution_id : null;
     }
 
     public function vendors()

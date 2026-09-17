@@ -29,6 +29,20 @@ class StudentController extends Controller
         $scopedIds = $request->user()->scopedStudentIds();
 
         $students = Student::query()
+            /*
+             * EAGER-LOAD the relations the roster table renders.
+             *
+             * This is the fix for the "Team shows Unassigned" bug: without
+             * `department` loaded, the serialized student had no department
+             * relation, so the frontend's `student.department?.name` was always
+             * undefined and fell back to "Unassigned" - even when a department
+             * WAS selected at creation.
+             */
+            ->with([
+                'department:id,name,slug',
+                'user:id,name,email',
+                'manager:id,name,email',
+            ])
             // Scope to the active institution in a multi-tenant deployment.
             ->when($institution, fn ($q) => $q->where(function ($sub) use ($institution) {
                 $sub->where('institution_id', $institution->id)

@@ -237,7 +237,21 @@ class UserController extends Controller
         }
 
         $user->save();
-        $user->syncRoles($selectedRoles);
+
+        /*
+         * ROLE WHITELIST ENFORCEMENT.
+         *
+         * Only a Software Super Admin may grant the global role. For everyone
+         * else we route through syncInstitutionRoles(), which strips any
+         * 'Software Super Admin' and keeps only institution-scoped roles. This
+         * closes the hole where an Institution Admin could PUT a crafted
+         * `roles[]=Software Super Admin` payload and escalate a user.
+         */
+        if ($request->user()->isSuperAdmin()) {
+            $user->syncRoles($selectedRoles);
+        } else {
+            $user->syncInstitutionRoles($selectedRoles);
+        }
 
         return redirect()
             ->route('settings.users.index')
@@ -315,7 +329,12 @@ class UserController extends Controller
             'roles.*' => ['string', Rule::exists('roles', 'name')],
         ]);
 
-        $user->syncRoles($data['roles'] ?? []);
+        // Same whitelist rule as update(): a non-SSA cannot mint super admins.
+        if ($request->user()->isSuperAdmin()) {
+            $user->syncRoles($data['roles'] ?? []);
+        } else {
+            $user->syncInstitutionRoles($data['roles'] ?? []);
+        }
 
         return redirect()->back()->with('success', 'User roles updated.');
     }

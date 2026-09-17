@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
@@ -7,17 +7,8 @@ import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { Spinner } from '@/Components/UI/Loading';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-
-const EMPTY_FORM = {
-    user_id: '',
-    manager_id: '',
-    name: '',
-    roll: '',
-    department_id: '',
-    join_date: '',
-    status: 'active',
-};
+import MemberFormModal from './MemberFormModal';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 
 const initials = (name) =>
     name
@@ -170,82 +161,22 @@ export default function Index({ students, departments, managers, costPerMeal, ra
     const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters?.search || '');
 
-    const { data, setData, post, put, processing, errors, reset, clearErrors } =
-        useForm({ ...EMPTY_FORM });
-
     const rows = students?.data || [];
-    const isEditing = Boolean(editing);
 
-    const departmentOptions = useMemo(
-        () => [
-            { value: '', label: `— No ${t('department', 'group').toLowerCase()} —` },
-            ...(departments || []).map((department) => ({
-                value: String(department.id),
-                label: department.name,
-            })),
-        ],
-        [departments, t]
-    );
-
-    // "Which user or meal manager manages this member record" - deliberately
-    // not a login selector. The member's own login is created via invitation.
-    const managerOptions = useMemo(() => {
-        const list = (managers || []).map((m) => ({
-            value: String(m.id),
-            label: `${m.name}${m.email ? ` (${m.email})` : ''}`,
-        }));
-
-        // Keep the current manager visible even if they fall outside the filter.
-        if (editing?.manager_id && !list.some((o) => o.value === String(editing.manager_id))) {
-            list.unshift({ value: String(editing.manager_id), label: editing.manager_name || 'Current manager' });
-        }
-
-        return [{ value: '', label: '— Unassigned —' }, ...list];
-    }, [managers, editing]);
-
+    // The form modal owns its own state; the page only tracks open/which record.
     const openCreate = () => {
-        clearErrors();
-        reset();
-        setData({ ...EMPTY_FORM });
         setEditing(null);
         setModalOpen(true);
     };
 
     const openEdit = (student) => {
-        clearErrors();
         setEditing(student);
-        setData({
-            user_id: student.user_id ? String(student.user_id) : '',
-            manager_id: student.manager_id ? String(student.manager_id) : '',
-            name: student.name || '',
-            roll: student.roll || '',
-            department_id: student.department_id ? String(student.department_id) : '',
-            join_date: student.join_date ? String(student.join_date).slice(0, 10) : '',
-            status: student.status || 'active',
-        });
         setModalOpen(true);
     };
 
     const closeModal = () => {
         setModalOpen(false);
         setEditing(null);
-        reset();
-    };
-
-    const submit = (event) => {
-        event.preventDefault();
-
-        if (isEditing) {
-            put(route('meals.students.update', editing.id), {
-                preserveScroll: true,
-                onSuccess: () => closeModal(),
-            });
-        } else {
-            post(route('meals.students.store'), {
-                preserveScroll: true,
-                onSuccess: () => closeModal(),
-            });
-        }
     };
 
     const remove = async (student) => {
@@ -600,120 +531,14 @@ export default function Index({ students, departments, managers, costPerMeal, ra
                 )}
             </div>
 
-            {/* Create / Edit modal */}
-            <Modal
+            {/* Create / Edit modal (self-contained form component). */}
+            <MemberFormModal
                 open={modalOpen}
                 onClose={closeModal}
-                title={isEditing ? `Edit ${editing?.name}` : `Add ${memberWord}`}
-                description={
-                    isEditing
-                        ? `Update this ${memberWord.toLowerCase()}'s profile.`
-                        : 'Add someone to the roster.'
-                }
-                footer={
-                    <>
-                        <button
-                            type="button"
-                            onClick={closeModal}
-                            className="rounded-lg border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            form="member-form"
-                            disabled={processing}
-                            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50"
-                        >
-                            {processing && (
-                                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
-                                    <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="opacity-90" />
-                                </svg>
-                            )}
-                            {processing ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Student'}
-                        </button>
-                    </>
-                }
-            >
-                <form id="member-form" onSubmit={submit} className="space-y-4">
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                            label="Full Name"
-                            name="name"
-                            required
-                            value={data.name}
-                            error={errors.name}
-                            placeholder="e.g. Farhan Hossain"
-                            onChange={(event) => setData('name', event.target.value)}
-                        />
-
-                        <Field
-                            label="Roll ID"
-                            name="roll"
-                            value={data.roll}
-                            error={errors.roll}
-                            placeholder="e.g. CS-2021-045"
-                            hint="Shown everywhere instead of the internal ID."
-                            onChange={(event) => setData('roll', event.target.value)}
-                        />
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                            label={t('department', 'Group')}
-                            name="department_id"
-                            type="select"
-                            value={data.department_id}
-                            error={errors.department_id}
-                            options={departmentOptions}
-                            onChange={(event) => setData('department_id', event.target.value)}
-                        />
-
-                        <Field
-                            label="Join Date"
-                            name="join_date"
-                            type="date"
-                            value={data.join_date}
-                            error={errors.join_date}
-                            onChange={(event) => setData('join_date', event.target.value)}
-                        />
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                            label="Status"
-                            name="status"
-                            type="select"
-                            required
-                            value={data.status}
-                            error={errors.status}
-                            options={[
-                                { value: 'active', label: 'Active' },
-                                { value: 'inactive', label: 'Inactive' },
-                            ]}
-                            onChange={(event) => setData('status', event.target.value)}
-                        />
-
-                        <Field
-                            label="Managed By"
-                            name="manager_id"
-                            type="select"
-                            value={data.manager_id}
-                            error={errors.manager_id}
-                            hint="The meal manager or admin who oversees this member."
-                            options={managerOptions}
-                            onChange={(event) => setData('manager_id', event.target.value)}
-                        />
-                    </div>
-
-                    <div className="rounded-lg border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                        <strong className="font-semibold text-slate-700">No password is set here.</strong>{' '}
-                        After saving, use <em>Invite</em> on the row to email a secure link so the
-                        member chooses their own password and completes their account.
-                    </div>
-                </form>
-            </Modal>
+                editing={editing}
+                departments={departments}
+                managers={managers}
+            />
 
             {/* Invite modal */}
             <Modal

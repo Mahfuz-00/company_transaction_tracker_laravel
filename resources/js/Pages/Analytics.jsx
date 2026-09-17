@@ -1,8 +1,10 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
-import { useCurrencySettings, formatCurrencyValue } from '@/Utils/useCurrency';
 import useMoney from '@/Utils/useMoney';
+import MetricCard, { pctChange } from '@/Components/Analytics/MetricCard';
+import ForecastPanel from '@/Components/Analytics/ForecastPanel';
+import SubsidyTrackingPanel from '@/Components/Analytics/SubsidyTrackingPanel';
 import {
     Chart as ChartJS,
     ArcElement,
@@ -19,178 +21,6 @@ import {
 import { Doughnut, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Title, Tooltip, Legend);
-
-/**
- * Percentage change between two values, rounded to a whole number.
- * Returns null when there is no meaningful baseline, so the caller can omit
- * the trend chip rather than rendering a misleading "+0%".
- */
-function pctChange(previous, current) {
-    const prev = Number(previous || 0);
-    const curr = Number(current || 0);
-
-    if (prev === 0) return null;
-
-    return Math.round(((curr - prev) / Math.abs(prev)) * 100);
-}
-
-/**
- * A summary metric card.
- *
- * The icon tile is `flex-shrink-0` and a FIXED size, so it can never be
- * squashed by a long number. The value itself is `min-w-0` + `truncate`, so a
- * large figure shortens gracefully rather than pushing the icon out of shape -
- * which is exactly the bug the old inline markup had.
- *
- * The trend chip is `whitespace-nowrap flex-shrink-0` for the same reason.
- */
-function MetricCard({ label, value, tone = 'slate', icon, trend, hint }) {
-    const tones = {
-        slate: { text: 'text-slate-800', tile: 'bg-slate-50 text-slate-500 border-slate-100' },
-        emerald: { text: 'text-emerald-600', tile: 'bg-emerald-50 text-emerald-600 border-emerald-100/60' },
-        rose: { text: 'text-rose-600', tile: 'bg-rose-50 text-rose-600 border-rose-100/60' },
-        sky: { text: 'text-sky-600', tile: 'bg-sky-50 text-sky-600 border-sky-100/60' },
-        amber: { text: 'text-amber-600', tile: 'bg-amber-50 text-amber-600 border-amber-100/60' },
-        accent: { text: 'text-[var(--accent)]', tile: 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent' },
-    }[tone] || {
-        text: 'text-slate-800',
-        tile: 'bg-slate-50 text-slate-500 border-slate-100',
-    };
-
-    // Trend is only rendered when explicitly supplied.
-    const hasTrend = trend !== undefined && trend !== null;
-    const trendUp = hasTrend && Number(trend) >= 0;
-
-    return (
-        <div className="flex items-start justify-between gap-4 rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
-            {/* min-w-0 lets the text column shrink instead of forcing the
-                icon tile to give up space. */}
-            <div className="min-w-0 flex-1">
-                {/* Title row: label on the left, trend chip immediately AFTER
-                    the title so the indicator reads as part of the heading,
-                    not as a suffix to the number. */}
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
-
-                    {hasTrend && (
-                        <span
-                            className={`inline-flex flex-shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${trendUp ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                                }`}
-                            title={`${trendUp ? 'Increase' : 'Decrease'} vs previous period`}
-                        >
-                            <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="3"
-                                    d={trendUp ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'}
-                                />
-                            </svg>
-                            {trendUp ? '+' : ''}{trend}%
-                        </span>
-                    )}
-                </div>
-
-                {/* The primary number stands alone, so nothing shifts its
-                    baseline any more. */}
-                <h3 className={`mt-1.5 truncate text-2xl font-extrabold leading-tight ${tones.text}`} title={String(value)}>
-                    {value}
-                </h3>
-
-                {hint && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
-            </div>
-
-            {/* Fixed-size icon tile - pinned to the top-right corner, a fixed
-                square that never shrinks or re-shapes regardless of value. */}
-            {icon && (
-                <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center self-start rounded-xl border ${tones.tile}`}>
-                    {icon}
-                </div>
-            )}
-        </div>
-    );
-}
-
-/**
- * The three-month predictive forecast panel.
- *
- * Explains its own maths, because a number a manager cannot reason about is
- * a number they will not act on.
- */
-function ForecastPanel({ forecast, money }) {
-    if (!forecast?.forecast) return null;
-
-    const f = forecast.forecast;
-    const a = forecast.assumptions || {};
-    const horizon = forecast.horizon || [];
-
-    return (
-        <div className="overflow-hidden rounded-2xl border-slate-200/80 bg-white shadow-sm">
-            <div className="flex flex-col gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h3 className="text-base font-bold text-slate-900">3-Month Predictive Forecast</h3>
-                    <p className="mt-0.5 text-xs text-slate-500">{a.method}</p>
-                </div>
-                <span className="inline-flex flex-shrink-0 items-center rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-bold text-[var(--accent)]">
-                    Based on {a.lookback_months} months
-                </span>
-            </div>
-
-            {/* Headline projection for next month */}
-            <div className="grid grid-cols-2 gap-px bg-slate-100 lg:grid-cols-4">
-                {[
-                    { label: `Projected Meals`, value: f.projected_meals, hint: `${f.meal_growth_pct}% trend` },
-                    { label: 'Projected Cost', value: money(f.projected_cost, false), hint: `${f.expense_growth_pct}% cost trend` },
-                    { label: 'Subsidy Required', value: money(f.subsidy_required, false), hint: `${a.target_subsidy_ratio}% target` },
-                    { label: 'Members Fund', value: money(f.member_funded, false), hint: `${a.target_member_ratio}% target` },
-                ].map((cell) => (
-                    <div key={cell.label} className="bg-white px-5 py-4">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{cell.label}</div>
-                        <div className="mt-0.5 text-lg font-bold text-slate-800">{cell.value}</div>
-                        <div className="text-[11px] text-slate-400">{cell.hint}</div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Forward horizon table */}
-            <div className="overflow-x-auto">
-                <table className="w-full min-w-140 border-collapse text-left">
-                    <thead>
-                        <tr className="border-y border-slate-100 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                            <th className="px-5 py-3">Month</th>
-                            <th className="px-5 py-3 text-right">Meals</th>
-                            <th className="px-5 py-3 text-right">Cost</th>
-                            <th className="px-5 py-3 text-right">Per-Meal Rate</th>
-                            <th className="px-5 py-3 text-right">Subsidy Needed</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-sm">
-                        {horizon.map((row) => (
-                            <tr key={row.month} className="transition-colors hover:bg-slate-50/60">
-                                <td className="px-5 py-3 font-semibold text-slate-700">{row.label}</td>
-                                <td className="px-5 py-3 text-right text-slate-600">{row.projected_meals}</td>
-                                <td className="px-5 py-3 text-right text-slate-600">{money(row.projected_cost, false)}</td>
-                                <td className="px-5 py-3 text-right text-slate-600">{money(row.projected_rate, false)}</td>
-                                <td className="px-5 py-3 text-right font-bold text-sky-600">{money(row.subsidy_required, false)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* The ratio the forecast is anchored to. */}
-            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3">
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                    The forecast holds the institution's <strong className="font-semibold text-slate-700">
-                        {a.target_member_ratio}/{a.target_subsidy_ratio} rule</strong>: members are expected to
-                    cover {a.target_member_ratio}% of the meal cost and subsidies the remaining{' '}
-                    {a.target_subsidy_ratio}%. The "Subsidy Needed" column is the exact funding required
-                    next month to keep that split.
-                </p>
-            </div>
-        </div>
-    );
-}
 
 export default function Analytics({
     auth,
@@ -212,9 +42,9 @@ export default function Analytics({
     subsidyTracking = {},
     forecast = {},
 }) {
-    const [currency] = useCurrencySettings();
-    // money() routes through the global threshold system, so summary figures
-    // adapt (1,234 -> 1.23 K) exactly when the admin's threshold is crossed.
+    // money() routes through the GLOBAL threshold system, so every figure on
+    // this page (cards, charts, tables) adapts uniformly (1,234 -> 1.23 K) the
+    // moment the admin's Abbreviation Threshold is crossed.
     const money = useMoney();
     const { data, setData } = useForm({
         period: activeFilters.period || 'current_month',
@@ -353,7 +183,7 @@ export default function Analytics({
                 callbacks: {
                     label: function (context) {
                         const v = context.parsed.y !== undefined ? context.parsed.y : context.parsed || context.raw || 0;
-                        return ` ${context.dataset.label || context.label}: ${formatCurrencyValue(Number(v || 0), currency)}`;
+                        return ` ${context.dataset.label || context.label}: ${money(Number(v || 0), false)}`;
                     },
                 },
             },
@@ -462,7 +292,7 @@ export default function Analytics({
                     font: { family: 'Inter, sans-serif', size: 11 },
                     color: '#94a3b8',
                     callback: function (value) {
-                        return formatCurrencyValue(Number(value || 0), currency);
+                        return money(Number(value || 0), false);
                     },
                 },
             },
@@ -477,7 +307,7 @@ export default function Analytics({
             ...commonChartOptions.plugins,
             legend: { display: false },
             doughnutCenter: {
-                text: formatCurrencyValue(Number(totalOut || 0), currency),
+                text: money(Number(totalOut || 0), false),
                 color: '#0f172a',
             },
         },
@@ -694,63 +524,10 @@ export default function Analytics({
 
                 {/* Subsidy tracking: each funder's target share vs what was
                     actually recorded this month. */}
-                {(subsidyTracking.sources || []).length > 0 && (
-                    <div className="overflow-hidden rounded-2xl border-slate-200/80 bg-white shadow-sm">
-                        <div className="flex flex-col gap-1 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <h3 className="text-base font-bold text-slate-900">Subsidy Tracking</h3>
-                                <p className="mt-0.5 text-xs text-slate-500">
-                                    Funding recorded this month, by source, against each source's target share.
-                                </p>
-                            </div>
-                            <span className="inline-flex flex-shrink-0 items-center rounded-full bg-sky-50 px-3 py-1 text-[11px] font-bold text-sky-700">
-                                {formatCurrencyValue(Number(subsidyTracking.total || 0), currency)} total
-                            </span>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full border-collapse text-left">
-                                <thead>
-                                    <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                                        <th className="px-5 py-3">Source</th>
-                                        <th className="px-5 py-3 text-right">Recorded</th>
-                                        <th className="px-5 py-3 text-right">Target Share</th>
-                                        <th className="px-5 py-3 text-right">Actual Share</th>
-                                        <th className="px-5 py-3">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 text-sm">
-                                    {subsidyTracking.sources.map((src) => {
-                                        const target = Number(src.target_percentage || 0);
-                                        const actual = Number(src.actual_percentage || 0);
-                                        const onTrack = target === 0 || Math.abs(actual - target) <= 5;
-
-                                        return (
-                                            <tr key={src.key} className="transition-colors hover:bg-slate-50/60">
-                                                <td className="px-5 py-3 font-semibold text-slate-700">{src.name}</td>
-                                                <td className="px-5 py-3 text-right text-slate-600">
-                                                    {formatCurrencyValue(Number(src.total || 0), currency)}
-                                                </td>
-                                                <td className="px-5 py-3 text-right text-slate-600">{target}%</td>
-                                                <td className="px-5 py-3 text-right font-bold text-slate-800">{actual}%</td>
-                                                <td className="px-5 py-3">
-                                                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${onTrack ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                                                        {onTrack ? 'On target' : 'Off target'}
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
+                <SubsidyTrackingPanel tracking={subsidyTracking} money={money} />
 
                 {/* The three-month predictive engine. */}
-                <ForecastPanel
-                    forecast={forecast}
-                    money={(v) => formatCurrencyValue(Number(v || 0), currency)}
-                />
+                <ForecastPanel forecast={forecast} money={money} />
 
                 {/* Meal trend + expense breakdown */}
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
@@ -788,7 +565,7 @@ export default function Analytics({
                                             plugins: {
                                                 ...doughnutOptions.plugins,
                                                 doughnutCenter: {
-                                                    text: formatCurrencyValue(categoryTotal, currency),
+                                                    text: money(categoryTotal, false),
                                                     color: '#0f172a',
                                                 },
                                             },
@@ -814,7 +591,7 @@ export default function Analytics({
                                                         {row.category}
                                                     </span>
                                                     <span className="font-bold text-slate-800">
-                                                        {formatCurrencyValue(Number(row.total), currency)}
+                                                        {money(Number(row.total), false)}
                                                         <span className="ml-1.5 font-normal text-slate-400">{pct}%</span>
                                                     </span>
                                                 </div>
@@ -867,7 +644,7 @@ export default function Analytics({
                                                 )}
                                             </td>
                                             <td className="whitespace-nowrap px-6 py-3 text-right font-bold text-rose-600">
-                                                −{formatCurrencyValue(Number(tx.amount), currency)}
+                                                −{money(Number(tx.amount), false)}
                                             </td>
                                         </tr>
                                     ))}
@@ -918,7 +695,7 @@ export default function Analytics({
                                                 border: { dash: [4, 4] },
                                                 grid: { color: '#f1f5f9' },
                                                 ticks: {
-                                                    callback: (v) => formatCurrencyValue(Number(v || 0), currency),
+                                                    callback: (v) => money(Number(v || 0), false),
                                                     color: '#94a3b8',
                                                     font: { family: 'Inter, sans-serif', size: 11 },
                                                 },

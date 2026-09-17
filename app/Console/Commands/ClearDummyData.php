@@ -25,16 +25,22 @@ class ClearDummyData extends Command
 {
     protected $signature = 'db:clear-dummy
         {--force : Skip the confirmation prompt}
-        {--users : Also delete member/staff user accounts (keeps Super Admins)}';
+        {--users : Also delete non-admin user accounts (keeps Super Admins + Institution Admins)}';
 
-    protected $description = 'Clear all dummy/sample data (ledgers, roster, claims, logs) while keeping roles, currencies and institutions.';
+    protected $description = 'Clear transactional dummy data (ledgers, roster, claims, logs) while preserving System Settings, Funding Sources, institutions and base admin users.';
 
     /**
-     * Tables wiped unconditionally, in FK-safe order (children first).
-     * Structural tables (roles, permissions, institutions, currencies) are NOT
-     * in this list and are therefore preserved.
+     * Transactional / dummy tables wiped, in FK-safe order (children first).
+     *
+     * RETENTION RULE - these are NEVER in the list and are therefore preserved:
+     *   - institutions                 (the workspaces / system config)
+     *   - subsidy_sources              (Funding Sources - foundational config)
+     *   - meal_rate_settings           (System Settings - rate configuration)
+     *   - currencies, roles, permissions
+     *   - Super Admin / base admin users
      */
     protected array $flush = [
+        // Ledger + activity (pure transactional records).
         'meal_entries',
         'meal_expenses',
         'deposits',
@@ -45,11 +51,13 @@ class ClearDummyData extends Command
         'email_logs',
         'activity_logs',
         'notifications',
+        // Test roster + test suppliers + their groupings.
         'students',
         'vendors',
         'departments',
-        'meal_rate_settings',
-        'subsidy_sources',
+        // NOTE: 'subsidy_sources' (Funding Sources) and 'meal_rate_settings'
+        // (System Settings) are intentionally NOT cleared - they are the core
+        // configuration the platform must retain.
     ];
 
     public function handle(): int
@@ -84,24 +92,24 @@ class ClearDummyData extends Command
             }
         }
 
-        // Optionally remove the dummy/staff accounts too, keeping Super Admins so
-        // the operator is never locked out of the platform.
+        // Optionally remove the test/staff accounts too, but ALWAYS keep the
+        // BASE ADMIN USERS - Super Admins and Institution Admins - so the
+        // platform's administrative spine is never destroyed.
         if ($this->option('users')) {
-            $kept = DB::table('users')
-                ->whereIn('id', DB::table('model_has_roles')
-                    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
-                    ->where('roles.name', 'Software Super Admin')
-                    ->pluck('model_has_roles.model_id'))
-                ->pluck('id');
+            $baseAdminIds = DB::table('model_has_roles')
+                ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+                ->whereIn('roles.name', ['Software Super Admin', 'Institution Admin'])
+                ->pluck('model_has_roles.model_id')
+                ->all();
 
-            $deleted = DB::table('users')->whereNotIn('id', $kept)->delete();
-            $this->line("  cleared <comment>users</comment> ({$deleted} removed, Super Admins kept)");
+            $deleted = DB::table('users')->whereNotIn('id', $baseAdminIds)->delete();
+            $this->line("  cleared <comment>users</comment> ({$deleted} removed; Super Admins + Institution Admins kept)");
         }
 
         Schema::enableForeignKeyConstraints();
 
         $this->newLine();
-        $this->info('Dummy data cleared. Roles, permissions, currencies and institutions were preserved.');
+        $this->info('Dummy data cleared. System Settings, Funding Sources, roles, currencies, institutions and base admin users were preserved.');
 
         return self::SUCCESS;
     }
