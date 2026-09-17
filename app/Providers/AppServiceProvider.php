@@ -42,6 +42,16 @@ class AppServiceProvider extends ServiceProvider
             $model::observe(RecordActivity::class);
         }
 
+        /*
+         * Outbox: record every dispatched email (Mailables and Notifications).
+         *
+         * IMPORTANT: this listener is ALREADY auto-discovered by Laravel from
+         * app/Listeners (its handle() type-hints MessageSent). Registering it
+         * here as well made it fire TWICE per email, writing two identical
+         * outbox rows - the duplicate-log bug. We therefore do NOT call
+         * Event::listen() for it; discovery is the single registration path.
+         */
+
         // A Super Admin passes every permission check; Institution Admins are
         // gated by the permissions granted to their role.
         Gate::before(function (User $user, string $ability) {

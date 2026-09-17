@@ -6,6 +6,7 @@ import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { Spinner } from '@/Components/UI/Loading';
+import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 
 const EMPTY_FORM = {
@@ -13,6 +14,7 @@ const EMPTY_FORM = {
     amount: '',
     payment_method: 'Cash',
     notes: '',
+    kind: 'personal',
 };
 
 const initials = (name) =>
@@ -55,14 +57,18 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
     const { t } = useTerminology();
     const { flash } = usePage().props;
     const money = useMoney();
+    const { confirm } = useFeedback();
     const canRecord = can('meals.deposit');
     const canExport = can('exports.download');
 
     const [modalOpen, setModalOpen] = useState(false);
+    const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters?.search || '');
 
-    const { data, setData, post, processing, errors, reset, clearErrors } =
+    const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm({ ...EMPTY_FORM });
+
+    const isEditing = Boolean(editing);
 
     const rows = deposits?.data || [];
 
@@ -80,21 +86,61 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
     const openModal = () => {
         clearErrors();
         reset();
+        setEditing(null);
         setData({ ...EMPTY_FORM });
+        setModalOpen(true);
+    };
+
+    // Edit an existing deposit. The member cannot be reassigned (it would move
+    // money between members), so only amount/method/notes/kind are editable.
+    const openEdit = (deposit) => {
+        clearErrors();
+        setEditing(deposit);
+        setData({
+            student_id: String(deposit.student_id),
+            amount: deposit.amount ?? '',
+            payment_method: deposit.payment_method || 'Cash',
+            notes: deposit.notes || '',
+            kind: deposit.kind || 'personal',
+        });
         setModalOpen(true);
     };
 
     const closeModal = () => {
         setModalOpen(false);
+        setEditing(null);
         reset();
     };
 
     const submit = (event) => {
         event.preventDefault();
+
+        if (isEditing) {
+            put(route('meals.deposits.update', editing.id), {
+                preserveScroll: true,
+                onSuccess: () => closeModal(),
+            });
+            return;
+        }
+
         post(route('meals.deposits.store'), {
             preserveScroll: true,
             onSuccess: () => closeModal(),
         });
+    };
+
+    // Reverse a deposit: it stays on record but stops counting toward the
+    // member's balance, and a matching cash-out is posted to the ledger.
+    const reverse = async (deposit) => {
+        const ok = await confirm({
+            title: 'Reverse this deposit?',
+            message: `A matching cash-out will be posted and ${deposit.student?.name || 'the member'}'s balance will drop by ${money(deposit.amount, false)}. The record is kept for the audit trail.`,
+            tone: 'danger',
+            confirmLabel: 'Reverse deposit',
+        });
+        if (!ok) return;
+
+        router.patch(route('meals.deposits.reverse', deposit.id), {}, { preserveScroll: true });
     };
 
     const applyFilters = (next) => {
@@ -274,12 +320,13 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
                                 <th className="px-6 py-3">Recorded By</th>
                                 <th className="px-6 py-3">Date</th>
                                 <th className="px-6 py-3">Notes</th>
+                                {canRecord && <th className="px-6 py-3 text-right">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-sm">
                             {rows.length > 0 ? (
                                 rows.map((deposit) => (
-                                    <tr key={deposit.id} className="transition-colors hover:bg-slate-50/60">
+                                    <tr key={deposit.id} className={`transition-colors hover:bg-slate-50/60 ${deposit.reversed_at ? 'opacity-60' : ''}`}>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-[10px] font-bold text-white">
@@ -300,8 +347,13 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className={`px-6 py-4 font-bold ${deposit.kind === 'subsidy' ? 'text-sky-600' : 'text-emerald-600'}`}>
+                                        <td className={`px-6 py-4 font-bold ${deposit.reversed_at ? 'text-slate-400 line-through' : deposit.kind === 'subsidy' ? 'text-sky-600' : 'text-emerald-600'}`}>
                                             +{money(deposit.amount, false)}
+                                            {deposit.reversed_at && (
+                                                <span className="ml-2 inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-600 no-underline">
+                                                    Reversed
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${deposit.kind === 'subsidy' ? 'border-sky-100 bg-sky-50 text-sky-700' : 'border-emerald-100 bg-emerald-50 text-emerald-700'}`}>
@@ -320,11 +372,37 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
                                         <td className="max-w-xs px-6 py-4 text-xs text-slate-500">
                                             {deposit.notes || <span className="text-slate-300">—</span>}
                                         </td>
+                                        {canRecord && (
+                                            <td className="whitespace-nowrap px-6 py-4 text-right">
+                                                {!deposit.reversed_at ? (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEdit(deposit)}
+                                                            className="font-medium text-indigo-600 transition-colors hover:text-indigo-900"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => reverse(deposit)}
+                                                            className="ml-4 font-medium text-rose-500 transition-colors hover:text-rose-700"
+                                                        >
+                                                            Reverse
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-xs italic text-slate-400">
+                                                        Reversed {deposit.reverser?.name ? `by ${deposit.reverser.name}` : ''}
+                                                    </span>
+                                                )}
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="7" className="py-14 text-center">
+                                    <td colSpan={canRecord ? 8 : 7} className="py-14 text-center">
                                         <p className="text-sm font-semibold text-slate-600">
                                             {hasFilters ? 'No deposits match these filters.' : 'No deposits recorded yet.'}
                                         </p>
@@ -374,8 +452,10 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
             <Modal
                 open={modalOpen}
                 onClose={closeModal}
-                title="Record Deposit"
-                description="This creates a matching cash-in transaction in the ledger."
+                title={isEditing ? 'Edit Deposit' : 'Record Deposit'}
+                description={isEditing
+                    ? 'Update this deposit. The change is mirrored onto its ledger transaction.'
+                    : 'This creates a matching cash-in transaction in the ledger.'}
                 footer={
                     <>
                         <button
@@ -392,7 +472,7 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
                             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50"
                         >
                             {processing && <Spinner className="h-4 w-4" />}
-                            {processing ? 'Saving...' : 'Record Deposit'}
+                            {processing ? 'Saving...' : isEditing ? 'Save Changes' : 'Record Deposit'}
                         </button>
                     </>
                 }
@@ -406,8 +486,17 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
                         value={data.student_id}
                         error={errors.student_id}
                         options={studentOptions}
+                        // A member cannot be reassigned on edit - that would move
+                        // money between members. Disable the control instead.
+                        disabled={isEditing}
                         onChange={(event) => setData('student_id', event.target.value)}
                     />
+
+                    {isEditing && (
+                        <div className="rounded-lg border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
+                            The member a deposit belongs to cannot be changed. Reverse this deposit and record a new one for a different member if needed.
+                        </div>
+                    )}
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field
@@ -440,12 +529,23 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
                     </div>
 
                     <Field
+                        label="Type"
+                        name="kind"
+                        type="select"
+                        value={data.kind}
+                        error={errors.kind}
+                        options={(kinds || []).map((k) => ({ value: k.value, label: k.label }))}
+                        onChange={(event) => setData('kind', event.target.value)}
+                    />
+
+                    <Field
                         label="Notes"
                         name="notes"
                         type="textarea"
                         value={data.notes}
                         error={errors.notes}
                         placeholder="Optional note about this payment..."
+                        onChange={(event) => setData('notes', event.target.value)}
                     />
                 </form>
             </Modal>

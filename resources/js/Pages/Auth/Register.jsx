@@ -50,7 +50,7 @@ export default function Register() {
     return (
         <GuestLayout
             heading="Create your account"
-            subheading="Join the dorm meal tracker and keep every meal and taka accounted for."
+            subheading="Join the platform and keep every meal and expense accounted for."
         >
             <Head title="Register" />
 

@@ -1,7 +1,12 @@
 <?php
 
 use App\Http\Controllers\ActivityLogController;
+use App\Http\Controllers\ClaimController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MemberDashboardController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PasswordSetupController;
+use App\Http\Controllers\EmailLogController;
 use App\Http\Controllers\InstitutionController;
 use App\Http\Controllers\InstitutionRegistryController;
 use App\Http\Controllers\MemberInvitationController;
@@ -34,21 +39,91 @@ Route::get('/', function () {
 })->name('home');
 
 /**
- * Public invitation acceptance. Signature-validated per Laravel's signed-route
- * middleware, so these live outside the auth group.
+ * Password setup from a signed link (invitation OR reset).
+ *
+ * The GET is protected by Laravel's `signed` middleware, so a tampered URL is
+ * rejected before we ever look the invitation up. The POST re-validates the
+ * opaque token inside the controller (hash_equals + expiry + single-use) as
+ * defence in depth. Both live outside the auth group - the recipient is a guest.
  */
-Route::get('/invitations/{invitation}/accept', [MemberInvitationController::class, 'accept'])
+Route::get('/password/setup/{invitation}', [PasswordSetupController::class, 'show'])
+    ->name('password.setup')
+    ->middleware('signed');
+
+Route::post('/password/setup/{invitation}', [PasswordSetupController::class, 'store'])
+    ->name('password.setup.store');
+
+/**
+ * Legacy invitation aliases. Existing emailed links and bookmarks keep working -
+ * they now render the same, upgraded password-setup screen.
+ */
+Route::get('/invitations/{invitation}/accept', [PasswordSetupController::class, 'show'])
     ->name('invitations.accept')
     ->middleware('signed');
 
-// The POST target differs from the signed GET path, so Laravel's `signed`
-// middleware cannot apply here. Security is enforced by the opaque token
-// check inside the controller (hash_equals + expiry + single-use).
-Route::post('/invitations/{invitation}/complete', [MemberInvitationController::class, 'complete'])
+Route::post('/invitations/{invitation}/complete', [PasswordSetupController::class, 'store'])
     ->name('invitations.complete');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    /*
+     * MEMBER AREA. Every route here is gated by the Member role and scoped to
+     * the signed-in member's own data in the controller - a member can never
+     * reach another member's records or the institution's pooled figures.
+     */
+    Route::middleware(['permission:meals.view', 'role:Member'])->prefix('my')->name('member.')->group(function () {
+        // Merged personal summary: month figures, deposits, meal history, balance.
+        Route::get('/dashboard', [MemberDashboardController::class, 'index'])->name('dashboard');
+        // Own meal entries, day by day.
+        Route::get('/meals', [MemberDashboardController::class, 'meals'])->name('meals');
+        // Own deposit history.
+        Route::get('/deposits', [MemberDashboardController::class, 'deposits'])->name('deposits');
+        // Personal analytics, scoped exclusively to this member.
+        Route::get('/analytics', [MemberDashboardController::class, 'analytics'])->name('analytics');
+    });
+
+    // Forced / voluntary password change. Reachable even while a user still
+    // holds a temporary password (the middleware allow-lists these names).
+    Route::get('/password/change', [ProfileController::class, 'showChangePassword'])->name('password.change');
+    Route::put('/password/change', [ProfileController::class, 'updatePassword'])->name('password.change.update');
+
+    // Email Log / Outbox. SSA sees the whole platform; IA / Meal Manager are
+    // scoped to their institution (enforced in the controller).
+    Route::get('/settings/emails', [EmailLogController::class, 'index'])
+        ->name('settings.emails.index')
+        ->middleware('permission:emails.view');
+    Route::get('/settings/emails/{emailLog}', [EmailLogController::class, 'show'])
+        ->name('settings.emails.show')
+        ->middleware('permission:emails.view');
+
+    // In-app notifications. Every role sees their own; admins may broadcast.
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('/notifications/latest', [NotificationController::class, 'latest'])->name('notifications.latest');
+    Route::post('/notifications/announce', [NotificationController::class, 'announce']) ->name('notifications.announce');
+    Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.readAll');
+    Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
+
+    // MEMBER-ONLY: a member's own claim submissions + status. Managers review
+    // claims through the separate /claims/review queue below.
+    Route::get('/claims', [ClaimController::class, 'index'])
+        ->name('claims.index')
+        ->middleware(['permission:claims.view', 'role:Member']);
+    Route::post('/claims', [ClaimController::class, 'store'])
+        ->name('claims.store')
+        ->middleware('permission:claims.submit');
+
+    // Manager review queue + decisions.
+    Route::get('/claims/review', [ClaimController::class, 'review'])
+        ->name('claims.review')
+        ->middleware('permission:claims.review');
+    Route::patch('/claims/{claim}/approve', [ClaimController::class, 'approve'])
+        ->name('claims.approve')
+        ->middleware('permission:claims.review');
+    Route::patch('/claims/{claim}/reject', [ClaimController::class, 'reject'])
+        ->name('claims.reject')
+        ->middleware('permission:claims.review');
 
     // The standalone "Add Transaction" module was removed: Cash In is now a
     // Deposit and Cash Out is an Expense, each with its own module. The old
@@ -171,8 +246,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/settings/institutions', [InstitutionRegistryController::class, 'index'])
         ->name('settings.institutions.index')
         ->middleware('permission:institutions.view');
+    Route::post('/settings/institutions', [InstitutionRegistryController::class, 'store'])
+        ->name('settings.institutions.store')
+        ->middleware('permission:institutions.manage');
     Route::patch('/settings/institutions/{institution}/toggle', [InstitutionRegistryController::class, 'toggle'])
         ->name('settings.institutions.toggle')
+        ->middleware('permission:institutions.manage');
+    // Switch the SSA into a specific institution's workspace.
+    Route::patch('/settings/institutions/{institution}/switch', [InstitutionRegistryController::class, 'switchTo'])
+        ->name('settings.institutions.switch')
         ->middleware('permission:institutions.manage');
 
     // Profile Routes
@@ -211,14 +293,26 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('permission:exports.download');
 
         Route::resource('deposits', DepositController::class)
-            ->only(['index', 'create', 'store'])
+            ->only(['index', 'create', 'store', 'update'])
+            ->middleware('permission:meals.deposit');
+
+        // Reverse a deposit: keeps the row, flags it and posts a counter entry.
+        Route::patch('deposits/{deposit}/reverse', [DepositController::class, 'reverse'])
+            ->name('deposits.reverse')
             ->middleware('permission:meals.deposit');
         Route::get('deposits/export', [DepositController::class, 'export'])
             ->name('deposits.export')
             ->middleware('permission:exports.download');
 
         Route::resource('entries', MealEntryController::class)->only(['index', 'create', 'store'])->middleware('permission:meals.entry');
-        Route::resource('expenses', MealExpenseController::class)->only(['index', 'create', 'store'])->middleware('permission:meals.expense');
+        Route::resource('expenses', MealExpenseController::class)
+            ->only(['index', 'create', 'store', 'update'])
+            ->middleware('permission:meals.expense');
+
+        // Reverse a recorded expense: keeps the row, flags it, posts a cash-in.
+        Route::patch('expenses/{expense}/reverse', [MealExpenseController::class, 'reverse'])
+            ->name('expenses.reverse')
+            ->middleware('permission:meals.expense');
 
         Route::get('reports', [MealReportController::class, 'index'])->name('reports.index')->middleware('permission:meals.reports');
         Route::get('reports/export', [MealReportController::class, 'export'])
@@ -238,6 +332,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('vendors/export', [VendorController::class, 'export'])
             ->name('vendors.export')
             ->middleware('permission:exports.download');
+
+        // Purchase history for one vendor (loaded by the profile tab).
+        Route::get('vendors/{vendor}/history', [VendorController::class, 'history'])
+            ->name('vendors.history')
+            ->middleware('permission:vendors.view');
 
         Route::resource('vendors', VendorController::class)
             ->except(['create', 'edit', 'show'])

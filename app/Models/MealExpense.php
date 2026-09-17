@@ -17,15 +17,41 @@ class MealExpense extends Model
         'amount',
         'payment_status',
         'recorded_by',
+        'reversed_at',
+        'reversed_by',
+        'reversal_transaction_id',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'reversed_at' => 'datetime',
     ];
+
+    /** A reversed expense no longer counts toward any total. */
+    public function isReversed(): bool
+    {
+        return $this->reversed_at !== null;
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->whereNull('reversed_at');
+    }
 
     public function transaction()
     {
         return $this->belongsTo(Transaction::class);
+    }
+
+    /** The administrator who reversed this expense. */
+    public function reverser()
+    {
+        return $this->belongsTo(User::class, 'reversed_by');
+    }
+
+    public function reversalTransaction()
+    {
+        return $this->belongsTo(Transaction::class, 'reversal_transaction_id');
     }
 
     public function vendor()

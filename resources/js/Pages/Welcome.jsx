@@ -4,42 +4,52 @@ import ApplicationLogo from '@/Components/ApplicationLogo';
 
 const FEATURES = [
     {
-        title: 'Pooled Meal Money',
-        body: 'Every student contributes to a shared pot. Track each payment against the group balance so nobody over- or under-pays.',
+        title: 'Multi-Institution Ready',
+        body: 'Run an office canteen, a university hall, or a general mess on the same platform. Each institution keeps its own roster, ledger and branding, fully isolated.',
+        icon: 'M3 21h18M4 10h16M5 10V21M19 10V21M9 21v-7M15 21v-7M12 3l9 6H3l9-6z',
+    },
+    {
+        title: 'Pooled Contributions',
+        body: 'Every member contributes to a shared fund. Track each payment against the group balance so nobody over- or under-pays.',
         icon: 'M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
     },
     {
         title: 'Meal Count Tracking',
-        body: 'Log breakfast, lunch and dinner per student, per day. Meal rates turn those counts into exact, fair costs automatically.',
+        body: 'Log breakfast, lunch and dinner per participant, per day. Meal rates turn those counts into exact, fair costs automatically.',
         icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
     },
     {
-        title: 'Expense & Cash-Out Log',
-        body: 'Record market runs, gas, and utilities. See total spending against total deposits at a glance, always in balance.',
+        title: 'Expense & Vendor Log',
+        body: 'Record purchases, rent, and utilities against the vendors you buy from. See total spending against total contributions, always in balance.',
         icon: 'M20 12V8H6a2 2 0 010-4h12v4m0 4v4H6a2 2 0 000 4h12v-4m0-4h-4a2 2 0 000 4h4v-4z',
     },
     {
-        title: 'Per-Student Ledger',
-        body: 'Each student gets a running balance of deposits, meal charges, and dues - no more guesswork or handwritten registers.',
-        icon: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+        title: 'Personal Member Dashboard',
+        body: 'Every participant gets a private view of their own deposits, meal history and live balance - plus the manager overseeing their account.',
+        icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z',
     },
     {
-        title: 'Roles & Permissions',
-        body: 'Super Admins, Meal Managers, and Students each see exactly what they should. Granular control down to a single action.',
+        title: 'Claims & Disputes',
+        body: 'Members can flag a missing deposit or meal, or claim an out-of-pocket purchase. Managers approve, and balances adjust automatically.',
         icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
     },
     {
         title: 'Reports & Analytics',
-        body: 'Daily, weekly, and monthly breakdowns of meals served and money spent, so the manager can report with confidence.',
+        body: 'Daily, weekly, and monthly breakdowns of meals served and money spent, so any manager can report with confidence.',
         icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+    },
+    {
+        title: 'Roles & Permissions',
+        body: 'Platform super admins, institution admins, meal managers and members each see exactly what they should - scoped to their own institution.',
+        icon: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-6.93 4 4 0 004 6.93z',
     },
 ];
 
 const STEPS = [
-    { step: '01', title: 'Register your account', body: 'Sign up in seconds. You are added as a Student with read-only access to your own meal history.' },
-    { step: '02', title: 'The manager sets up the mess', body: 'A Meal Manager creates departments, adds students, and defines the per-meal rate for the month.' },
-    { step: '03', title: 'Log deposits and meals', body: 'Cash-in from each student and daily meal counts are recorded as they happen - entries take seconds.' },
-    { step: '04', title: 'Track the balance live', body: 'Expenses are logged as cash-out, and every student balance updates automatically. No month-end math.' },
+    { step: '01', title: 'Set up your institution', body: 'Create your workspace in seconds - an office canteen, a university hall, or a general mess. Each gets its own roster and ledger.' },
+    { step: '02', title: 'Add members and managers', body: 'Managers add participants, organise them into departments or teams, and define the per-meal rate for the month.' },
+    { step: '03', title: 'Log contributions and meals', body: 'Money in from each member and daily meal counts are recorded as they happen - entries take seconds.' },
+    { step: '04', title: 'Track balances live', body: 'Expenses are logged against vendors, and every member balance updates automatically. Members can raise claims any time.' },
 ];
 
 const PREVIEW_ROWS = [
@@ -47,6 +57,14 @@ const PREVIEW_ROWS = [
     { name: 'Rakib Ahmed', meals: 58, due: '460', status: 'Partial', tone: 'bg-amber-50 text-amber-700 border-amber-100' },
     { name: 'Tamim Iqbal', meals: 60, due: '1,200', status: 'Paid', tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
     { name: 'Sadia Afrin', meals: 44, due: '880', status: 'Due', tone: 'bg-rose-50 text-rose-700 border-rose-100' },
+];
+
+/* The institution types the platform serves, shown as a trust strip. */
+const INSTITUTION_TYPES = [
+    { label: 'Corporate Offices', detail: 'Staff cafeterias & office meal programs' },
+    { label: 'University Halls', detail: 'Residential halls & shared messes' },
+    { label: 'General Messes', detail: 'Hostels, clubs & shared households' },
+    { label: 'Colleges & Hostels', detail: 'Campus boarding & dining' },
 ];
 
 const PREVIEW_CARDS = [
@@ -60,7 +78,7 @@ export default function Welcome() {
 
     return (
         <>
-            <Head title="Dorm Meal Management - Track Meals, Money & Expenses" />
+            <Head title="Meal & Expense Management System for Offices, Halls & Messes" />
 
             <div className="min-h-screen bg-white text-slate-900 antialiased">
                 <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur-md">
@@ -68,8 +86,8 @@ export default function Welcome() {
                         <Link href="/" className="flex items-center gap-3">
                             <ApplicationLogo className="h-9 w-9 rounded-lg object-contain" />
                             <span className="flex flex-col leading-tight">
-                                <span className="text-sm font-bold text-slate-900">Dorm Meal Manager</span>
-                                <span className="text-[11px] font-medium text-slate-400">Shared meals, tracked</span>
+                                <span className="text-sm font-bold text-slate-900">Meal &amp; Expense Manager</span>
+                                <span className="text-[11px] font-medium text-slate-400">Multi-institution platform</span>
                             </span>
                         </Link>
 
@@ -114,16 +132,16 @@ export default function Welcome() {
                             <div className="max-w-xl lg:max-w-none">
                                 <span className="inline-flex items-center gap-2 rounded-full border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
                                     <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-                                    Built for dorm mess management
+                                    Multi-institution meal &amp; expense management
                                 </span>
 
                                 <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
-                                    Shared meals,
-                                    <span className="block bg-gradient-to-r from-indigo-600 to-sky-500 bg-clip-text text-transparent">without the messy math</span>
+                                    One system for every
+                                    <span className="block bg-gradient-to-r from-indigo-600 to-sky-500 bg-clip-text text-transparent">shared meal &amp; expense ledger</span>
                                 </h1>
 
                                 <p className="mt-5 text-base leading-relaxed text-slate-600 sm:text-lg">
-                                    Dorm Meal Manager tracks the money students pool, the meals they eat, and every expense the kitchen makes - turning a handwritten register into a live, always-balanced ledger.
+                                    Run meal programs for offices, university halls, colleges and general messes on a single platform. Track the money members pool, the meals they eat, and every expense - turning a handwritten register into a live, always-balanced ledger.
                                 </p>
 
                                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -137,8 +155,8 @@ export default function Welcome() {
                                 <dl className="mt-10 grid grid-cols-3 gap-6 border-t border-slate-200 pt-6">
                                     {[
                                         { label: 'Meals tracked', value: 'B / L / D' },
-                                        { label: 'Ledger entries', value: 'Per student' },
-                                        { label: 'Balances', value: 'Always live' },
+                                        { label: 'Ledger entries', value: 'Per member' },
+                                        { label: 'Institutions', value: 'Many, isolated' },
                                     ].map((item) => (
                                         <div key={item.label}>
                                             <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{item.label}</dt>
@@ -193,11 +211,29 @@ export default function Welcome() {
                     </div>
                 </section>
 
+                {/* Who the platform is for. Makes the multi-institution scope
+                    obvious before the feature grid. */}
+                <section className="border-t border-slate-100 bg-white py-12">
+                    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                        <p className="text-center text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            Built for any shared meal &amp; expense operation
+                        </p>
+                        <div className="mt-6 grid-cols-2 gap-4 lg:grid-cols-4">
+                            {INSTITUTION_TYPES.map((type) => (
+                                <div key={type.label} className="rounded-xl border-slate-200 bg-slate-50/60 p-4">
+                                    <div className="text-sm font-bold text-slate-800">{type.label}</div>
+                                    <div className="mt-0.5 text-xs leading-relaxed text-slate-500">{type.detail}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+
                 <section id="features" className="scroll-mt-20 border-t border-slate-100 bg-slate-50/70 py-20">
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="mx-auto max-w-2xl text-center">
-                            <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Everything a mess manager juggles, in one place</h2>
-                            <p className="mt-4 text-base leading-relaxed text-slate-600">From the first deposit to the month-end report, each part of the money and meal cycle is recorded once and reused everywhere.</p>
+                            <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Everything a meal program juggles, in one place</h2>
+                            <p className="mt-4 text-base leading-relaxed text-slate-600">From the first contribution to the month-end report, each part of the money and meal cycle is recorded once and reused everywhere - across every institution you run.</p>
                         </div>
 
                         <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -218,7 +254,7 @@ export default function Welcome() {
                     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div className="mx-auto max-w-2xl text-center">
                             <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">Up and running in four steps</h2>
-                            <p className="mt-4 text-base leading-relaxed text-slate-600">No accounting background needed - the system handles the arithmetic, you just record what happened.</p>
+                            <p className="mt-4 text-base leading-relaxed text-slate-600">No accounting background needed - the platform handles the arithmetic, you just record what happened.</p>
                         </div>
 
                         <ol className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -236,8 +272,8 @@ export default function Welcome() {
                 <section className="px-4 pb-20 sm:px-6 lg:px-8">
                     <div className="mx-auto max-w-7xl overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 px-6 py-14 shadow-2xl shadow-indigo-600/20 sm:px-12 sm:py-16">
                         <div className="mx-auto max-w-2xl text-center">
-                            <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">Stop reconciling the mess by hand</h2>
-                            <p className="mt-4 text-base leading-relaxed text-indigo-100">Create your account and bring your dorm's meals, deposits, and expenses into one clear, trustworthy ledger.</p>
+                            <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">Stop reconciling by hand</h2>
+                            <p className="mt-4 text-base leading-relaxed text-indigo-100">Create your account and bring your institution's meals, contributions, and expenses into one clear, trustworthy ledger.</p>
                             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                                 <Link href={route('register')} className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-indigo-700 shadow-lg transition-all hover:bg-indigo-50 active:bg-indigo-100">
                                     Get Started - It's Free
@@ -253,10 +289,10 @@ export default function Welcome() {
                     <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-8 sm:flex-row sm:px-6 lg:px-8">
                         <div className="flex items-center gap-2.5">
                             <ApplicationLogo className="h-7 w-7 rounded-md object-contain" />
-                            <span className="text-sm font-bold text-slate-800">Dorm Meal Manager</span>
+                            <span className="text-sm font-bold text-slate-800">Meal &amp; Expense Manager</span>
                         </div>
 
-                        <p className="text-xs font-medium text-slate-500">&copy; {new Date().getFullYear()} Dorm Meal Manager. Built for shared living.</p>
+                        <p className="text-xs font-medium text-slate-500">&copy; {new Date().getFullYear()} Meal &amp; Expense Manager. Multi-institution, for offices, halls &amp; messes.</p>
 
                         <div className="flex items-center gap-5">
                             <Link href={route('login')} className="text-xs font-semibold text-slate-500 transition-colors hover:text-slate-900">Log In</Link>

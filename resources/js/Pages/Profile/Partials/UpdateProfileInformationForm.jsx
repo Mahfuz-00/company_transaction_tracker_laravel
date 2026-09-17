@@ -14,8 +14,10 @@ export default function UpdateProfileInformation({
 }) {
     const user = usePage().props.auth.user;
 
-    const { data, setData, patch, errors, processing, recentlySuccessful } =
+    const { data, setData, post, errors, processing, recentlySuccessful } =
         useForm({
+            // Method spoofing: see submit() for why this is POST rather than PATCH.
+            _method: 'patch',
             name: user.name,
             email: user.email,
             avatar: null,
@@ -36,8 +38,27 @@ export default function UpdateProfileInformation({
     const submit = (e) => {
         e.preventDefault();
 
-        // The avatar rides along as a file, so the request must be multipart.
-        patch(route('profile.update'), { forceFormData: true });
+        /*
+         * WHY post() + _method instead of patch():
+         *
+         * The avatar rides along as a file, so the request must be
+         * multipart/form-data. PHP only populates the request body for POST -
+         * it does NOT parse a multipart payload on PATCH/PUT. Sending a real
+         * PATCH therefore delivered an EMPTY payload, and every field failed
+         * "is required" even with valid input (the reported validation bug).
+         *
+         * POSTing with _method=patch keeps the multipart body intact AND still
+         * routes to the PATCH handler in Laravel.
+         */
+        post(route('profile.update'), {
+            forceFormData: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                // Once saved, drop the local blob preview so the freshly-versioned
+                // server URL (avatar_url) is what renders next.
+                setAvatarPreview(null);
+            },
+        });
     };
 
     return (

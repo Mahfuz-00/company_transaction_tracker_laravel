@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Deposit;
 use App\Models\Institution;
 use App\Models\MealEntry;
 use App\Models\MealRateSetting;
@@ -10,6 +11,7 @@ use App\Models\Subsidy;
 use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The finance brain of the system.
@@ -83,6 +85,17 @@ class FinanceCalculator
 
         return (float) Transaction::query()
             ->where('type', 'out')
+            // An out-transaction whose meal expense was later reversed is no
+            // longer a real expense - exclude it so the month total falls.
+            ->where(function ($q) {
+                $q->where('transactions.source', '!=', 'meal_expense')
+                    ->orWhereNotExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('meal_expenses')
+                            ->whereColumn('meal_expenses.transaction_id', 'transactions.id')
+                            ->whereNotNull('meal_expenses.reversed_at');
+                    });
+            })
             ->whereDate('created_at', '>=', $start->toDateString())
             ->whereDate('created_at', '<=', $end->toDateString())
             ->sum('amount');
@@ -95,6 +108,12 @@ class FinanceCalculator
 
         return (float) Transaction::query()
             ->where('type', 'in')
+            // Reversal entries (cash-ins posted to cancel a reversed expense)
+            // are not deposits - exclude them from the deposit figure.
+            ->where(function ($q) {
+                $q->whereNull('transactions.category')
+                    ->orWhere('transactions.category', '!=', 'Expense Reversal');
+            })
             ->whereDate('created_at', '>=', $start->toDateString())
             ->whereDate('created_at', '<=', $end->toDateString())
             ->sum('amount');
@@ -213,9 +232,12 @@ class FinanceCalculator
             ->get()
             ->keyBy('student_id');
 
-        $depositTotals = Transaction::query()
-            ->where('type', 'in')
-            ->whereNotNull('student_id')
+        // Deposits are sourced from the deposits table (not the ledger) so that
+        // a reversed deposit is excluded the moment it is flagged - this is what
+        // makes a reversal immediately drop the member's balance. Only deposits
+        // that have NOT been reversed count.
+        $depositTotals = Deposit::query()
+            ->whereNull('reversed_at')
             ->whereDate('created_at', '>=', $start->toDateString())
             ->whereDate('created_at', '<=', $end->toDateString())
             ->select('student_id')

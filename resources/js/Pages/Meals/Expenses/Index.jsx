@@ -4,6 +4,7 @@ import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
+import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 
 const EMPTY_FORM = {
@@ -55,13 +56,17 @@ export default function Index({ expenses, categories, vendors, filteredTotal, by
     const { can } = useCan();
     const { flash } = usePage().props;
     const money = useMoney();
+    const { confirm } = useFeedback();
     const canRecord = can('meals.expense');
 
     const [modalOpen, setModalOpen] = useState(false);
+    const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters?.search || '');
 
-    const { data, setData, post, processing, errors, reset, clearErrors } =
+    const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm({ ...EMPTY_FORM });
+
+    const isEditing = Boolean(editing);
 
     const rows = expenses?.data || [];
 
@@ -86,21 +91,60 @@ export default function Index({ expenses, categories, vendors, filteredTotal, by
     const openModal = () => {
         clearErrors();
         reset();
+        setEditing(null);
         setData({ ...EMPTY_FORM });
+        setModalOpen(true);
+    };
+
+    const openEdit = (expense) => {
+        clearErrors();
+        setEditing(expense);
+        setData({
+            amount: expense.transaction?.amount ?? expense.amount ?? '',
+            description: expense.description || '',
+            category: expense.category || 'Groceries',
+            vendor_id: expense.vendor_id ? String(expense.vendor_id) : '',
+            payment_status: expense.payment_status || 'paid',
+            // Notes are stored on the transaction as its reason.
+            notes: expense.transaction?.reason || '',
+        });
         setModalOpen(true);
     };
 
     const closeModal = () => {
         setModalOpen(false);
+        setEditing(null);
         reset();
     };
 
     const submit = (event) => {
         event.preventDefault();
+
+        if (isEditing) {
+            put(route('meals.expenses.update', editing.id), {
+                preserveScroll: true,
+                onSuccess: () => closeModal(),
+            });
+            return;
+        }
+
         post(route('meals.expenses.store'), {
             preserveScroll: true,
             onSuccess: () => closeModal(),
         });
+    };
+
+    // Reverse a recorded expense: keeps the row for audit, posts a cash-in.
+    const reverse = async (expense) => {
+        const ok = await confirm({
+            title: 'Reverse this expense?',
+            message: `A matching cash-in of ${money(expense.transaction?.amount ?? expense.amount ?? 0, false)} will be posted so the money returns to the books. The record is kept for the audit trail.`,
+            tone: 'danger',
+            confirmLabel: 'Reverse expense',
+        });
+        if (!ok) return;
+
+        router.patch(route('meals.expenses.reverse', expense.id), {}, { preserveScroll: true });
     };
 
     const applyFilters = (next) => {
@@ -256,14 +300,20 @@ export default function Index({ expenses, categories, vendors, filteredTotal, by
                                 <th className="px-6 py-3 text-right">Amount</th>
                                 <th className="px-6 py-3">Recorded By</th>
                                 <th className="px-6 py-3">Date</th>
+                                {canRecord && <th className="px-6 py-3 text-right">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-sm">
                             {rows.length > 0 ? (
                                 rows.map((expense) => (
-                                    <tr key={expense.id} className="transition-colors hover:bg-slate-50/60">
+                                    <tr key={expense.id} className={`transition-colors hover:bg-slate-50/60 ${expense.reversed_at ? 'opacity-60' : ''}`}>
                                         <td className="px-6 py-4 font-semibold text-slate-900">
                                             {expense.description || 'Untitled expense'}
+                                            {expense.reversed_at && (
+                                                <span className="ml-2 inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-600">
+                                                    Reversed
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             {expense.category ? (
@@ -274,7 +324,7 @@ export default function Index({ expenses, categories, vendors, filteredTotal, by
                                                 <span className="text-slate-300">—</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-bold text-rose-600">
+                                        <td className={`px-6 py-4 text-right font-bold ${expense.reversed_at ? 'text-slate-400 line-through' : 'text-rose-600'}`}>
                                             −{money(expense.transaction?.amount ?? 0, false)}
                                         </td>
                                         <td className="px-6 py-4 text-slate-500">
@@ -283,11 +333,37 @@ export default function Index({ expenses, categories, vendors, filteredTotal, by
                                         <td className="px-6 py-4 text-slate-500">
                                             {new Date(expense.created_at).toLocaleDateString()}
                                         </td>
+                                        {canRecord && (
+                                            <td className="whitespace-nowrap px-6 py-4 text-right">
+                                                {!expense.reversed_at ? (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEdit(expense)}
+                                                            className="font-medium text-indigo-600 transition-colors hover:text-indigo-900"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => reverse(expense)}
+                                                            className="ml-4 font-medium text-rose-500 transition-colors hover:text-rose-700"
+                                                        >
+                                                            Reverse
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-xs italic text-slate-400">
+                                                        Reversed {expense.reverser?.name ? `by ${expense.reverser.name}` : ''}
+                                                    </span>
+                                                )}
+                                            </td>
+                                        )}
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="5" className="py-14 text-center">
+                                    <td colSpan={canRecord ? 6 : 5} className="py-14 text-center">
                                         <p className="text-sm font-semibold text-slate-600">
                                             {hasFilters ? 'No expenses match these filters.' : 'No expenses recorded yet.'}
                                         </p>
@@ -332,8 +408,10 @@ export default function Index({ expenses, categories, vendors, filteredTotal, by
             <Modal
                 open={modalOpen}
                 onClose={closeModal}
-                title="Record Expense"
-                description="This creates a matching cash-out transaction in the ledger."
+                title={isEditing ? 'Edit Expense' : 'Record Expense'}
+                description={isEditing
+                    ? 'Update this expense. The change is mirrored onto its ledger transaction.'
+                    : 'This creates a matching cash-out transaction in the ledger.'}
                 footer={
                     <>
                         <button
@@ -355,7 +433,7 @@ export default function Index({ expenses, categories, vendors, filteredTotal, by
                                     <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="opacity-90" />
                                 </svg>
                             )}
-                            {processing ? 'Saving...' : 'Record Expense'}
+                            {processing ? 'Saving...' : isEditing ? 'Save Changes' : 'Record Expense'}
                         </button>
                     </>
                 }
@@ -429,6 +507,7 @@ export default function Index({ expenses, categories, vendors, filteredTotal, by
                         value={data.notes}
                         error={errors.notes}
                         placeholder="Optional note about this purchase..."
+                        onChange={(event) => setData('notes', event.target.value)}
                     />
                 </form>
             </Modal>

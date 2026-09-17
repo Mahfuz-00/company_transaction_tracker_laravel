@@ -134,6 +134,7 @@ export default function Index({ entries, students, filters, dayTotals }) {
                                 <th className="px-4 py-3 text-center">D</th>
                                 <th className="px-6 py-3 text-right">Total</th>
                                 <th className="px-6 py-3">Recorded By</th>
+                                {canEntry && <th className="px-6 py-3 text-right">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-sm">
@@ -181,12 +182,25 @@ export default function Index({ entries, students, filters, dayTotals }) {
                                             <td className="px-6 py-3 text-slate-500">
                                                 {entry.recorder?.name || '—'}
                                             </td>
+                                            {canEntry && (
+                                                <td className="whitespace-nowrap px-6 py-3 text-right">
+                                                    {/* Editing a meal entry means re-opening the day's
+                                                        grid for its date, pre-filled - the controller
+                                                        already upserts per (member, day). */}
+                                                    <Link
+                                                        href={route('meals.entries.create', { date: String(entry.date).slice(0, 10) })}
+                                                        className="font-medium text-indigo-600 transition-colors hover:text-indigo-900"
+                                                    >
+                                                        Edit
+                                                    </Link>
+                                                </td>
+                                            )}
                                         </tr>
                                     );
                                 })
                             ) : (
                                 <tr>
-                                    <td colSpan="7" className="py-14 text-center">
+                                    <td colSpan={canEntry ? 8 : 7} className="py-14 text-center">
                                         <p className="text-sm font-semibold text-slate-600">
                                             No meal entries for this filter.
                                         </p>

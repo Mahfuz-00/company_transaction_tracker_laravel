@@ -1,6 +1,6 @@
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useCurrencySettings } from '@/Utils/useCurrency';
 import formatNumber from '@/Utils/numberFormatter';
 import Button from '@/Components/UI/Button';
@@ -21,40 +21,55 @@ export default function Settings({ auth, currencies, currencySettings, canManage
         decimal_precision: source.decimal_precision ?? 2,
         numbering_system: source.numbering_system || 'short',
         abbreviations: source.abbreviations ?? true,
+        abbreviation_threshold: source.abbreviation_threshold ?? 1000,
     });
 
     const [, saveLocal] = useCurrencySettings();
     const [previewValue, setPreviewValue] = useState(1234567.89);
 
+    // Build the canonical settings object once, so the live preview, the local
+    // cache, and the saved payload can never drift from one another.
+    const resolvedSettings = useMemo(() => {
+        const symbol = data.symbol
+            || currencies?.find((c) => c.code === data.currency_code)?.symbol
+            || '৳';
+
+        return {
+            symbol,
+            sign: symbol,
+            position: data.symbol_position,
+            symbol_position: data.symbol_position,
+            decimal_separator: data.decimal_separator,
+            thousands_separator: data.thousands_separator,
+            decimal_precision: data.decimal_precision,
+            numbering_system: data.numbering_system,
+            abbreviations: data.abbreviations,
+            abbreviation_threshold: Number(data.abbreviation_threshold) || 0,
+            currency_code: data.currency_code,
+        };
+    }, [data, currencies]);
+
     // Keep the local cache in step so formatting is correct on the very next
-    // paint, then the server share takes over permanently.
+    // paint, then the server share takes over permanently. Writing the FULL
+    // object (not just symbol/position) is what makes the change propagate to
+    // every already-mounted module the instant it is saved.
     useEffect(() => {
         try {
-            const symbol = data.symbol || currencies?.find((c) => c.code === data.currency_code)?.symbol || '৳';
-            localStorage.setItem('currency_settings', JSON.stringify({
-                symbol,
-                sign: symbol,
-                position: data.symbol_position,
-                symbol_position: data.symbol_position,
-                decimal_separator: data.decimal_separator,
-                thousands_separator: data.thousands_separator,
-                decimal_precision: data.decimal_precision,
-                numbering_system: data.numbering_system,
-                abbreviations: data.abbreviations,
-                currency_code: data.currency_code,
-            }));
+            localStorage.setItem('currency_settings', JSON.stringify(resolvedSettings));
         } catch (e) {}
-    }, [data, currencies]);
+    }, [resolvedSettings]);
 
     const handleSave = (e) => {
         e.preventDefault();
         post(route('settings.currency.store'), {
+            preserveScroll: true,
             onSuccess: () => {
-                try {
-                    const symbol = data.symbol || currencies?.find((c) => c.code === data.currency_code)?.symbol || '৳';
-                    saveLocal({ symbol, sign: symbol, position: data.symbol_position, symbol_position: data.symbol_position });
-                } catch (e) {}
-            }
+                // Push the full merged settings into the shared cache immediately
+                // so every module re-renders with the new currency before the
+                // next Inertia response lands. `reload` is not needed because
+                // the server shares `currency` on every response.
+                saveLocal(resolvedSettings);
+            },
         });
     };
 
@@ -255,6 +270,38 @@ export default function Settings({ auth, currencies, currencySettings, canManage
                                     </label>
                                 </div>
                             </div>
+
+                            {/* Number-formatting threshold. Numbers below this
+                                magnitude always render in full; at or above it
+                                they switch to the compact scale. */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                                <div>
+                                    <label htmlFor="abbreviation_threshold" className="block text-xs font-semibold text-gray-600 mb-1">
+                                        Abbreviation Threshold
+                                    </label>
+                                    <input
+                                        id="abbreviation_threshold"
+                                        type="number"
+                                        min={0}
+                                        step={100}
+                                        value={data.abbreviation_threshold}
+                                        disabled={!canManage || !data.abbreviations}
+                                        onChange={(e) => setData('abbreviation_threshold', Number(e.target.value))}
+                                        className="w-full border-gray-300 rounded-lg shadow-sm text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500 transition-colors disabled:bg-gray-50"
+                                    />
+                                    <p className="mt-1 text-[11px] text-gray-400">
+                                        Numbers at or above this value are shown in compact scale (e.g. 1.25 Mil).
+                                        Below it they stay full (e.g. 950). Set to 0 to always abbreviate.
+                                    </p>
+                                </div>
+                                <div className="rounded-lg border-indigo-100 bg-indigo-50/50 p-3 text-xs text-indigo-700 sm:mt-6">
+                                    <strong className="font-semibold">Adaptive:</strong> figures below{' '}
+                                    <strong className="font-semibold">{Number(data.abbreviation_threshold) >= 1000
+                                        ? `${Number(data.abbreviation_threshold) / 1000}K`
+                                        : Number(data.abbreviation_threshold)}</strong>{' '}
+                                    render in full; at or above it they abbreviate automatically.
+                                </div>
+                            </div>
                         </div>
 
                         {/* Form Submit */}
@@ -279,12 +326,12 @@ export default function Settings({ auth, currencies, currencySettings, canManage
                         </div>
 
                         <div>
-                            <Input 
-                                id="preview_input" 
-                                label="Sample Number Input" 
-                                type="number" 
-                                value={previewValue} 
-                                onChange={(e) => setPreviewValue(Number(e.target.value))} 
+                            <Input
+                                id="preview_input"
+                                label="Sample Number Input"
+                                type="number"
+                                value={previewValue}
+                                onChange={(e) => setPreviewValue(Number(e.target.value))}
                             />
                         </div>
 
@@ -292,14 +339,14 @@ export default function Settings({ auth, currencies, currencySettings, canManage
                             <div className="p-4 bg-white rounded-lg border border-gray-200/80 shadow-xs">
                                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Standard Format</div>
                                 <div className="mt-1 text-2xl font-bold text-gray-900 tracking-tight" role="status" aria-live="polite">
-                                    {formatNumber(previewValue, data, currencies)}
+                                    {formatNumber(previewValue, resolvedSettings, currencies)}
                                 </div>
                             </div>
 
                             <div className="p-4 bg-white rounded-lg border border-gray-200/80 shadow-xs">
                                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Abbreviated Output</div>
                                 <div className="mt-1 text-2xl font-bold text-indigo-600 tracking-tight" role="status" aria-live="polite">
-                                    {data.abbreviations ? formatNumber(previewValue, { ...data, abbreviated: true }, currencies) : <span className="text-gray-400 font-normal text-base">— Disabled —</span>}
+                                    {data.abbreviations ? formatNumber(previewValue, { ...resolvedSettings, abbreviated: true }, currencies) : <span className="text-gray-400 font-normal text-base">— Disabled —</span>}
                                 </div>
                             </div>
                         </div>

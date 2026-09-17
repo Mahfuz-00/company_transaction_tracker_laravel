@@ -19,6 +19,10 @@
  *                            'settings.roles.*' to highlight while on child pages.
  *     children:   array    - nested items (rendered as a collapsible group)
  *     roles:      string[] - optional extra gate: visible if user has ANY of these roles
+ *     rolesOnly:  boolean  - when true, `roles` is EXCLUSIVE: the item is shown
+ *                            ONLY to users with one of those roles, and hidden
+ *                            from everyone else - even if they hold the
+ *                            `permission`. Used for member-only modules.
  *   }
  *
  * Permission strings must match database/seeders/RolesAndPermissionsSeeder.php.
@@ -26,27 +30,97 @@
  */
 
 export const NAV_SECTIONS = [
+    /* ------------------------------------------------------------------ *
+     * MEMBER AREA - members only.
+     *
+     * Every item here uses rolesOnly: ['Member'], so an admin or meal manager
+     * never sees this section. The member's own sidebar is deliberately
+     * streamlined to just these five destinations; no administrative module is
+     * reachable from it.
+     * ------------------------------------------------------------------ */
     {
-        // No permission -> every signed-in user sees these.
+        heading: 'My Account',
+        roles: ['Member'],
+        rolesOnly: true,
         items: [
             {
-                label: 'Dashboard',
-                route: 'dashboard',
+                // The merged personal summary: current-month figures, deposits,
+                // meal history and balance all in one cohesive view.
+                label: 'Summary',
+                route: 'member.dashboard',
+                match: 'member.dashboard',
                 icon: 'dashboard',
-                permission: null,
+                roles: ['Member'],
+                rolesOnly: true,
             },
             {
+                // Own meal entries, day by day.
+                label: 'Meal Entries',
+                route: 'member.meals',
+                match: 'member.meals',
+                icon: 'clipboard',
+                roles: ['Member'],
+                rolesOnly: true,
+            },
+            {
+                // Own deposit history.
+                label: 'Deposits',
+                route: 'member.deposits',
+                match: 'member.deposits',
+                icon: 'download',
+                roles: ['Member'],
+                rolesOnly: true,
+            },
+            {
+                // Personal analytics, scoped exclusively to this member.
+                label: 'Analytics',
+                route: 'member.analytics',
+                match: 'member.analytics',
+                icon: 'analytics',
+                roles: ['Member'],
+                rolesOnly: true,
+            },
+            {
+                // Own claim submissions + status tracking.
+                label: 'My Claims',
+                route: 'claims.index',
+                match: 'claims.index',
+                icon: 'clipboard',
+                roles: ['Member'],
+                rolesOnly: true,
+            },
+        ],
+    },
+    /* ------------------------------------------------------------------ *
+     * STAFF AREA - hidden from members. Both sections carry the same exclusive
+     * role gate, so members never see the org-wide Dashboard or any Meal
+     * Management / Administration module.
+     * ------------------------------------------------------------------ */
+    {
+        heading: 'Overview',
+        roles: ['Software Super Admin', 'Institution Admin', 'Meal Manager'],
+        rolesOnly: true,
+        items: [
+            {
+                // Org-wide dashboard for staff.
+                label: 'Dashboard',
+                route: 'dashboard',
+                match: 'dashboard',
+                icon: 'dashboard',
+            },
+            {
+                // Org-wide analytics; members get their own under My Account.
                 label: 'Analytics',
                 route: 'analytics',
                 icon: 'analytics',
-                permission: null,
+                permission: 'transactions.view',
             },
-            // The standalone "Add Transaction" entry is gone: money in is a
-            // Deposit and money out is an Expense, both inside Meal Management.
         ],
     },
     {
         heading: 'Meal Management',
+        roles: ['Software Super Admin', 'Institution Admin', 'Meal Manager'],
+        rolesOnly: true,
         items: [
             {
                 // termKey lets the label follow the institution type
@@ -104,10 +178,49 @@ export const NAV_SECTIONS = [
                 icon: 'chart',
                 permission: 'meals.reports',
             },
+            {
+                // Manager-only: review the claims members have raised.
+                label: 'Claim Review',
+                route: 'claims.review',
+                match: 'claims.review',
+                icon: 'clipboard',
+                permission: 'claims.review',
+            },
+        ],
+    },
+    /* ------------------------------------------------------------------ *
+     * STAFF ACCOUNT - Profile + User Management, placed ABOVE Settings.
+     *
+     * The spec requires the Account / User-Management module to sit above the
+     * Settings module for admins and meal managers. Members never see this
+     * section (rolesOnly), and get their own Account block at the very bottom.
+     * ------------------------------------------------------------------ */
+    {
+        heading: 'Account',
+        roles: ['Software Super Admin', 'Institution Admin', 'Meal Manager'],
+        rolesOnly: true,
+        items: [
+            {
+                label: 'Profile Manager',
+                route: 'profile.edit',
+                match: 'profile.*',
+                icon: 'users',
+                permission: null,
+            },
+            {
+                // User Management lives in the Account module (above Settings).
+                label: 'User Manager',
+                route: 'settings.users.index',
+                match: 'settings.users.*',
+                icon: 'users',
+                permission: 'users.view',
+            },
         ],
     },
     {
         heading: 'Administration',
+        roles: ['Software Super Admin', 'Institution Admin', 'Meal Manager'],
+        rolesOnly: true,
         items: [
             {
                 label: 'Settings',
@@ -152,12 +265,8 @@ export const NAV_SECTIONS = [
                         match: 'settings.roles.*',
                         permission: 'roles.view',
                     },
-                    {
-                        label: 'User Manager',
-                        route: 'settings.users.index',
-                        match: 'settings.users.*',
-                        permission: 'users.view',
-                    },
+                    // NOTE: User Manager intentionally lives in the Account section
+                    // above (not here), per the required sidebar ordering.
                     {
                         // Audit trail: visible to Software Super Admins (global)
                         // and Institution Admins (their own institution).
@@ -167,7 +276,39 @@ export const NAV_SECTIONS = [
                         icon: 'clipboard',
                         permission: 'audit.view',
                     },
+                    {
+                        // Email Log / Outbox: every dispatched email with its
+                        // rendered HTML. SSA = global; IA / Meal Manager = own
+                        // institution (scoped in the controller).
+                        label: 'Email Log',
+                        route: 'settings.emails.index',
+                        match: 'settings.emails.*',
+                        icon: 'mail',
+                        permission: 'emails.view',
+                    },
                 ],
+            },
+        ],
+    },
+    /* ------------------------------------------------------------------ *
+     * MEMBER ACCOUNT - deliberately the LAST section for members.
+     *
+     * The spec requires the member's Account/Profile module to sit strictly
+     * BELOW every operational module (Summary, Meal Entries, Deposits,
+     * Analytics, My Claims). Placing this section last guarantees that order.
+     * ------------------------------------------------------------------ */
+    {
+        heading: 'Account',
+        roles: ['Member'],
+        rolesOnly: true,
+        items: [
+            {
+                label: 'Profile Manager',
+                route: 'profile.edit',
+                match: 'profile.*',
+                icon: 'users',
+                roles: ['Member'],
+                rolesOnly: true,
             },
         ],
     },
@@ -183,15 +324,23 @@ export const NAV_SECTIONS = [
 export function buildVisibleNav(sections, { can, hasRole } = {}) {
     if (typeof can !== 'function') return [];
 
-    const allows = (permission, roles) => {
+    const allows = (permission, roles, rolesOnly = false) => {
         if (Array.isArray(permission)) {
             // Array means ALL required.
-            return permission.length > 0 && permission.every((p) => can(p));
+            if (!(permission.length > 0 && permission.every((p) => can(p)))) return false;
+        } else if (permission && !can(permission)) {
+            return false;
         }
-        if (permission && !can(permission)) return false;
 
         if (Array.isArray(roles) && roles.length > 0) {
-            return typeof hasRole === 'function' && roles.some((r) => hasRole(r));
+            const matchesRole = typeof hasRole === 'function' && roles.some((r) => hasRole(r));
+
+            // Exclusive gate: the item is shown ONLY to those roles. Everyone
+            // else is hidden even if they passed the permission check above.
+            if (rolesOnly) return matchesRole;
+
+            // Inclusive gate (legacy): any listed role grants visibility.
+            return matchesRole;
         }
 
         return true;
@@ -199,13 +348,20 @@ export function buildVisibleNav(sections, { can, hasRole } = {}) {
 
     return sections
         .map((section) => {
+            // SECTION-LEVEL GATE: a whole section can be role-exclusive (e.g. the
+            // member area, or the staff areas). If the section does not pass, it
+            // is dropped entirely before its items are even considered.
+            if (!allows(section.permission, section.roles, section.rolesOnly)) {
+                return null;
+            }
+
             const items = (section.items || [])
                 .map((item) => {
-                    if (!allows(item.permission, item.roles)) return null;
+                    if (!allows(item.permission, item.roles, item.rolesOnly)) return null;
 
                     if (Array.isArray(item.children)) {
                         const children = item.children.filter((child) =>
-                            allows(child.permission, child.roles)
+                            allows(child.permission, child.roles, child.rolesOnly)
                         );
 
                         // Group is only worth showing if it leads somewhere.
@@ -220,5 +376,8 @@ export function buildVisibleNav(sections, { can, hasRole } = {}) {
 
             return { ...section, items };
         })
-        .filter((section) => section.items.length > 0);
+        // Drop sections the gate rejected (null) AND sections left empty after
+        // their items were pruned. Guarding against null is essential: a failed
+        // section-level role gate returns null, and `null.items` would throw.
+        .filter((section) => section && section.items.length > 0);
 }

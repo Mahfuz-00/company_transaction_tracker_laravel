@@ -24,12 +24,18 @@ class StudentController extends Controller
         $month = FinanceCalculator::resolveMonth($request->query('month'));
         $institution = Institution::current();
 
+        // Manager scoping: a Meal Manager only sees the members assigned directly
+        // under them; admins see the whole institution. null = unrestricted.
+        $scopedIds = $request->user()->scopedStudentIds();
+
         $students = Student::query()
             // Scope to the active institution in a multi-tenant deployment.
             ->when($institution, fn ($q) => $q->where(function ($sub) use ($institution) {
                 $sub->where('institution_id', $institution->id)
                     ->orWhereNull('institution_id');
             }))
+            // Only the members this manager is responsible for.
+            ->when($scopedIds !== null, fn ($q) => $q->whereIn('id', $scopedIds))
             ->when($search !== '', function ($query) use ($search) {
                 $term = '%'.$search.'%';
                 $query->where(function ($q) use ($term) {
@@ -147,6 +153,21 @@ class StudentController extends Controller
         // Stamp the active institution so the record is scoped correctly.
         $data['institution_id'] = Institution::current()?->id;
 
+        /*
+         * MANAGED-BY vs. USER-ACCOUNT separation.
+         *
+         * `user_id`  = the member's OWN login account (set later via Invite).
+         * `manager_id` = the Meal Manager / Admin who OVERSEES this member.
+         *
+         * A member must never be left "managed by themselves": if the form
+         * somehow sends manager_id equal to the member's own user_id, we drop it
+         * so the roster cannot show the member as their own manager.
+         */
+        if (! empty($data['manager_id']) && ! empty($data['user_id'])
+            && (int) $data['manager_id'] === (int) $data['user_id']) {
+            $data['manager_id'] = null;
+        }
+
         $student = Student::create($data);
 
         // Redirect back to the INDEX (not create), so the roster table - the
@@ -159,6 +180,13 @@ class StudentController extends Controller
 
     public function show(Request $request, Student $student)
     {
+        // A Meal Manager may only open a member assigned to them.
+        if (! $this->canAccessStudent($request, $student)) {
+            return redirect()
+                ->route('meals.students.index')
+                ->with('error', 'That member is not assigned to you.');
+        }
+
         $student->load([
             'department:id,name,slug',
             'user:id,name,email',
@@ -291,6 +319,14 @@ class StudentController extends Controller
             $data['institution_id'] = Institution::current()?->id;
         }
 
+        // Same guard as store(): a member can never be their own manager. Compare
+        // against the incoming user_id (or the existing one when not resubmitted).
+        $effectiveUserId = $data['user_id'] ?? $student->user_id;
+        if (! empty($data['manager_id']) && ! empty($effectiveUserId)
+            && (int) $data['manager_id'] === (int) $effectiveUserId) {
+            $data['manager_id'] = null;
+        }
+
         $student->update($data);
 
         return redirect()
@@ -319,6 +355,29 @@ class StudentController extends Controller
     /* ------------------------------------------------------------------ *
      * Helpers
      * ------------------------------------------------------------------ */
+
+    /**
+     * May the acting user open this member record?
+     *
+     * Admins: any member in their institution. Meal Manager: only a member
+     * assigned to them (students.manager_id). Members: only themselves.
+     */
+    protected function canAccessStudent(Request $request, Student $student): bool
+    {
+        $user = $request->user();
+
+        if ($user->isSuperAdmin() || $user->isInstitutionAdmin()) {
+            return $student->institution_id === null
+                || $user->belongsToInstitution($student->institution_id);
+        }
+
+        if ($user->hasRole('Meal Manager')) {
+            return (int) $student->manager_id === (int) $user->id;
+        }
+
+        // A member may only view their own record.
+        return (int) $student->user_id === (int) $user->id;
+    }
 
     protected function rules(?Student $student = null): array
     {

@@ -74,6 +74,10 @@ class Institution extends Model
         'decimal_precision' => 2,
         'numbering_system' => 'short',
         'abbreviations' => true,
+        // Magnitude at which a figure switches to its compact scale (K, Mil,
+        // ...). Below it the full number is always shown. Default 1000 = only
+        // thousands and above abbreviate.
+        'abbreviation_threshold' => 1000,
     ];
 
     /**
@@ -235,6 +239,12 @@ class Institution extends Model
         return $this->hasMany(Subsidy::class);
     }
 
+    /** Member claims / disputes raised within this institution. */
+    public function claims()
+    {
+        return $this->hasMany(Claim::class);
+    }
+
     public function subsidySources()
     {
         return $this->hasMany(SubsidySource::class);
@@ -271,15 +281,43 @@ class Institution extends Model
         return self::THEMES[$accent] ?? self::THEMES[self::DEFAULT_THEME['accent']];
     }
 
-    /** Public URL for the logo, or null when none has been uploaded. */
+    /**
+     * Public URL for the logo, or null when none has been uploaded.
+     * Carries a cache-busting version so a replaced logo appears immediately.
+     */
     public function logoUrl(): ?string
     {
-        return $this->logo_path ? \Storage::disk('public')->url($this->logo_path) : null;
+        return $this->brandingUrl($this->logo_path);
     }
 
+    /** Public URL for the login banner, with the same cache-busting version. */
     public function bannerUrl(): ?string
     {
-        return $this->banner_path ? \Storage::disk('public')->url($this->banner_path) : null;
+        return $this->brandingUrl($this->banner_path);
+    }
+
+    /**
+     * A public URL for a branding file, versioned by last-modified time so the
+     * browser fetches the new image the instant a logo/banner is replaced.
+     */
+    protected function brandingUrl(?string $path): ?string
+    {
+        if (blank($path)) {
+            return null;
+        }
+
+        $disk = \Storage::disk('public');
+        $url = $disk->url($path);
+
+        try {
+            if ($disk->exists($path)) {
+                $url .= '?v='.$disk->lastModified($path);
+            }
+        } catch (\Throwable $e) {
+            // Fall through with the plain URL if the disk is unavailable.
+        }
+
+        return $url;
     }
 
     /**

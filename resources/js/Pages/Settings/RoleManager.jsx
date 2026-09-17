@@ -2,16 +2,18 @@ import React, { useState, useEffect } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import { Head, router, useForm } from '@inertiajs/react';
 import useCan from '@/Utils/can';
+import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { formatPermissionLabel, formatRoleName } from '@/Utils/roleFormatters';
 
 export default function RoleManager({ auth, roles: initialRoles }) {
     const { can } = useCan();
+    const { confirm } = useFeedback();
     const [roles, setRoles] = useState(initialRoles || []);
     const [modalOpen, setModalOpen] = useState(false);
     const [editingRole, setEditingRole] = useState(null);
     const [allPermissions, setAllPermissions] = useState({});
     const [loadingPermissions, setLoadingPermissions] = useState(false);
-    
+
     const { data, setData, put, processing, reset } = useForm({
         name: '',
         permissions: [],
@@ -71,8 +73,15 @@ export default function RoleManager({ auth, roles: initialRoles }) {
         router.get(route('settings.roles.create'));
     };
 
-    const deleteRole = (roleId) => {
-        if (!confirm('Are you sure you want to delete this role?')) return;
+    const deleteRole = async (roleId) => {
+        const ok = await confirm({
+            title: 'Delete this role?',
+            message: 'Users holding this role will lose its permissions immediately. This cannot be undone.',
+            tone: 'danger',
+            confirmLabel: 'Delete role',
+        });
+        if (!ok) return;
+
         router.delete(route('settings.roles.destroy', roleId));
     };
 

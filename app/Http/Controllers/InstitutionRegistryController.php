@@ -4,9 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Institution;
 use App\Models\User;
+use App\Support\AuditLogger;
 use App\Support\FinanceCalculator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Spatie\Permission\Models\Role;
 
 /**
  * Software Super Admin only: a registry of every institution on the platform,
@@ -71,6 +76,14 @@ class InstitutionRegistryController extends Controller
 
         return Inertia::render('Settings/InstitutionRegistry', [
             'institutions' => $institutions,
+            // Institution types power the "New Institution" form's picker.
+            'types' => collect(Institution::TYPES)
+                ->map(fn ($preset, $key) => [
+                    'value' => $key,
+                    'label' => $preset['label'],
+                    'description' => $preset['description'],
+                ])
+                ->values(),
             'filters' => ['search' => $search],
             'totals' => [
                 'institutions' => $institutions->count(),
@@ -110,6 +123,100 @@ class InstitutionRegistryController extends Controller
                 'deposits' => 0.0, 'per_meal_rate' => 0.0, 'pool_balance' => 0.0,
             ];
         }
+    }
+
+    /**
+     * Create an institution AND its first Institution Admin in one step.
+     *
+     * A workspace with no administrator is unusable, so the two are provisioned
+     * together inside a transaction - if either fails, neither is left behind.
+     */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'type' => ['required', Rule::in(array_keys(Institution::TYPES))],
+            'subtitle' => ['nullable', 'string', 'max:160'],
+            'contact_email' => ['nullable', 'email', 'max:255'],
+            'contact_phone' => ['nullable', 'string', 'max:30'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'currency_code' => ['nullable', 'string', 'max:10'],
+            'timezone' => ['nullable', 'string', 'max:64'],
+            // The institution admin account provisioned alongside the workspace.
+            'admin_name' => ['required', 'string', 'max:255'],
+            'admin_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
+            'admin_password' => ['required', 'string', 'min:8'],
+        ]);
+
+        $result = DB::transaction(function () use ($data) {
+            $institution = Institution::create([
+                'name' => $data['name'],
+                'subtitle' => $data['subtitle'] ?? null,
+                'type' => $data['type'],
+                'contact_email' => $data['contact_email'] ?? null,
+                'contact_phone' => $data['contact_phone'] ?? null,
+                'address' => $data['address'] ?? null,
+                'currency_code' => $data['currency_code'] ?? null,
+                'timezone' => $data['timezone'] ?? null,
+                'is_active' => true,
+            ]);
+
+            // The institution acts as its own hub vendor from day one.
+            $institution->ensureHubVendor();
+
+            // Provision the Institution Admin, scoped to the new workspace.
+            $admin = User::create([
+                'institution_id' => $institution->id,
+                'name' => $data['admin_name'],
+                'email' => $data['admin_email'],
+                'password' => Hash::make($data['admin_password']),
+                'status' => 'active',
+                'designation' => 'Institution Admin',
+            ]);
+
+            // Assign the role if it exists (seeded in production).
+            if (Role::where('name', 'Institution Admin')->exists()) {
+                $admin->assignRole('Institution Admin');
+            }
+
+            AuditLogger::log('created', "created institution \"{$institution->name}\" with admin {$admin->name}", $institution, [
+                'type' => $institution->type,
+                'admin_email' => $admin->email,
+            ], ['subject_label' => $institution->name, 'institution_id' => $institution->id]);
+
+            return $institution;
+        });
+
+        return redirect()
+            ->route('settings.institutions.index')
+            ->with('success', "Institution \"{$result->name}\" created with its administrator account.");
+    }
+
+    /**
+     * Switch the Software Super Admin into an institution's workspace so they
+     * can review or manage it directly. The chosen institution becomes the
+     * active one (Institution::current() resolves the active row).
+     */
+    public function switchTo(Request $request, Institution $institution)
+    {
+        // Only one institution is "active" at a time; flipping the flag is what
+        // routes every module to this workspace.
+        DB::transaction(function () use ($institution) {
+            Institution::query()->where('is_active', true)
+                ->whereKeyNot($institution->id)
+                ->update(['is_active' => false]);
+
+            $institution->update(['is_active' => true]);
+        });
+
+        AuditLogger::log('updated', "switched into institution \"{$institution->name}\"", $institution, [], [
+            'subject_label' => $institution->name,
+            'institution_id' => $institution->id,
+        ]);
+
+        return redirect()
+            ->route('meals.students.index')
+            ->with('success', "Now viewing \"{$institution->name}\".");
     }
 
     /** Toggle an institution's active state. */

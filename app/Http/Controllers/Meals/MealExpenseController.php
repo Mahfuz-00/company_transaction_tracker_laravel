@@ -7,6 +7,7 @@ use App\Models\Institution;
 use App\Models\MealExpense;
 use App\Models\Transaction;
 use App\Models\Vendor;
+use App\Support\AuditLogger;
 use App\Support\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,9 +31,10 @@ class MealExpenseController extends Controller
 
         $expenses = MealExpense::query()
             ->with([
-                'transaction:id,amount,category,payee',
+                'transaction:id,amount,category,payee,payment_method,reason',
                 'vendor:id,name,slug,is_institution_hub',
                 'recorder:id,name',
+                'reverser:id,name',
             ])
             ->when($category !== '', fn ($q) => $q->where('category', $category))
             ->when($vendorId !== '', fn ($q) => $q->where('vendor_id', $vendorId))
@@ -55,6 +57,8 @@ class MealExpenseController extends Controller
             ->join('transactions', 'transactions.id', '=', 'meal_expenses.transaction_id')
             ->when($category !== '', fn ($q) => $q->where('meal_expenses.category', $category))
  ->when($vendorId !== '', fn ($q) => $q->where('meal_expenses.vendor_id', $vendorId))
+            // Reversed expenses no longer count toward the month total.
+            ->whereNull('meal_expenses.reversed_at')
             ->when($start, fn ($q) => $q->whereDate('meal_expenses.created_at', '>=', $start->toDateString()))
             ->when($end, fn ($q) => $q->whereDate('meal_expenses.created_at', '<=', $end->toDateString()))
             ->sum('transactions.amount');
@@ -63,6 +67,8 @@ class MealExpenseController extends Controller
         $byVendor = MealExpense::query()
             ->when($start, fn ($q) => $q->whereDate('meal_expenses.created_at', '>=', $start->toDateString()))
             ->when($end, fn ($q) => $q->whereDate('meal_expenses.created_at', '<=', $end->toDateString()))
+            // Reversed rows are excluded from vendor spend too.
+            ->whereNull('meal_expenses.reversed_at')
             ->whereNotNull('meal_expenses.vendor_id')
             ->with('vendor:id,name,is_institution_hub')
             ->get()
@@ -161,9 +167,119 @@ class MealExpenseController extends Controller
                 'recorded_by' => auth()->id(),
             ]);
 
+            AuditLogger::log('created', 'recorded an expense', $tx, [
+                'description' => $data['description'] ?? null,
+                'amount' => (float) $data['amount'],
+                'vendor' => $vendor?->name,
+            ], ['subject_label' => $data['description'] ?? 'Expense']);
+
             return redirect()
                 ->route('meals.expenses.index')
                 ->with('success', 'Expense recorded as a cash-out transaction.');
+        });
+    }
+
+    /**
+     * Edit an existing expense. The linked ledger transaction carries the
+     * authoritative amount, so both rows are updated together.
+     */
+    public function update(Request $request, MealExpense $expense)
+    {
+        if ($expense->isReversed()) {
+            return back()->with('error', 'A reversed expense cannot be edited. Record a new expense instead.');
+        }
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.01'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:120'],
+            'vendor_id' => ['nullable', 'exists:vendors,id'],
+            'payment_status' => ['nullable', Rule::in(['paid', 'unpaid', 'partial'])],
+            // The form sends notes; the model stores them as the transaction reason.
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $vendor = ! empty($data['vendor_id']) ? Vendor::find($data['vendor_id']) : null;
+
+        return DB::transaction(function () use ($data, $vendor, $expense) {
+            $before = [
+                'amount' => (float) ($expense->transaction?->amount ?? $expense->amount),
+                'description' => $expense->description,
+                'category' => $expense->category,
+                'vendor_id' => $expense->vendor_id,
+                'payment_status' => $expense->payment_status,
+            ];
+
+            if ($expense->transaction) {
+                $expense->transaction->update([
+                    'item' => $data['description'] ?? 'Meal Expense',
+                    'amount' => $data['amount'],
+                    'category' => $data['category'] ?? 'Meal Expense',
+                    'payee' => $vendor?->name,
+                    'vendor_id' => $vendor?->id,
+                    'reason' => $data['notes'] ?? null,
+                ]);
+            }
+
+            $expense->update([
+                'vendor_id' => $vendor?->id,
+                'description' => $data['description'] ?? null,
+                'category' => $data['category'] ?? null,
+                'amount' => $data['amount'],
+                'payment_status' => $data['payment_status'] ?? $expense->payment_status,
+            ]);
+
+            AuditLogger::log('updated', 'edited an expense', $expense, [
+                'before' => $before,
+                'after' => [
+                    'amount' => (float) $data['amount'],
+                    'description' => $data['description'] ?? null,
+                    'category' => $data['category'] ?? null,
+                    'vendor_id' => $vendor?->id,
+                    'payment_status' => $data['payment_status'] ?? $expense->payment_status,
+                ],
+            ], ['subject_label' => $data['description'] ?? 'Expense']);
+
+            return back()->with('success', 'Expense updated.');
+        });
+    }
+
+    /**
+     * Reverse a recorded expense: the row is kept for the audit trail but
+     * flagged, and a matching cash-in is posted so the money returns to the
+     * books.
+     */
+    public function reverse(Request $request, MealExpense $expense)
+    {
+        if ($expense->isReversed()) {
+            return back()->with('error', 'This expense is already reversed.');
+        }
+
+        return DB::transaction(function () use ($request, $expense) {
+            $amount = (float) ($expense->transaction?->amount ?? $expense->amount);
+
+            $reversal = Transaction::create([
+                'user_id' => $request->user()->id,
+                'type' => 'in',
+                'item' => 'Expense reversal - '.($expense->description ?: 'Meal Expense'),
+                'amount' => $amount,
+                'category' => 'Expense Reversal',
+                'reason' => 'Reversal of expense #'.$expense->id,
+                'source' => 'meal_expense',
+            ]);
+
+            $expense->update([
+                'reversed_at' => now(),
+                'reversed_by' => $request->user()->id,
+                'reversal_transaction_id' => $reversal->id,
+            ]);
+
+            AuditLogger::log('reversed', 'reversed an expense', $expense, [
+                'amount' => $amount,
+                'reversal_transaction_id' => $reversal->id,
+            ], ['subject_label' => $expense->description ?: 'Expense']);
+
+            return back()->with('success', 'Expense reversed. A matching cash-in was posted.');
         });
     }
 }

@@ -4,6 +4,7 @@ import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
+import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 
 const EMPTY_FORM = {
@@ -67,12 +68,18 @@ export default function Index({ vendors, categories = [], recurrences = [], filt
     const { can } = useCan();
     const { flash } = usePage().props;
     const money = useMoney();
+    const { confirm, alert } = useFeedback();
     const canManage = can('vendors.manage');
     const canExport = can('exports.download');
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState(filters?.search || '');
+
+    // Purchase History drawer: which vendor, its history, and load state.
+    const [historyVendor, setHistoryVendor] = useState(null);
+    const [history, setHistory] = useState(null);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
     const { data, setData, post, put, processing, errors, reset, clearErrors } =
         useForm({ ...EMPTY_FORM });
@@ -138,9 +145,37 @@ export default function Index({ vendors, categories = [], recurrences = [], filt
         }
     };
 
-    const remove = (vendor) => {
-        if (!confirm(`Delete vendor "${vendor.name}"? This cannot be undone.`)) return;
+    const remove = async (vendor) => {
+        const ok = await confirm({
+            title: `Delete "${vendor.name}"?`,
+            message: 'This cannot be undone. Vendors with purchase history cannot be deleted - mark them inactive instead.',
+            tone: 'danger',
+            confirmLabel: 'Delete vendor',
+        });
+        if (!ok) return;
+
         router.delete(route('meals.vendors.destroy', vendor.slug), { preserveScroll: true });
+    };
+
+    // Open the Purchase History tab for a vendor and fetch its ledger.
+    const openHistory = async (vendor) => {
+        setHistoryVendor(vendor);
+        setHistory(null);
+        setHistoryLoading(true);
+
+        try {
+            const { data } = await window.axios.get(route('meals.vendors.history', vendor.slug));
+            setHistory(data);
+        } catch (e) {
+            alert({
+                title: 'Could not load history',
+                message: 'Please try again in a moment.',
+                tone: 'error',
+            });
+            setHistoryVendor(null);
+        } finally {
+            setHistoryLoading(false);
+        }
     };
 
     const applyFilters = (next) => {
@@ -354,12 +389,19 @@ export default function Index({ vendors, categories = [], recurrences = [], filt
                                         </span>
                                     </td>
                                     <td className="whitespace-nowrap px-6 py-4 text-right">
+                                        <button
+                                            type="button"
+                                            onClick={() => openHistory(vendor)}
+                                            className="font-medium text-slate-600 transition-colors hover:text-slate-900"
+                                        >
+                                            History
+                                        </button>
                                         {canManage && (
                                             <>
                                                 <button
                                                     type="button"
                                                     onClick={() => openEdit(vendor)}
-                                                    className="font-medium text-indigo-600 transition-colors hover:text-indigo-900"
+                                                    className="ml-4 font-medium text-indigo-600 transition-colors hover:text-indigo-900"
                                                 >
                                                     Edit
                                                 </button>
@@ -429,24 +471,33 @@ export default function Index({ vendors, categories = [], recurrences = [], filt
                                 </div>
                             )}
 
-                            {canManage && (
-                                <div className="flex gap-2 pt-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => openEdit(vendor)}
-                                        className="flex-1 rounded-lg border-slate-300 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-                                    >
-                                        Edit
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => remove(vendor)}
-                                        className="flex-1 rounded-lg border-rose-200 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50"
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-                            )}
+                            <div className="flex gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => openHistory(vendor)}
+                                    className="flex-1 rounded-lg border-slate-300 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                                >
+                                    History
+                                </button>
+                                {canManage && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => openEdit(vendor)}
+                                            className="flex-1 rounded-lg border-slate-300 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                                        >
+                                            Edit
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => remove(vendor)}
+                                            className="flex-1 rounded-lg border-rose-200 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-50"
+                                        >
+                                            Delete
+                                        </button>
+                                    </>
+                                )}
+                            </div>
                         </li>
                     ))}
                 </ul>
@@ -659,8 +710,87 @@ export default function Index({ vendors, categories = [], recurrences = [], filt
                         value={data.notes}
                         error={errors.notes}
                         placeholder="Payment terms, delivery days, etc."
+                        onChange={(event) => setData('notes', event.target.value)}
                     />
                 </form>
+            </Modal>
+
+            {/* Purchase History - every purchase tied to this vendor. */}
+            <Modal
+                open={Boolean(historyVendor)}
+                onClose={() => { setHistoryVendor(null); setHistory(null); }}
+                title={historyVendor ? `Purchase History - ${historyVendor.name}` : 'Purchase History'}
+                description="Every recorded purchase tied to this supplier, newest first."
+                maxWidth="max-w-3xl"
+                footer={
+                    <button
+                        type="button"
+                        onClick={() => { setHistoryVendor(null); setHistory(null); }}
+                        className="rounded-lg border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                    >
+                        Close
+                    </button>
+                }
+            >
+                {historyLoading ? (
+                    <div className="py-10 text-center text-sm text-slate-400">Loading purchase history...</div>
+                ) : history ? (
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-3 gap-3">
+                            {[
+                                { label: 'Orders', value: history.totals.orders },
+                                { label: 'Total Purchased', value: money(history.totals.purchased, false) },
+                                { label: 'Outstanding', value: money(history.totals.outstanding, false) },
+                            ].map((cell) => (
+                                <div key={cell.label} className="rounded-lg border-slate-200 bg-slate-50 p-3">
+                                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{cell.label}</div>
+                                    <div className="mt-0.5 text-lg font-bold text-slate-800">{cell.value}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {history.history.length > 0 ? (
+                            <div className="overflow-x-auto rounded-lg border-slate-200">
+                                <table className="w-full text-left text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                            <th className="px-4 py-2.5">Date</th>
+                                            <th className="px-4 py-2.5">Item</th>
+                                            <th className="px-4 py-2.5">Category</th>
+                                            <th className="px-4 py-2.5">Status</th>
+                                            <th className="px-4 py-2.5 text-right">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {history.history.map((row) => (
+                                            <tr key={row.id}>
+                                                <td className="whitespace-nowrap px-4 py-2.5 text-xs text-slate-500">{row.date}</td>
+                                                <td className="px-4 py-2.5 font-medium text-slate-800">{row.description}</td>
+                                                <td className="px-4 py-2.5 text-xs text-slate-500">{row.category || '—'}</td>
+                                                <td className="px-4 py-2.5">
+                                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${row.payment_status === 'paid'
+                                                        ? 'bg-emerald-50 text-emerald-700'
+                                                        : row.payment_status === 'partial'
+                                                            ? 'bg-amber-50 text-amber-700'
+                                                            : 'bg-rose-50 text-rose-700'}`}>
+                                                        {row.payment_status || 'paid'}
+                                                    </span>
+                                                </td>
+                                                <td className="whitespace-nowrap px-4 py-2.5 text-right font-bold text-rose-600">
+                                                    −{money(row.amount, false)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="py-8 text-center text-sm italic text-slate-400">
+                                No purchases recorded with this vendor yet.
+                            </p>
+                        )}
+                    </div>
+                ) : null}
             </Modal>
         </MealsLayout>
     );

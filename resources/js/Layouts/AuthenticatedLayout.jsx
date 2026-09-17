@@ -1,5 +1,6 @@
 import Sidebar from '@/Components/Sidebar';
 import ThemeProvider from '@/Components/ThemeProvider';
+import NotificationBell from '@/Components/NotificationBell';
 import { usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
@@ -74,11 +75,21 @@ export default function AuthenticatedLayout({ header, children }) {
                     </div>
 
                     <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-                        {header && (
-                            <header className="mb-4">
-                                <div className="max-w-full">{header}</div>
-                            </header>
-                        )}
+                        {/* Header row: page title on the left, the notification
+                            bell pinned right so it is reachable from every page
+                            and every screen size. */}
+                        <div className="mb-4 flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                                {header && (
+                                    <header>
+                                        <div className="max-w-full">{header}</div>
+                                    </header>
+                                )}
+                            </div>
+                            <div className="flex-shrink-0">
+                                <NotificationBell />
+                            </div>
+                        </div>
 
                         {/* Keyed by the current route so a page swap
                             animates in smoothly without the shell (sidebar,

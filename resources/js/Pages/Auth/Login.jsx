@@ -52,7 +52,7 @@ export default function Login({ status, canResetPassword }) {
                         className="mt-1 block w-full rounded-xl border-slate-200 shadow-xs focus:border-indigo-600 focus:ring-indigo-600 py-2.5 px-3.5 text-sm"
                         autoComplete="username"
                         isFocused={true}
-                        placeholder="student@dorm.com"
+                        placeholder="you@institution.com"
                         onChange={(e) => setData('email', e.target.value)}
                     />
 

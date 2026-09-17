@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import useCan from '@/Utils/can';
+import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { formatRoleName } from '@/Utils/roleFormatters';
 import {
     roleBadgeClasses,
@@ -68,15 +69,18 @@ const EMPTY_FORM = {
     password_confirmation: '',
     status: 'active',
     roles: [],
+    // 'invite'   -> email an invitation link (needs SMTP)
+    // 'password' -> assign a temporary password now (SMTP-free fallback)
+    creation_mode: 'password',
 };
 
 /* ------------------------------------------------------------------ *
  * Page
  * ------------------------------------------------------------------ */
 
-export default function UserManager({ users, roles: availableRoles, filters }) {
+export default function UserManager({ users, roles: availableRoles, filters, scopeInstitution = null }) {
     const { can } = useCan();
-    const { flash } = usePage().props;
+    const { confirm } = useFeedback();
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
@@ -148,21 +152,30 @@ export default function UserManager({ users, roles: availableRoles, filters }) {
 
     /* ---------------- row actions ---------------- */
 
-    const toggleStatus = (user) => {
+    const toggleStatus = async (user) => {
         const isActive = (user.status || 'active') === 'active';
         const label = isActive ? 'deactivate' : 'activate';
-        if (!confirm(`Are you sure you want to ${label} ${user.name}?`)) return;
+        const ok = await confirm({
+            title: isActive ? `Deactivate ${user.name}?` : `Activate ${user.name}?`,
+            message: isActive
+                ? 'They will no longer be able to sign in. Their history is kept intact.'
+                : 'They will regain access to the workspace.',
+            tone: isActive ? 'warning' : 'info',
+            confirmLabel: isActive ? 'Deactivate' : 'Activate',
+        });
+        if (!ok) return;
 
         router.patch(route(`settings.users.${label}`, user.id), {}, { preserveScroll: true });
     };
 
-    const deleteUser = (user) => {
-        if (
-            !confirm(
-                `Permanently delete ${user.name}? This cannot be undone.`
-            )
-        )
-            return;
+    const deleteUser = async (user) => {
+        const ok = await confirm({
+            title: `Permanently delete ${user.name}?`,
+            message: 'This cannot be undone. Consider deactivating the account instead to keep their history.',
+            tone: 'danger',
+            confirmLabel: 'Delete user',
+        });
+        if (!ok) return;
 
         router.delete(route('settings.users.destroy', user.id), {
             preserveScroll: true,
@@ -206,27 +219,33 @@ export default function UserManager({ users, roles: availableRoles, filters }) {
         <SettingsLayout title="Settings">
             <Head title="User Manager" />
 
-            {/* Flash messages */}
-            {flash?.success && (
-                <div className="mb-4 p-3 bg-emerald-50 border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-700 text-sm font-medium">
-                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+            {/* Scope banner: which institution users are created into. */}
+            {scopeInstitution ? (
+                <div className="mb-4 flex items-center gap-2 rounded-lg border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    <svg className="h-4 w-4 flex-shrink-0 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
-                    {flash.success}
+                    Managing users in <strong className="font-semibold text-slate-800">{scopeInstitution.name}</strong>.
+                    Every account you create here belongs to this institution.
                 </div>
-            )}
-            {flash?.error && (
-                <div className="mb-4 p-3 bg-red-50 border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm font-medium">
-                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            ) : (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                    <svg className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                     </svg>
-                    {flash.error}
+                    <span>
+                        No institution is selected. Users are always created inside a workspace - open the{' '}
+                        <Link href={route('settings.institutions.index')} className="font-semibold underline">
+                            Institution Registry
+                        </Link>{' '}
+                        and use <strong className="font-semibold">Access Dashboard</strong> to enter one.
+                    </span>
                 </div>
             )}
 
             <div className="bg-white shadow-sm rounded-xl border-gray-100 overflow-hidden">
                 {/* Header */}
-                <div className="p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gray-50/50">
+                <div className="p-6 border-b border-gray-100 flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gray-50/50">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900">User Manager</h2>
                         <p className="text-sm text-gray-500 mt-0.5">
@@ -236,7 +255,9 @@ export default function UserManager({ users, roles: availableRoles, filters }) {
                     {canCreate && (
                         <button
                             onClick={openCreate}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium text-sm rounded-lg shadow-sm transition-all"
+                            disabled={!scopeInstitution}
+                            title={scopeInstitution ? undefined : 'Select an institution first'}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium text-sm rounded-lg shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
@@ -449,6 +470,36 @@ export default function UserManager({ users, roles: availableRoles, filters }) {
 
                         {/* Modal body */}
                         <form onSubmit={submit} className="flex-1 overflow-y-auto">
+                            {/* Creation mode: invitation vs temporary password.
+                                Only relevant when creating (not editing). */}
+                            {!isEditing && (
+                                <div className="border-b border-gray-100 bg-gray-50/60 px-6 py-4">
+                                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-indigo-600">
+                                        How should this user get access?
+                                    </p>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        {[
+                                            { value: 'password', title: 'Set a temporary password', desc: 'No email needed. They must change it on first sign-in.' },
+                                            { value: 'invite', title: 'Email an invitation', desc: 'Sends a link so they choose their own password (needs email configured).' },
+                                        ].map((mode) => (
+                                            <button
+                                                key={mode.value}
+                                                type="button"
+                                                onClick={() => setData('creation_mode', mode.value)}
+                                                className={`rounded-xl border p-3 text-left transition-all ${data.creation_mode === mode.value ? 'border-indigo-300 bg-indigo-50/60 ring-1 ring-indigo-200' : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`h-3.5 w-3.5 rounded-full border-2 ${data.creation_mode === mode.value ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300'}`} />
+                                                    <span className="text-sm font-semibold text-gray-900">{mode.title}</span>
+                                                </div>
+                                                <p className="mt-1 text-xs leading-relaxed text-gray-500">{mode.desc}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <FieldError message={errors.creation_mode} />
+                                </div>
+                            )}
+
                             <div className="p-6 grid grid-cols-1 lg:grid-cols-5 gap-6">
                                 {/* Left: details */}
                                 <div className="lg:col-span-3 space-y-4">
@@ -497,10 +548,15 @@ export default function UserManager({ users, roles: availableRoles, filters }) {
                                         <FieldError message={errors.phone} />
                                     </div>
 
+                                    {/* Password fields show when editing, or when
+                                        creating in 'password' mode. In invite mode
+                                        the user sets their own password via email,
+                                        so these are hidden. */}
+                                    {(isEditing || data.creation_mode === 'password') && (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                                                {isEditing ? 'New Password' : 'Password'}
+                                                {isEditing ? 'New Password' : 'Temporary Password'}
                                                 {isEditing && (
                                                     <span className="text-gray-400 font-normal">
                                                         {' '}
@@ -540,6 +596,13 @@ export default function UserManager({ users, roles: availableRoles, filters }) {
                                             )}
                                         </div>
                                     </div>
+                                    )}
+
+                                    {!isEditing && data.creation_mode === 'password' && (
+                                        <div className="rounded-lg border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                                            This user will be asked to change this temporary password the first time they sign in.
+                                        </div>
+                                    )}
 
                                     <div>
                                         <label className="block text-sm font-semibold text-gray-700 mb-1.5">

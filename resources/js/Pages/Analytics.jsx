@@ -2,18 +2,19 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { useCurrencySettings, formatCurrencyValue } from '@/Utils/useCurrency';
-import { 
-    Chart as ChartJS, 
-    ArcElement, 
-    CategoryScale, 
-    LinearScale, 
-    BarElement, 
-    Title, 
-    Tooltip, 
+import useMoney from '@/Utils/useMoney';
+import {
+    Chart as ChartJS,
+    ArcElement,
+    CategoryScale,
+    LinearScale,
+    BarElement,
+    Title,
+    Tooltip,
     Legend,
-    LineElement, 
-    PointElement, 
-    Filler 
+    LineElement,
+    PointElement,
+    Filler
 } from 'chart.js';
 import { Doughnut, Bar } from 'react-chartjs-2';
 
@@ -51,33 +52,37 @@ function MetricCard({ label, value, tone = 'slate', icon, trend, hint }) {
         sky: { text: 'text-sky-600', tile: 'bg-sky-50 text-sky-600 border-sky-100/60' },
         amber: { text: 'text-amber-600', tile: 'bg-amber-50 text-amber-600 border-amber-100/60' },
         accent: { text: 'text-[var(--accent)]', tile: 'bg-[var(--accent-soft)] text-[var(--accent)] border-transparent' },
-    }[tone] || tones?.slate;
+    }[tone] || {
+        text: 'text-slate-800',
+        tile: 'bg-slate-50 text-slate-500 border-slate-100',
+    };
 
     // Trend is only rendered when explicitly supplied.
-    const trendUp = trend !== undefined && trend !== null && Number(trend) >= 0;
+    const hasTrend = trend !== undefined && trend !== null;
+    const trendUp = hasTrend && Number(trend) >= 0;
 
     return (
         <div className="flex items-start justify-between gap-4 rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
             {/* min-w-0 lets the text column shrink instead of forcing the
                 icon tile to give up space. */}
             <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
+                {/* Title row: label on the left, trend chip immediately AFTER
+                    the title so the indicator reads as part of the heading,
+                    not as a suffix to the number. */}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</p>
 
-                <div className="mt-1 flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <h3 className={`truncate text-2xl font-extrabold ${tones.text}`} title={String(value)}>
-                        {value}
-                    </h3>
-
-                    {trend !== undefined && trend !== null && (
+                    {hasTrend && (
                         <span
-                            className={`inline-flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-bold ${trendUp ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            className={`inline-flex flex-shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${trendUp ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
                                 }`}
+                            title={`${trendUp ? 'Increase' : 'Decrease'} vs previous period`}
                         >
-                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="h-2.5 w-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
-                                    strokeWidth="2.5"
+                                    strokeWidth="3"
                                     d={trendUp ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'}
                                 />
                             </svg>
@@ -86,12 +91,19 @@ function MetricCard({ label, value, tone = 'slate', icon, trend, hint }) {
                     )}
                 </div>
 
+                {/* The primary number stands alone, so nothing shifts its
+                    baseline any more. */}
+                <h3 className={`mt-1.5 truncate text-2xl font-extrabold leading-tight ${tones.text}`} title={String(value)}>
+                    {value}
+                </h3>
+
                 {hint && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>}
             </div>
 
-            {/* Fixed-size icon tile - never shrinks, never changes shape. */}
+            {/* Fixed-size icon tile - pinned to the top-right corner, a fixed
+                square that never shrinks or re-shapes regardless of value. */}
             {icon && (
-                <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${tones.tile}`}>
+                <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center self-start rounded-xl border ${tones.tile}`}>
                     {icon}
                 </div>
             )}
@@ -201,6 +213,9 @@ export default function Analytics({
     forecast = {},
 }) {
     const [currency] = useCurrencySettings();
+    // money() routes through the global threshold system, so summary figures
+    // adapt (1,234 -> 1.23 K) exactly when the admin's threshold is crossed.
+    const money = useMoney();
     const { data, setData } = useForm({
         period: activeFilters.period || 'current_month',
         from: activeFilters.from || '',
@@ -345,7 +360,7 @@ export default function Analytics({
         },
     };
 
-    /* --- Dorm meal trend: stacked B/L/D bars --- */
+    /* --- Institution meal trend: stacked B/L/D bars --- */
     const mealTrendLabels = mealTrend.map((m) => m.period);
 
     const mealTrendData = {
@@ -477,194 +492,176 @@ export default function Analytics({
 
             <div className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full space-y-8">
                 {/* Filter Bar */}
-                <div className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50" role="group">
-                            {['current_month', 'last_month', 'last_3_months', 'ytd'].map((p) => {
-                                const labelsMap = {
-                                    current_month: 'Current Month',
-                                    last_month: 'Last Month',
-                                    last_3_months: 'Last 3 Months',
-                                    ytd: 'YTD',
-                                };
-                                return (
+                {/* Filter Bar - grouped into labelled sections so it reads as
+                    structured controls rather than a loose row of widgets. */}
+                <div className="rounded-xl border-slate-200/80 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                        {/* Section 1: reporting period. */}
+                        <div className="flex flex-col gap-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                Reporting Period
+                            </span>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="inline-flex rounded-lg border-slate-200 bg-slate-50 p-1" role="group" aria-label="Quick period">
+                                    {['current_month', 'last_month', 'last_3_months', 'ytd'].map((p) => {
+                                        const labelsMap = {
+                                            current_month: 'Current Month',
+                                            last_month: 'Last Month',
+                                            last_3_months: 'Last 3 Months',
+                                            ytd: 'YTD',
+                                        };
+                                        return (
+                                            <button
+                                                key={p}
+                                                type="button"
+                                                onClick={() => handlePeriodChange(p)}
+                                                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                                                    data.period === p
+                                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                                        : 'text-slate-600 hover:text-slate-900'
+                                                }`}
+                                            >
+                                                {labelsMap[p]}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                <form onSubmit={handleDateApply} className="flex items-center gap-2">
+                                    <input
+                                        type="date"
+                                        aria-label="From date"
+                                        value={data.from}
+                                        onChange={(e) => setData('from', e.target.value)}
+                                        className="rounded-lg border-slate-300 px-2.5 py-1.5 text-xs text-slate-700 focus:border-indigo-500 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-xs text-slate-400">to</span>
+                                    <input
+                                        type="date"
+                                        aria-label="To date"
+                                        value={data.to}
+                                        onChange={(e) => setData('to', e.target.value)}
+                                        className="rounded-lg border-slate-300 px-2.5 py-1.5 text-xs text-slate-700 focus:border-indigo-500 focus:ring-indigo-500"
+                                    />
                                     <button
-                                        key={p}
-                                        type="button"
-                                        onClick={() => handlePeriodChange(p)}
-                                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                                            data.period === p
-                                                ? 'bg-indigo-600 text-white shadow-sm'
-                                                : 'text-slate-600 hover:text-slate-900'
-                                        }`}
+                                        type="submit"
+                                        className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700"
                                     >
-                                        {labelsMap[p]}
+                                        Apply
                                     </button>
-                                );
-                            })}
+                                </form>
+                            </div>
                         </div>
 
-                        <form onSubmit={handleDateApply} className="flex items-center gap-2">
-                            <input
-                                type="date"
-                                value={data.from}
-                                onChange={(e) => setData('from', e.target.value)}
-                                className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:ring-indigo-500 focus:border-indigo-500"
-                            />
-                            <span className="text-slate-400 text-xs">to</span>
-                            <input
-                                type="date"
-                                value={data.to}
-                                onChange={(e) => setData('to', e.target.value)}
-                                className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:ring-indigo-500 focus:border-indigo-500"
-                            />
-                            <button
-                                type="submit"
-                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg text-xs transition-colors"
-                            >
-                                Apply
-                            </button>
-                        </form>
-                    </div>
+                        {/* Section 2: display controls. */}
+                        <div className="flex flex-col gap-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                Display
+                            </span>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="flex items-center gap-2">
+                                    <label htmlFor="analytics-month" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                                        Month
+                                    </label>
+                                    <select
+                                        id="analytics-month"
+                                        value={month}
+                                        onChange={(e) => router.get(route('analytics'), { month: e.target.value }, { preserveState: true, preserveScroll: true, replace: true })}
+                                        className="w-44 cursor-pointer rounded-lg border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm focus:border-[var(--accent)] focus:ring-[var(--accent)]"
+                                    >
+                                        {(months || []).map((m) => (
+                                            <option key={m.value} value={m.value}>
+                                                {m.label}{m.current ? ' (current)' : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                    {/* Wider View Selector */}
-                    <div className="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:items-center md:w-auto">
-                        {/* Month selector: the primary, month-scoped filter. */}
-                        <select
-                            value={month}
-                            onChange={(e) => router.get(route('analytics'), { month: e.target.value }, { preserveState: true, preserveScroll: true, replace: true })}
-                            aria-label="Report month"
-                            className="w-full border-slate-300 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm cursor-pointer focus:border-[var(--accent)] focus:ring-[var(--accent)] md:w-44"
-                        >
-                            {(months || []).map((m) => (
-                                <option key={m.value} value={m.value}>
-                                    {m.label}{m.current ? ' (current)' : ''}
-                                </option>
-                            ))}
-                        </select>
-
-                        <div className="flex items-center gap-2">
-                        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                            View Mode:
-                        </label>
-                        <select
-                            value={viewType}
-                            onChange={(e) => setViewType(e.target.value)}
-                            className="w-48 border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-700 bg-white focus:ring-indigo-500 focus:border-indigo-500 shadow-sm cursor-pointer"
-                        >
-                            <option value="area">Area + Bars</option>
-                            <option value="bar">Stacked Bars</option>
-                        </select>
+                                <div className="flex items-center gap-2">
+                                    <label htmlFor="analytics-view" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                                        Chart
+                                    </label>
+                                    <select
+                                        id="analytics-view"
+                                        value={viewType}
+                                        onChange={(e) => setViewType(e.target.value)}
+                                        className="w-40 cursor-pointer rounded-lg border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    >
+                                        <option value="area">Area + Bars</option>
+                                        <option value="bar">Stacked Bars</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Metric summary cards. Icon tiles are fixed-size so a large
-                    number can never squash them - via MetricCard below. */}
+                {/* Metric summary cards. The trend chip sits right after the
+                    title, the number stands alone, and the icon is a fixed
+                    square pinned top-right - so a large figure can never
+                    squash the icon or shift the indicator. */}
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-                    {/* Total Cash In */}
-                    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
-                        <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Cash In</p>
-                            <div className="flex items-center gap-3">
-                                <h3 className="truncate text-2xl font-extrabold text-emerald-600 mt-1">
-                                    {formatCurrencyValue(Number(totalIn || 0), currency)}
-                                </h3>
-                                {previousPeriod && previousPeriod.totalIn !== undefined && (
-                                    <span className={`text-xs font-medium px-2 py-1 rounded ${Number(previousPeriod.totalIn) < Number(totalIn) ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                                        {(() => {
-                                            const prev = Number(previousPeriod.totalIn || 0);
-                                            const curr = Number(totalIn || 0);
-                                            if (prev === 0) return '–';
-                                            const p = Math.round(((curr - prev) / Math.abs(prev)) * 100);
-                                            return `${p >= 0 ? '+' : ''}${p}%`;
-                                        })()}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                        <div className="h-12 w-12 flex-shrink-0 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100/60">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <MetricCard
+                        label="Total Cash In"
+                        value={money(totalIn, false)}
+                        tone="emerald"
+                        trend={pctChange(previousPeriod?.totalIn, totalIn)}
+                        hint="Deposits and other cash received"
+                        icon={
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                             </svg>
-                        </div>
-                    </div>
+                        }
+                    />
 
-                    {/* Total Cash Out */}
-                    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
-                        <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Cash Out</p>
-                            <div className="flex items-center gap-3">
-                                <h3 className="truncate text-2xl font-extrabold text-rose-600 mt-1">
-                                    {formatCurrencyValue(Number(totalOut || 0), currency)}
-                                </h3>
-                                {previousPeriod && previousPeriod.totalOut !== undefined && (
-                                    <span className={`text-xs font-medium px-2 py-1 rounded ${Number(previousPeriod.totalOut) < Number(totalOut) ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                                        {(() => {
-                                            const prev = Number(previousPeriod.totalOut || 0);
-                                            const curr = Number(totalOut || 0);
-                                            if (prev === 0) return '–';
-                                            const p = Math.round(((curr - prev) / Math.abs(prev)) * 100);
-                                            return `${p >= 0 ? '+' : ''}${p}%`;
-                                        })()}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                        <div className="h-12 w-12 flex-shrink-0 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center border border-rose-100/60">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <MetricCard
+                        label="Total Cash Out"
+                        value={money(totalOut, false)}
+                        tone="rose"
+                        trend={pctChange(previousPeriod?.totalOut, totalOut)}
+                        hint="Expenses and other cash paid out"
+                        icon={
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
                             </svg>
-                        </div>
-                    </div>
+                        }
+                    />
 
-                    {/* Net Savings */}
-                    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
-                        <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Net Savings</p>
-                            <h3 className={`truncate text-2xl font-extrabold mt-1 ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                {formatCurrencyValue(Number(netBalance || 0), currency)}
-                            </h3>
-                        </div>
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${
-                            netBalance >= 0
-                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100/60'
-                                : 'bg-rose-50 text-rose-600 border-rose-100/60'
-                        }`}>
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <MetricCard
+                        label="Net Savings"
+                        value={money(netBalance, false)}
+                        tone={netBalance >= 0 ? 'emerald' : 'rose'}
+                        hint="Cash in minus cash out"
+                        icon={
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                        </div>
-                    </div>
+                        }
+                    />
 
-                    {/* Current Overall Balance */}
-                    <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex items-center justify-between">
-                        <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Current Balance</p>
-                            <h3 className={`truncate text-2xl font-extrabold mt-1 ${currentBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                {formatCurrencyValue(Number(currentBalance || 0), currency)}
-                            </h3>
-                        </div>
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${
-                            currentBalance >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100/60' : 'bg-rose-50 text-rose-600 border-rose-100/60'
-                        }`}>
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <MetricCard
+                        label="Current Balance"
+                        value={money(currentBalance, false)}
+                        tone={currentBalance >= 0 ? 'accent' : 'rose'}
+                        hint="Live balance across all accounts"
+                        icon={
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2" />
                             </svg>
-                        </div>
-                    </div>
+                        }
+                    />
                 </div>
 
-                {/* Dorm-wide metrics */}
+                {/* Institution-wide metrics */}
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm">
                         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Pool Balance</p>
                         <h3 className={`mt-1 text-2xl font-extrabold ${(dorm.pool_balance ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {formatCurrencyValue(Number(dorm.pool_balance || 0), currency)}
+                            {money(dorm.pool_balance ?? 0, false)}
                         </h3>
                         <p className="mt-0.5 text-xs text-slate-400">
-                            {formatCurrencyValue(Number(dorm.deposits || 0), currency)} in ·{' '}
-                            {formatCurrencyValue(Number(dorm.expenses || 0), currency)} out
+                            {money(dorm.deposits ?? 0)} in · {money(dorm.expenses ?? 0)} out
                         </p>
                     </div>
 
@@ -681,10 +678,10 @@ export default function Analytics({
                     <div className="rounded-2xl border-slate-200/80 bg-white p-5 shadow-sm">
                         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Cost / Meal</p>
                         <h3 className="mt-1 text-2xl font-extrabold text-slate-900">
-                            {formatCurrencyValue(Number(dorm.cost_per_meal || 0), currency)}
+                            {money(dorm.cost_per_meal ?? 0, false)}
                         </h3>
                         <p className="mt-0.5 text-xs text-slate-400">
-                            {formatCurrencyValue(Number(dorm.meals || 0) * Number(dorm.cost_per_meal || 0), currency)} total cost
+                            {money(Number(dorm.meals || 0) * Number(dorm.cost_per_meal || 0))} total cost
                         </p>
                     </div>
 

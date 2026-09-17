@@ -21,7 +21,9 @@ class ProfileUpdateRequest extends FormRequest
             'email' => [
                 'required',
                 'string',
-                'lowercase',
+                // NOTE: no 'lowercase' rule - it silently rejected any uppercase
+                // character, which surfaced as a confusing validation failure.
+                // The email is normalised instead.
                 'email',
                 'max:255',
                 Rule::unique(User::class)->ignore($this->user()->id),
@@ -30,5 +32,21 @@ class ProfileUpdateRequest extends FormRequest
             'avatar' => ['nullable', 'image', 'mimes:png,jpg,jpeg,webp', 'max:2048'],
             'remove_avatar' => ['boolean'],
         ];
+    }
+
+    /**
+     * Normalise the email to lowercase before validation, so a user typing
+     * "Name@Example.com" is accepted rather than rejected.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('email')) {
+            $this->merge(['email' => strtolower(trim((string) $this->input('email')))]);
+        }
+    }
+
+    public function authorize(): bool
+    {
+        return $this->user() !== null;
     }
 }

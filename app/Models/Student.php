@@ -41,12 +41,24 @@ class Student extends Model
     }
 
     /**
-     * The user or meal manager responsible for maintaining this member record.
-     * Distinct from user_id (the member's own login, once invited).
+     * The Meal Manager / Admin who OVERSEES this member record.
+     *
+     * This is deliberately distinct from `user()` (the member's OWN login, once
+     * invited). `manager_id` must always point at a staff account, never at the
+     * member's own user account - that confusion was the "member is managed by
+     * themselves" bug.
      */
     public function manager()
     {
         return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    /** Is this member overseen by the given user (as their manager)? */
+    public function isManagedBy(?User $user): bool
+    {
+        return $user !== null
+            && $this->manager_id !== null
+            && (int) $this->manager_id === (int) $user->id;
     }
 
     public function institution()
@@ -60,12 +72,15 @@ class Student extends Model
     }
 
     /**
-     * The person who manages this record: the explicit manager, else the linked
-     * user account, else nothing.
+     * The name of the person who OVERSEES this member.
+     *
+     * Falls back to the institution admin only when no explicit manager is set -
+     * it must NOT fall back to the member's own user account, otherwise the
+     * roster would show the member as being managed by themselves.
      */
     public function getManagerLabelAttribute(): ?string
     {
-        return $this->manager?->name ?? $this->user?->name;
+        return $this->manager?->name;
     }
 
     public function deposits()
@@ -76,6 +91,12 @@ class Student extends Model
     public function entries()
     {
         return $this->hasMany(MealEntry::class);
+    }
+
+    /** Claims and disputes this member has raised. */
+    public function claims()
+    {
+        return $this->hasMany(Claim::class);
     }
 
     /* ------------------------------------------------------------------ *
@@ -99,11 +120,15 @@ class Student extends Model
 
     public function getTotalDepositsAttribute(): float
     {
+        // Reversed deposits are kept for history but must never count toward a
+        // member's balance, so both branches filter them out.
         if (! $this->relationLoaded('deposits')) {
-            return (float) $this->deposits()->sum('amount');
+            return (float) $this->deposits()->whereNull('reversed_at')->sum('amount');
         }
 
-        return (float) $this->deposits->sum('amount');
+        return (float) $this->deposits
+            ->whereNull('reversed_at')
+            ->sum('amount');
     }
 
     /**

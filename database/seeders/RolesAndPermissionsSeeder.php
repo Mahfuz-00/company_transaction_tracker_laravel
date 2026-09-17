@@ -59,6 +59,21 @@ class RolesAndPermissionsSeeder extends Seeder
             'institutions' => [
                 'institutions.view', 'institutions.manage',
             ],
+            // Member claims & disputes. Members raise them (claims.submit);
+            // managers review them (claims.review).
+            'claims' => [
+                'claims.view', 'claims.submit', 'claims.review',
+            ],
+            // In-app notifications. Everyone can view their own; only admins
+            // may broadcast an announcement to the institution.
+            'notifications' => [
+                'notifications.view', 'notifications.announce',
+            ],
+            // Email Log / Outbox. Scoped per institution in the controller;
+            // SSAs see the global log.
+            'emails' => [
+                'emails.view',
+            ],
         ];
 
         $allPermissions = [];
@@ -104,6 +119,10 @@ class RolesAndPermissionsSeeder extends Seeder
             $definitions['audit'],
             $definitions['institution'],
             $definitions['appearance'],
+            $definitions['claims'],
+            // Institution Admins can broadcast announcements to their institution.
+            $definitions['notifications'],
+            $definitions['emails'],
             ['users.view', 'users.create', 'users.edit', 'roles.view']
         );
         $instAdmin->syncPermissions($instAdminPerms);
@@ -118,13 +137,17 @@ class RolesAndPermissionsSeeder extends Seeder
             $definitions['departments'],
             $definitions['vendors'],
             $definitions['exports'],
-            ['users.view', 'institution.view', 'subsidies.view', 'audit.view', 'appearance.view']
+            $definitions['claims'],
+            // Managers can view notifications but not broadcast announcements.
+            // They also get the (institution-scoped) email outbox.
+            ['users.view', 'institution.view', 'subsidies.view', 'audit.view', 'appearance.view', 'notifications.view', 'emails.view']
         );
         $manager->syncPermissions($managerPerms);
 
         // Member: limited view permissions only - sees their own meals and
         // deposits, nothing administrative.
-        $member->syncPermissions(['meals.view', 'transactions.view']);
+        // Members can view their own data and raise claims, nothing more.
+        $member->syncPermissions(['meals.view', 'transactions.view', 'claims.view', 'claims.submit', 'notifications.view']);
 
         // Assign the top role to the first seed user (if exists).
         $user = User::first();

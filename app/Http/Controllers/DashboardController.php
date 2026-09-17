@@ -16,6 +16,13 @@ class DashboardController extends Controller
 {
     public function index(Request $request)
     {
+        // Members get their OWN dashboard, not the manager's pooled overview.
+        // Sending them there also keeps the org-wide figures off their screen.
+        $user = $request->user();
+        if ($user && $user->isMember() && ! $user->isSuperAdmin() && ! $user->isInstitutionAdmin()) {
+            return redirect()->route('member.dashboard');
+        }
+
         $now = Carbon::now();
         $monthStart = $now->copy()->startOfMonth();
         $monthEnd = $now->copy()->endOfMonth();

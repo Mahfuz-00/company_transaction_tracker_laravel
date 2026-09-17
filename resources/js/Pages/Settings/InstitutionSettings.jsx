@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
-import { Spinner } from '@/Components/UI/Loading';
-import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 
 /* ------------------------------------------------------------------ *
  * Live preview of how terminology lands across the app
@@ -54,10 +53,11 @@ function TerminologyPreview({ terms, effect }) {
 
 export default function InstitutionSettings({ institution, types = [], termKeys = [], themes = [] }) {
     const { can } = useCan();
-    const { flash } = usePage().props;
     const canManage = can('institution.manage');
 
-    const { data, setData, put, processing, errors, clearErrors } = useForm({
+    const { data, setData, post, processing, errors, clearErrors } = useForm({
+        // Method spoofing - see submit() below for why we do not use put().
+        _method: 'put',
         name: institution?.name || '',
         subtitle: institution?.subtitle || '',
         type: institution?.type || 'general_mess',
@@ -88,8 +88,6 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
         const found = types.find((type) => type.value === data.type);
         return found?.terms || {};
     }, [types, data.type]);
-
-    const selectedType = types.find((type) => type.value === data.type);
 
     // Effective = preset overlaid with explicit overrides, matching the backend.
     const effectiveTerms = useMemo(() => {
@@ -133,8 +131,15 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
         event.preventDefault();
         clearErrors();
 
-        // forceFormData is required because logo/banner ride along as files.
-        put(route('settings.institution.update'), {
+        // WHY post() + _method instead of put():
+        // The logo and banner ride along as files, so the request must be
+        // multipart/form-data. PHP only populates $_POST (which Laravel reads)
+        // for POST requests - it does NOT parse a multipart body on PUT or
+        // PATCH. Sending a real PUT therefore delivered an empty payload, and
+        // EVERY field failed "is required" even after the user filled it in
+        // (the frustrating validation bug). POSTing with _method=put keeps the
+        // multipart body intact AND still routes to the update method.
+        post(route('settings.institution.update'), {
             preserveScroll: true,
             forceFormData: true,
         });
@@ -162,25 +167,8 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
         <SettingsLayout title="Settings">
             <Head title="Institution Settings" />
 
-            {flash?.success && (
-                <div
-                    role="status"
-                    className="mb-4 flex items-center gap-2 rounded-lg border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700"
-                >
-                    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    {flash.success}
-                </div>
-            )}
-            {flash?.error && (
-                <div
-                    role="status"
-                    className="mb-4 flex items-center gap-2 rounded-lg border-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700"
-                >
-                    {flash.error}
-                </div>
-            )}
+            {/* Feedback is delivered globally by the FeedbackProvider (toasts),
+                so this screen no longer renders its own duplicate banners. */}
 
             <form onSubmit={submit} className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-start">
                 {/* Main column */}
@@ -199,7 +187,7 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
                                 required
                                 value={data.name}
                                 error={errors.name}
-                                placeholder="e.g. Main Campus Dorm"
+                                placeholder="e.g. Main Campus Hall"
                                 onChange={(event) => setData('name', event.target.value)}
                             />
 
@@ -477,23 +465,37 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
                         )}
                     </section>
 
-                    {/* Locale */}
+                    {/* Locale. Currency is deliberately NOT editable here: it is
+                        configured in exactly one place - the Currency Manager -
+                        so this screen cannot create a second, conflicting
+                        source of truth. We show the active currency read-only
+                        and link out to the manager. */}
                     <section className="rounded-xl border-slate-200 bg-white p-6 shadow-sm">
                         <h3 className="text-lg font-bold text-slate-900">Regional</h3>
                         <p className="mt-0.5 text-xs text-slate-500">
-                            Defaults used for formatting and date display.
+                            Timezone and locale defaults. Currency is configured in the Currency Manager.
                         </p>
 
                         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                            <Field
-                                label="Currency Code"
-                                name="currency_code"
-                                value={data.currency_code}
-                                error={errors.currency_code}
-                                placeholder="e.g. BDT"
-                                hint="Managed in detail under Currency Manager."
-                                onChange={(event) => setData('currency_code', event.target.value)}
-                            />
+                            <div>
+                                <span className="mb-1.5 block text-sm font-semibold text-slate-700">
+                                    Active Currency
+                                </span>
+                                <div className="flex items-center justify-between gap-3 rounded-lg border-slate-200 bg-slate-50 px-3.5 py-2">
+                                    <span className="text-sm font-bold text-slate-800">
+                                        {data.currency_code || 'Not set'}
+                                    </span>
+                                    <Link
+                                        href={route('settings.currency')}
+                                        className="text-xs font-semibold text-[var(--accent)] hover:underline"
+                                    >
+                                        Open Currency Manager →
+                                    </Link>
+                                </div>
+                                <p className="mt-1 text-xs text-slate-400">
+                                    Symbol, placement, separators and precision are managed centrally.
+                                </p>
+                            </div>
                             <Field
                                 label="Timezone"
                                 name="timezone"

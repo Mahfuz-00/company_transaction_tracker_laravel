@@ -7,7 +7,9 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -25,6 +27,21 @@ class ProfileController extends Controller
             'status' => session('status'),
             'avatarUrl' => $user->avatarUrl(),
             'designation' => $user->designation,
+            // Context so the Profile Manager is informative for every role:
+            // which roles the user holds, which institution they belong to, and
+            // whether they are the global platform admin.
+            'profile' => [
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'designation' => $user->designation,
+                'status' => $user->status,
+                'roles' => $user->getRoleNames()->all(),
+                'is_super_admin' => $user->isSuperAdmin(),
+                'institution' => $user->institution?->name,
+                'password_changed_at' => $user->password_changed_at?->format('j M Y'),
+                'joined_at' => $user->created_at?->format('j M Y'),
+            ],
         ]);
     }
 
@@ -58,6 +75,44 @@ class ProfileController extends Controller
         $user->save();
 
         return Redirect::route('profile.edit')->with('success', 'Profile updated.');
+    }
+
+    /**
+     * The forced / voluntary password-change screen.
+     *
+     * A user with a temporary (demo) password lands here via the
+     * EnsurePasswordIsChanged middleware and cannot leave until they set a new
+     * one. Any other user can open it voluntarily too.
+     */
+    public function showChangePassword(Request $request): Response
+    {
+        return Inertia::render('Auth/ChangePassword', [
+            'mustChange' => $request->user()->mustChangePassword(),
+        ]);
+    }
+
+    /**
+     * Apply the new password, clearing the forced-change flag.
+     */
+    public function updatePassword(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', 'confirmed', Password::defaults()],
+        ]);
+
+        $user = $request->user();
+
+        $user->forceFill([
+            'password' => Hash::make($data['password']),
+            // The temporary password has been replaced - lift the restriction.
+            'must_change_password' => false,
+            'password_changed_at' => now(),
+        ])->save();
+
+        return redirect()
+            ->route('dashboard')
+            ->with('success', 'Your password has been updated.');
     }
 
     /**

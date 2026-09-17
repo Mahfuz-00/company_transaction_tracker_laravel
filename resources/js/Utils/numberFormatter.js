@@ -49,8 +49,30 @@ export default function formatNumber(value, settings = {}, currencies = []) {
         if (c) symbol = c.symbol || c.code || '';
     }
 
-    // Abbreviated formats (compact implied)
-    if (s.abbreviated && s.abbreviations !== false) {
+    // ------------------------------------------------------------------
+    // Threshold system.
+    //
+    // `abbreviation_threshold` is the magnitude at which a number switches
+    // from its full form (123,456) to the compact scale (123.46 K). The admin
+    // sets this in global settings. A value of 0 means "always abbreviate";
+    // `null`/undefined falls back to 1000 (only thousands and above shrink),
+    // so the default behaviour never abbreviates a small number like 250.
+    // ------------------------------------------------------------------
+    const threshold = s.abbreviation_threshold === null
+        || s.abbreviation_threshold === undefined
+        ? 1000
+        : Math.max(0, Number(s.abbreviation_threshold));
+
+    const magnitude = Math.abs(Number(value) || 0);
+    const crossesThreshold = magnitude >= threshold;
+
+    // Abbreviated formats (compact implied), but only once the figure crosses
+    // the configured threshold - unless the caller forces it with
+    // `force_abbreviated` (used by the "Abbreviated Output" preview).
+    const wantsAbbreviation = (s.abbreviated && s.abbreviations !== false)
+        || s.force_abbreviated === true;
+
+    if (wantsAbbreviation && (crossesThreshold || s.force_abbreviated === true)) {
         let formatted;
         switch (s.numbering_system) {
             case 'indian': formatted = abbreviateIndian(value, precision); break;

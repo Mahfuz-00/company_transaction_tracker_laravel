@@ -5,6 +5,7 @@ import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
 import { Spinner } from '@/Components/UI/Loading';
+import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 
 const EMPTY_FORM = {
@@ -47,6 +48,7 @@ export default function Index({ subsidies, sources, applyModes, departments, stu
     const { can } = useCan();
     const { flash } = usePage().props;
     const money = useMoney();
+    const { confirm } = useFeedback();
     const canManage = can('subsidies.manage');
     const canExport = can('exports.download');
 
@@ -86,8 +88,15 @@ export default function Index({ subsidies, sources, applyModes, departments, stu
         });
     };
 
-    const reverse = (subsidy) => {
-        if (!confirm('Reverse this subsidy? This posts a matching cash-out to the ledger.')) return;
+    const reverse = async (subsidy) => {
+        const ok = await confirm({
+            title: 'Reverse this subsidy?',
+            message: 'This posts a matching cash-out to the ledger and removes any per-member allocations it created.',
+            tone: 'danger',
+            confirmLabel: 'Reverse subsidy',
+        });
+        if (!ok) return;
+
         router.patch(route('meals.subsidies.reverse', subsidy.id), {}, { preserveScroll: true });
     };
 

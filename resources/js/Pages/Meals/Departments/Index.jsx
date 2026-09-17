@@ -4,6 +4,7 @@ import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
 import useTerminology from '@/Utils/useTerminology';
+import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 
 /* ------------------------------------------------------------------ *
@@ -35,19 +36,21 @@ function Flash({ success, error }) {
     );
 }
 
-function EmptyState({ search, canManage, onCreate }) {
+function EmptyState({ search, canManage, onCreate, groupNoun, groupPlural, memberNoun }) {
     return (
         <div className="py-14 text-center">
             <svg className="mx-auto h-10 w-10 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
             <p className="mt-3 text-sm font-semibold text-slate-600">
-                {search ? 'No departments match your search.' : 'No departments yet.'}
+                {search
+                    ? `No ${groupPlural.toLowerCase()} match your search.`
+                    : `No ${groupPlural.toLowerCase()} yet.`}
             </p>
             <p className="mt-1 text-xs text-slate-400">
                 {search
                     ? 'Try a different term.'
-                    : `${t('departments', 'Groups')} group ${t('members', 'members').toLowerCase()} together.`}
+                    : `${groupPlural} group ${memberNoun.toLowerCase()} together.`}
             </p>
             {!search && canManage && (
                 <button
@@ -58,7 +61,7 @@ function EmptyState({ search, canManage, onCreate }) {
                     <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                     </svg>
-                    Add the first department
+                    Add the first {groupNoun.toLowerCase()}
                 </button>
             )}
         </div>
@@ -83,6 +86,7 @@ export default function Index({ departments, filters }) {
     const { can } = useCan();
     const { t } = useTerminology();
     const { flash } = usePage().props;
+    const { confirm } = useFeedback();
     const canManage = can('departments.manage');
 
     const [modalOpen, setModalOpen] = useState(false);
@@ -139,13 +143,14 @@ export default function Index({ departments, filters }) {
         }
     };
 
-    const remove = (department) => {
-        if (
-            !confirm(
-                `Delete "${department.name}"? This cannot be undone.`
-            )
-        )
-            return;
+    const remove = async (department) => {
+        const ok = await confirm({
+            title: `Delete "${department.name}"?`,
+            message: 'This cannot be undone. Groups that still have members cannot be deleted - reassign them first.',
+            tone: 'danger',
+            confirmLabel: 'Delete group',
+        });
+        if (!ok) return;
 
         router.delete(route('meals.departments.destroy', department.slug), {
             preserveScroll: true,
@@ -180,12 +185,12 @@ export default function Index({ departments, filters }) {
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                         </svg>
-                        New Department
+                        New {t('department', 'Group')}
                     </button>
                 )
             }
         >
-            <Head title="Departments" />
+            <Head title={t('departments', 'Groups')} />
 
             <Flash success={flash?.success} error={flash?.error} />
 
@@ -204,7 +209,7 @@ export default function Index({ departments, filters }) {
                         <input
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search departments..."
+                            placeholder={`Search ${t('departments', 'departments').toLowerCase()}...`}
                             className="w-full rounded-lg border-slate-300 py-2 pl-9 pr-3 text-sm outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                         />
                     </form>
@@ -225,7 +230,7 @@ export default function Index({ departments, filters }) {
                     <table className="w-full border-collapse text-left">
                         <thead>
                             <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                                <th className="px-6 py-3">Department</th>
+                                <th className="px-6 py-3">{t('department', 'Group')}</th>
                                 <th className="px-6 py-3">Slug</th>
                                 <th className="px-6 py-3">{t('members', 'Members')}</th>
                                 <th className="px-6 py-3 text-right">Actions</th>
@@ -265,7 +270,7 @@ export default function Index({ departments, filters }) {
                                                 href={route('meals.students.index', { department: department.id })}
                                                 className="font-medium text-slate-500 transition-colors hover:text-slate-800"
                                             >
-                                                View students
+                                                View {t('members', 'members').toLowerCase()}
                                             </Link>
                                             {canManage && (
                                                 <>
@@ -295,6 +300,9 @@ export default function Index({ departments, filters }) {
                                             search={filters?.search}
                                             canManage={canManage}
                                             onCreate={openCreate}
+                                            groupNoun={t('department', 'Group')}
+                                            groupPlural={t('departments', 'Groups')}
+                                            memberNoun={t('members', 'members')}
                                         />
                                     </td>
                                 </tr>
@@ -334,11 +342,11 @@ export default function Index({ departments, filters }) {
             <Modal
                 open={modalOpen}
                 onClose={closeModal}
-                title={isEditing ? `Edit "${editing?.name}"` : 'New Department'}
+                title={isEditing ? `Edit "${editing?.name}"` : `New ${t('department', 'Group')}`}
                 description={
                     isEditing
                         ? 'Update the name, slug, or description. Changes apply immediately.'
-                        : 'Create a department to group students under.'
+                        : `Create a ${t('department', 'group').toLowerCase()} to group ${t('members', 'members').toLowerCase()} under.`
                 }
                 footer={
                     <>
@@ -361,14 +369,14 @@ export default function Index({ departments, filters }) {
                                     <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="opacity-90" />
                                 </svg>
                             )}
-                            {processing ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Department'}
+                            {processing ? 'Saving...' : isEditing ? 'Save Changes' : `Create ${t('department', 'Group')}`}
                         </button>
                     </>
                 }
             >
                 <form id="department-form" onSubmit={submit} className="space-y-4">
                     <Field
-                        label="Department Name"
+                        label={`${t('department', 'Group')} Name`}
                         name="name"
                         required
                         value={data.name}
@@ -404,7 +412,8 @@ export default function Index({ departments, filters }) {
                         type="textarea"
                         value={data.description}
                         error={errors.description}
-                        placeholder="Short note about this department..."
+                        placeholder={`Short note about this ${t('department', 'group').toLowerCase()}...`}
+                        onChange={(event) => setData('description', event.target.value)}
                     />
                 </form>
             </Modal>

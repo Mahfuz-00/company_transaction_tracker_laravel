@@ -16,8 +16,12 @@ class MealEntryController extends Controller
         $date = $request->query('date', now()->toDateString());
         $studentId = (string) $request->query('student', '');
 
+        // A Meal Manager sees only entries for members assigned to them.
+        $scopedIds = $request->user()->scopedStudentIds();
+
         $entries = MealEntry::query()
             ->with(['student:id,name,roll', 'recorder:id,name'])
+            ->when($scopedIds !== null, fn ($q) => $q->whereIn('student_id', $scopedIds))
             ->when($date, fn ($q) => $q->whereDate('date', $date))
             ->when($studentId !== '', fn ($q) => $q->where('student_id', $studentId))
             ->orderByDesc('date')
@@ -27,7 +31,10 @@ class MealEntryController extends Controller
 
         return Inertia::render('Meals/Entries/Index', [
             'entries' => $entries,
-            'students' => Student::active()->orderBy('name')->get(['id', 'name', 'roll']),
+            'students' => Student::active()
+                ->when($scopedIds !== null, fn ($q) => $q->whereIn('id', $scopedIds))
+                ->orderBy('name')
+                ->get(['id', 'name', 'roll']),
             'filters' => [
                 'date' => $date,
                 'student' => $studentId,
@@ -45,12 +52,17 @@ class MealEntryController extends Controller
     {
         $date = $request->query('date', now()->toDateString());
 
+        // Only the members this manager is responsible for appear on the grid.
+        $scopedIds = $request->user()->scopedStudentIds();
+
         $existing = MealEntry::query()
+            ->when($scopedIds !== null, fn ($q) => $q->whereIn('student_id', $scopedIds))
             ->whereDate('date', $date)
             ->get()
             ->keyBy('student_id');
 
         $students = Student::active()
+            ->when($scopedIds !== null, fn ($q) => $q->whereIn('id', $scopedIds))
             ->orderBy('name')
             ->get(['id', 'name', 'roll'])
             ->map(fn (Student $student) => [
@@ -85,10 +97,19 @@ class MealEntryController extends Controller
             'entries.*.dinner' => ['nullable', 'integer', 'min:0', 'max:10'],
         ]);
 
+        // A manager may only save entries for members assigned to them.
+        $scopedIds = $request->user()->scopedStudentIds();
+
         $saved = 0;
 
-        DB::transaction(function () use ($data, &$saved) {
+        DB::transaction(function () use ($data, &$saved, $scopedIds) {
             foreach ($data['entries'] as $row) {
+                // Silently skip any row the manager is not allowed to touch, so a
+                // crafted request cannot write meals for another manager's member.
+                if ($scopedIds !== null && ! in_array((int) $row['student_id'], $scopedIds, true)) {
+                    continue;
+                }
+
                 $breakfast = (int) ($row['breakfast'] ?? 0);
                 $lunch = (int) ($row['lunch'] ?? 0);
                 $dinner = (int) ($row['dinner'] ?? 0);

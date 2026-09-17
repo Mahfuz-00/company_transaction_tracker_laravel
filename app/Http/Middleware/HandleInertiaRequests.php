@@ -59,6 +59,33 @@ class HandleInertiaRequests extends Middleware
                 'permissions' => $user ? $user->getAllPermissions()->pluck('name')->toArray() : [],
             ],
 
+            // In-app notifications, shared so the header bell shows the unread
+            // badge on every page without an extra request. Kept small - the full
+            // list lives on the notifications page.
+            'notifications' => function () use ($user) {
+                if (! $user) {
+                    return ['unreadCount' => 0, 'items' => []];
+                }
+
+                return [
+                    'unreadCount' => $user->unreadNotifications()->count(),
+                    'items' => $user->notifications()
+                        ->orderByDesc('created_at')
+                        ->limit(6)
+                        ->get()
+                        ->map(fn ($n) => [
+                            'id' => $n->id,
+                            'kind' => $n->data['kind'] ?? 'notice',
+                            'title' => $n->data['title'] ?? 'Notification',
+                            'body' => $n->data['body'] ?? '',
+                            'url' => $n->data['meta']['url'] ?? null,
+                            'read' => $n->read_at !== null,
+                            'created_human' => $n->created_at?->diffForHumans(),
+                        ])
+                        ->all(),
+                ];
+            },
+
             // Flash messages, so "Deposit recorded" style feedback reaches the
             // UI. Without this, every ->with('success', ...) was invisible.
             'flash' => [

@@ -235,7 +235,7 @@ export default function Dashboard({
             header={
                 <div>
                     <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                        Dorm Meal Overview
+                        Meal &amp; Expense Overview
                     </h2>
                     <p className="mt-0.5 text-xs font-medium text-slate-500">
                         Shared pool, meal counts, and spending at a glance — {metrics.month_label}

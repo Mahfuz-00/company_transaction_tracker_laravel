@@ -6,6 +6,7 @@ import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { Spinner } from '@/Components/UI/Loading';
+import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 
 const EMPTY_FORM = {
@@ -113,13 +114,23 @@ function RateBreakdown({ rate, money }) {
                 </code>
             </div>
 
-            <div className="mt-3 grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+            {/* A real grid (the old markup omitted `grid`, so every cell
+                stacked into one column). Auto-fitting columns keep the row
+                clean at any width without awkward gaps. */}
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                 {cells.map((cell) => (
-                    <div key={cell.label} className="rounded-lg border-slate-100 bg-slate-50/60 px-3 py-2">
+                    <div
+                        key={cell.label}
+                        className={`flex flex-col justify-between rounded-lg border px-3.5 py-3 ${
+                            cell.formula
+                                ? 'border-indigo-100 bg-indigo-50/60'
+                                : 'border-slate-100 bg-slate-50/60'
+                        }`}
+                    >
                         <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                             {cell.label}
                         </div>
-                        <div className={`mt-0.5 text-sm font-bold ${cell.tone || 'text-slate-800'}`}>
+                        <div className={`mt-1 text-lg font-bold leading-tight ${cell.tone || (cell.formula ? 'text-indigo-600' : 'text-slate-800')}`}>
                             {cell.value}
                         </div>
                     </div>
@@ -141,6 +152,7 @@ function RateBreakdown({ rate, money }) {
 export default function Index({ students, departments, managers, costPerMeal, rateBreakdown, months, month, filters }) {
     const { can } = useCan();
     const { t } = useTerminology();
+    const { confirm } = useFeedback();
     const { flash } = usePage().props;
     const money = useMoney();
     const canManage = can('students.manage');
@@ -236,8 +248,14 @@ export default function Index({ students, departments, managers, costPerMeal, ra
         }
     };
 
-    const remove = (student) => {
-        if (!confirm(`Remove "${student.name}" from the roster?`)) return;
+    const remove = async (student) => {
+        const ok = await confirm({
+            title: `Remove "${student.name}" from the roster?`,
+            message: 'Members with meal or deposit history cannot be removed - mark them inactive instead.',
+            tone: 'danger',
+            confirmLabel: 'Remove member',
+        });
+        if (!ok) return;
 
         router.delete(route('meals.students.destroy', student.id), {
             preserveScroll: true,
@@ -683,7 +701,7 @@ export default function Index({ students, departments, managers, costPerMeal, ra
                             type="select"
                             value={data.manager_id}
                             error={errors.manager_id}
-                            hint="Which user or meal manager is responsible for this record."
+                            hint="The meal manager or admin who oversees this member."
                             options={managerOptions}
                             onChange={(event) => setData('manager_id', event.target.value)}
                         />

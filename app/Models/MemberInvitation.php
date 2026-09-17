@@ -73,11 +73,13 @@ class MemberInvitation extends Model
      */
     public static function issue(array $attributes): array
     {
-        // Supersede earlier pending invites for the same email so only the
-        // newest link works.
+        // Supersede earlier pending invites for the same email WITHIN THE SAME
+        // INSTITUTION so only the newest link works - but never touch another
+        // institution's pending invite for a coincidentally identical address.
         static::query()
             ->where('email', $attributes['email'])
             ->whereNull('accepted_at')
+            ->where('institution_id', $attributes['institution_id'] ?? null)
             ->delete();
 
         $plainToken = Str::random(64);

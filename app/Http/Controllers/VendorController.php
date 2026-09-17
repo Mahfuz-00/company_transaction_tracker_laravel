@@ -87,6 +87,33 @@ class VendorController extends Controller
     }
 
     /**
+     * Purchase history for one vendor: every recorded expense tied to it, with
+     * lifetime and month-to-date totals. Returned as JSON so the Purchase
+     * History tab can load on demand without a full page visit.
+     */
+    public function history(Vendor $vendor)
+    {
+        $rows = $vendor->purchaseHistory(200);
+
+        return response()->json([
+            'vendor' => [
+                'id' => $vendor->id,
+                'name' => $vendor->name,
+                'category' => $vendor->category_label,
+                'recurrence' => $vendor->recurrence_label,
+                'status' => $vendor->status,
+                'is_institution_hub' => (bool) $vendor->is_institution_hub,
+            ],
+            'history' => $rows,
+            'totals' => [
+                'orders' => count($rows),
+                'purchased' => round(array_sum(array_column($rows, 'amount')), 2),
+                'outstanding' => $vendor->outstandingBalance(),
+            ],
+        ]);
+    }
+
+    /**
      * Export the vendor ledger (spend per supplier).
      */
     public function export(Request $request)

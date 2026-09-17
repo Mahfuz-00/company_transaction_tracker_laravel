@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
-import useCan from '@/Utils/can';
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 
 /**
  * Audit Trail / Activity Log.
@@ -64,8 +63,15 @@ function ChangeList({ properties }) {
     );
 }
 
-export default function ActivityLog({ logs, events, filters, isSuperAdmin }) {
-    const { flash } = usePage().props;
+export default function ActivityLog({
+    logs,
+    events,
+    filters,
+    isSuperAdmin,
+    institutions = [],
+    byInstitution = [],
+    scopeInstitution = null,
+}) {
     const [search, setSearch] = useState(filters?.search || '');
 
     const rows = logs?.data || [];
@@ -76,7 +82,9 @@ export default function ActivityLog({ logs, events, filters, isSuperAdmin }) {
         });
     };
 
-    const hasFilters = Boolean(filters?.search || filters?.event || filters?.module || filters?.actor);
+    const hasFilters = Boolean(
+        filters?.search || filters?.event || filters?.module || filters?.actor || filters?.institution
+    );
 
     return (
         <SettingsLayout title="Settings">
@@ -88,15 +96,60 @@ export default function ActivityLog({ logs, events, filters, isSuperAdmin }) {
                         <h3 className="text-lg font-bold text-slate-900">Activity Log</h3>
                         <p className="mt-0.5 text-sm text-slate-500">
                             {isSuperAdmin
-                                ? 'Complete audit trail across every institution.'
+                                ? 'Global audit trail. Filter by institution to inspect a single workspace.'
                                 : 'Audit trail for your institution.'}
                         </p>
                     </div>
                 </div>
 
-                {flash?.success && (
-                    <div role="status" className="rounded-lg border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
-                        {flash.success}
+                {/* Non-SSA: an explicit, non-dismissible notice that this log is
+                    locked to their institution. */}
+                {!isSuperAdmin && scopeInstitution && (
+                    <div className="flex items-center gap-2 rounded-lg border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+                        <svg className="h-4 w-4 flex-shrink-0 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        Showing activity for <strong className="font-semibold text-slate-800">{scopeInstitution.name}</strong> only.
+                    </div>
+                )}
+
+                {/* SSA: per-institution roll-up, so the global view is grouped
+                    by workspace rather than a flat, unscannable feed. */}
+                {isSuperAdmin && byInstitution.length > 0 && (
+                    <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            Activity by Institution
+                        </p>
+                        <div className="mt-2 flex-wrap gap-2">
+                            <button
+                                type="button"
+                                onClick={() => applyFilters({ institution: '' })}
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                                    !filters?.institution
+                                        ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                All institutions
+                            </button>
+                            {byInstitution.map((inst) => (
+                                <button
+                                    key={inst.id}
+                                    type="button"
+                                    onClick={() => applyFilters({ institution: String(inst.id) })}
+                                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                                        String(filters?.institution) === String(inst.id)
+                                            ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]'
+                                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {inst.name}
+                                    <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-500">
+                                        {inst.entries}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -125,6 +178,23 @@ export default function ActivityLog({ logs, events, filters, isSuperAdmin }) {
                             ))}
                         </select>
 
+                        {/* SSA-only institution filter. Institution Admins are
+                            hard-scoped server-side, so this never renders for
+                            them. */}
+                        {isSuperAdmin && (
+                            <select
+                                value={filters?.institution || ''}
+                                onChange={(e) => applyFilters({ institution: e.target.value })}
+                                aria-label="Filter by institution"
+                                className="rounded-lg border-slate-300 text-sm text-slate-900 focus:border-[var(--accent)] focus:ring-[var(--accent)]"
+                            >
+                                <option value="">All institutions</option>
+                                {(institutions || []).map((inst) => (
+                                    <option key={inst.value} value={inst.value}>{inst.label}</option>
+                                ))}
+                            </select>
+                        )}
+
                         {hasFilters && (
                             <button
                                 type="button"
@@ -142,6 +212,9 @@ export default function ActivityLog({ logs, events, filters, isSuperAdmin }) {
                                 <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
                                     <th className="px-4 py-3 sm:px-6">When</th>
                                     <th className="px-4 py-3 sm:px-6">Who</th>
+                                    {/* Institution column only makes sense on the
+                                        SSA's global view. */}
+                                    {isSuperAdmin && <th className="px-4 py-3 sm:px-6">Institution</th>}
                                     <th className="px-4 py-3 sm:px-6">Event</th>
                                     <th className="px-4 py-3 sm:px-6">What</th>
                                     <th className="px-4 py-3 sm:px-6">Module</th>
@@ -162,6 +235,11 @@ export default function ActivityLog({ logs, events, filters, isSuperAdmin }) {
                                                 <div className="text-xs text-slate-400">{log.user_email}</div>
                                             )}
                                         </td>
+                                        {isSuperAdmin && (
+                                            <td className="px-4 py-3 text-xs text-slate-500 sm:px-6">
+                                                {log.institution?.name || <span className="italic text-slate-300">Platform</span>}
+                                            </td>
+                                        )}
                                         <td className="px-4 py-3 sm:px-6">
                                             <EventBadge event={log.event} />
                                         </td>
@@ -175,7 +253,7 @@ export default function ActivityLog({ logs, events, filters, isSuperAdmin }) {
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan="5" className="py-14 text-center">
+                                        <td colSpan={isSuperAdmin ? 6 : 5} className="py-14 text-center">
                                             <p className="text-sm font-semibold text-slate-600">No activity recorded yet.</p>
                                             <p className="mt-1 text-xs text-slate-400">
                                                 Creates, updates, deletes and sign-ins appear here as they happen.

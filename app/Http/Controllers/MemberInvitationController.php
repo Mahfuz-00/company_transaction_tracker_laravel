@@ -38,38 +38,107 @@ class MemberInvitationController extends Controller
 
         $institution = Institution::current();
 
-        // An email that already has an account cannot be invited again.
-        if (User::where('email', $data['email'])->exists()) {
-            return back()->with('error', 'A user with that email already exists.');
+        // An invitation is meaningless without a workspace, so refuse early
+        // rather than creating an ungrouped, orphaned row.
+        if (! $institution) {
+            return back()->with('error', 'Select an institution first, then invite its members.');
         }
 
+        // TWO-STEP STATE: an email may already belong to a user (complete) or be
+        // brand new (incomplete). Both are valid invitation targets - an existing
+        // user simply gets a password-RESET link instead of a first-time setup.
+        $existingUser = User::where('email', $data['email'])->first();
+
+        // Tenancy guard: an existing user from another institution cannot be
+        // re-invited into this one.
+        if ($existingUser && $existingUser->institution_id
+            && (int) $existingUser->institution_id !== (int) $institution->id) {
+            return back()->with('error', 'That email already belongs to a user in another institution.');
+        }
+
+        /*
+         * Member-record guard. When an invite targets a member record:
+         *  - the record must belong to THIS institution (no cross-tenant attach),
+         *  - and if it is already linked to a login, inviting the same email is a
+         *    no-op reset rather than a second account. We check the email matches
+         *    so an invite can never silently re-point an existing login.
+         */
+        if (! empty($data['student_id'])) {
+            $student = Student::query()
+                ->whereKey($data['student_id'])
+                ->when($institution, fn ($q) => $q->where(function ($sub) use ($institution) {
+                    $sub->where('institution_id', $institution->id)->orWhereNull('institution_id');
+                }))
+                ->first();
+
+            if (! $student) {
+                return back()->with('error', 'That member record does not belong to this institution.');
+            }
+
+            // Already linked to a different login? Refuse rather than create a
+            // duplicate/overlapping account.
+            if ($student->user_id) {
+                $linked = User::find($student->user_id);
+                if ($linked && strcasecmp($linked->email, $data['email']) !== 0) {
+                    return back()->with('error', "That member is already linked to {$linked->email}.");
+                }
+            }
+
+            // Prefer the member's real name for the invite when none was typed,
+            // so the invitation never carries an empty/placeholder name.
+            if (blank($data['name'] ?? null) && filled($student->name)) {
+                $data['name'] = $student->name;
+            }
+        }
+
+        /*
+         * SAFE ROLE at the source. The invitation's role is what the account is
+         * created with, so it must be an institution-scoped role. A request that
+         * asks for 'Software Super Admin' (or any unknown value) is coerced to
+         * Member here - before it is ever persisted - so the misassignment can
+         * never reach the assignment step at accept-time.
+         */
+        $safeRole = User::safeInstitutionRole($data['role'] ?? null) ?: 'Member';
+
         [$invitation, $plainToken] = MemberInvitation::issue([
-            'institution_id' => $institution?->id,
+            'institution_id' => $institution->id,
             'student_id' => $data['student_id'] ?? null,
             'email' => $data['email'],
             'name' => $data['name'] ?? null,
-            'role' => $data['role'] ?? 'Member',
+            'role' => $safeRole,
             'invited_by' => $request->user()->id,
         ]);
 
         // A signed URL: the token in the path plus a signature that Laravel
         // validates, so a tampered link is rejected before we ever look it up.
+        // Points at the dedicated password-setup screen (handles both the
+        // first-time and reset cases).
         $acceptUrl = \URL::temporarySignedRoute(
-            'invitations.accept',
+            'password.setup',
             now()->addDays(MemberInvitation::TTL_DAYS),
             ['invitation' => $invitation->id, 'token' => $plainToken]
         );
 
+        // Send through the branded HTML template. isReset flips the copy when the
+        // account already exists. Every send is captured by the outbox listener.
         Mail::to($invitation->email)->send(
-            new MemberInvitationMail($invitation, $acceptUrl, $institution?->name)
+            new MemberInvitationMail(
+                $invitation,
+                $acceptUrl,
+                $institution?->name,
+                isReset: $existingUser !== null,
+            )
         );
 
         AuditLogger::log('invited', 'invited '.$invitation->email, $invitation, [
             'email' => $invitation->email,
             'role' => $invitation->role,
-        ], ['subject_label' => $invitation->email]);
+            'state' => $existingUser ? 'complete' : 'incomplete',
+        ], ['subject_label' => $invitation->email, 'institution_id' => $invitation->institution_id]);
 
-        return back()->with('success', "Invitation sent to {$invitation->email}.");
+        $label = $existingUser ? 'Password reset link' : 'Invitation';
+
+        return back()->with('success', "{$label} sent to {$invitation->email}.");
     }
 
     /**
@@ -126,12 +195,9 @@ class MemberInvitationController extends Controller
                 'password' => Hash::make($data['password']),
             ]);
 
-            // Grant the role the invitation specified (defaults to Member).
-            try {
-                $user->assignRole($invitation->role);
-            } catch (\Throwable $e) {
-                $user->assignRole('Member');
-            }
+            // SAFE ROLE: the invitation can only confer an institution-scoped
+            // role; a global role is impossible here.
+            $user->assignInstitutionRole($invitation->role);
 
             // Link the member record to this new login.
             if ($invitation->student_id) {

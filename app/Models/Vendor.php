@@ -191,6 +191,33 @@ class Vendor extends Model
         return round((float) $this->opening_balance + $unpaid, 2);
     }
 
+    /**
+     * The vendor's purchase history: every expense recorded against them, newest
+     * first, joined with the ledger transaction that carries the authoritative
+     * amount. Powers the "Purchase History" tab on the vendor profile.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function purchaseHistory(int $limit = 100): array
+    {
+        return $this->expenses()
+            ->with(['transaction:id,amount,item,category,payee,payment_method', 'recorder:id,name'])
+            ->orderByDesc('created_at')
+            ->limit($limit)
+            ->get()
+            ->map(fn (MealExpense $expense) => [
+                'id' => $expense->id,
+                'date' => $expense->created_at?->toDateString(),
+                'description' => $expense->description ?: ($expense->transaction?->item ?? 'Expense'),
+                'category' => $expense->category,
+                'amount' => (float) ($expense->transaction?->amount ?? $expense->amount ?? 0),
+                'payment_status' => $expense->payment_status,
+                'payment_method' => $expense->transaction?->payment_method,
+                'recorded_by' => $expense->recorder?->name,
+            ])
+            ->all();
+    }
+
     /** "Meat & Fish" from "meat_fish". */
     public function getCategoryLabelAttribute(): ?string
     {

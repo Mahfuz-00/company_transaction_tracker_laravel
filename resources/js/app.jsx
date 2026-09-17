@@ -5,6 +5,7 @@ import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import GlobalLoadingIndicator from '@/Components/GlobalLoadingIndicator';
+import { FeedbackProvider } from '@/Components/Feedback/FeedbackProvider';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -42,11 +43,14 @@ createInertiaApp({
         const root = createRoot(el);
 
         root.render(
-            <>
+            // FeedbackProvider wraps the whole app (not just a layout) so flash
+            // messages and confirmations work identically on every screen,
+            // including the guest pages.
+            <FeedbackProvider>
                 <App {...props} />
                 {/* One central spinner for every async request. */}
                 <GlobalLoadingIndicator />
-            </>
+            </FeedbackProvider>
         );
     },
     progress: {
