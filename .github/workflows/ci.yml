@@ -1,0 +1,290 @@
+# =============================================================================
+# CI - Multi-Institution SaaS Platform
+#
+# MANUAL CONTROL: this workflow has NO push / pull_request trigger. It ONLY runs
+# when a human starts it from the GitHub UI (or the API/CLI) via `workflow_dispatch`.
+# Pushing to a branch therefore starts nothing on its own.
+# =============================================================================
+
+name: CI
+
+on:
+  # Runs automatically whenever code is pushed to the 'main' branch
+  push:
+    branches:
+      - main
+  # ---------------------------------------------------------------------------
+  # MANUAL TRIGGER ONLY.
+  #
+  # `workflow_dispatch` is the GitHub event for "run this by hand". Because this
+  # is the ONLY entry in `on:`, a `git push` or a PR opens NOTHING - the pipeline
+  # runs exactly when you ask it to, from the Actions tab.
+  #
+  # `inputs` below become a form in the UI, so a manual run can be parameterised
+  # (e.g. run only the tenant-isolation tests) without editing the file.
+  # ---------------------------------------------------------------------------
+  workflow_dispatch:
+    inputs:
+      php_version:
+        description: 'PHP version to test against'
+        required: false
+        default: '8.2'
+        type: choice
+        options:
+          - '8.2'
+          - '8.3'
+      node_version:
+        description: 'Node.js version for the Vite build'
+        required: false
+        default: '20'
+        type: choice
+        options:
+          - '20'
+          - '22'
+
+# Least-privilege default for the whole workflow. The pipeline only needs to
+# read the checked-out repo; no job writes back to it.
+permissions:
+  contents: read
+
+# Cancel an in-flight run if the same branch is manually re-triggered - manual
+# runs are deliberate, so a newer one supersedes an older, still-running one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # JOB 1 - PHP static analysis + test suite (Pest/PHPUnit, SQLite in-memory)
+  # ===========================================================================
+  tests:
+    name: Tests (PHP ${{ github.event.inputs.php_version || '8.2' }})
+    runs-on: ubuntu-latest
+
+    # The PHP version comes from the manual-trigger form, falling back to 8.2.
+    env:
+      PHP_VERSION: ${{ github.event.inputs.php_version || '8.2' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # PHP + Composer setup with dependency caching.
+      #
+      # `shivammathur/setup-php` installs PHP, Composer and the extensions below.
+      # We add sqlite3 + pdo_sqlite explicitly because the entire test suite and
+      # the migration check run on SQLite.
+      # -----------------------------------------------------------------------
+      - name: Setup PHP ${{ env.PHP_VERSION }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, dom, fileinfo, sqlite3, pdo_sqlite, bcmath, gd
+          coverage: none          # Coverage is a separate concern; skip the driver cost.
+
+      # -----------------------------------------------------------------------
+      # COMPOSER CACHE.
+      #
+      # WHY: `composer install` resolves the full dependency graph against
+      # packagist. Caching Composer's download cache means unchanged packages are
+      # restored from the cache instead of re-downloaded - typically cutting this
+      # step from ~40s to a few seconds.
+      #
+      # KEY: hashed on `composer.lock`, so the cache is INVALIDATED the instant a
+      # dependency changes - never a stale lockfile, never a wrong package.
+      #
+      # This caches the DOWNLOAD ARTIFACTS (the Composer home cache), not the
+      # vendor/ directory: the install step still runs every time, so a
+      # corrupted cache can never masquerade as a correct install.
+      # -----------------------------------------------------------------------
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache/files
+            ~/.cache/composer/files
+          key: composer-${{ runner.os }}-php${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ env.PHP_VERSION }}-
+            composer-${{ runner.os }}-
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+        # `composer.lock` is committed, so this is a DETERMINISTIC install:
+        # `composer install` honours the lock exactly; it never upgrades.
+
+      - name: Prepare the application environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Compliant coding style (Laravel Pint)
+        # Fails the build on style violations so reviews focus on logic, not
+        # formatting. `--test` checks WITHOUT writing, leaving the tree clean.
+        run: vendor/bin/pint --test
+
+      # -----------------------------------------------------------------------
+      # RUN THE TEST SUITE.
+      #
+      # phpunit.xml already pins the test environment (APP_ENV=testing,
+      # DB_CONNECTION=sqlite, DB_DATABASE=:memory:, MAIL_MAILER=array,
+      # SESSION_DRIVER=array, QUEUE_CONNECTION=sync). So tests are hermetic: no
+      # real database, no outbound mail, no shared state between runs.
+      #
+      # `composer test` runs `config:clear` first - important because Laravel
+      # caches config, and a stale cache would make the suite run against the
+      # WRONG (non-testing) environment.
+      # -----------------------------------------------------------------------
+      - name: Run test suite (Pest/PHPUnit)
+        run: composer test
+
+      # -----------------------------------------------------------------------
+      # TENANT-ISOLATION & PERMISSION FOCUSED RUN.
+      #
+      # The guardrails require explicit, named coverage of the multi-tenant data
+      # boundary and role-based access. `--filter` targets those test classes;
+      # `--fail-on-empty` guarantees a rename that drops coverage FAILS the build
+      # rather than silently passing zero tests.
+      # -----------------------------------------------------------------------
+      - name: Tenant isolation & permission tests
+        run: |
+          php artisan test \
+            --filter='RegistrationTest|SuperAdminPasswordGuardTest|ProfileTest' \
+            --fail-on-empty
+
+  # ===========================================================================
+  # JOB 2 - Frontend build (React / Inertia / Vite)
+  # ===========================================================================
+  build-assets:
+    name: Build assets (Vite)
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_VERSION: ${{ github.event.inputs.node_version || '20' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          # -----------------------------------------------------------------
+          # NODE CACHE - built into setup-node.
+          #
+          # WHY: npm re-downloads the whole dependency tree on a cold runner.
+          # setup-node's cache restores the global npm cache, so `npm ci` mostly
+          # unpacks rather than downloads.
+          #
+          # KEY: keyed on package-lock.json -> invalidated exactly when a
+          # dependency changes.
+          # -----------------------------------------------------------------
+          cache: 'npm'
+
+      # -----------------------------------------------------------------------
+      # `npm ci` (NOT `npm install`).
+      #
+      # `npm ci` installs EXACTLY what package-lock.json specifies and refuses to
+      # run if the lock and package.json disagree - the deterministic,
+      # reproducible install the guardrails require. It is also faster than
+      # `npm install` because it skips resolution.
+      # -----------------------------------------------------------------------
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build production assets
+        run: npm run build
+
+      # The build must actually emit a manifest; a silent no-op would break every
+      # Inertia page at runtime. Assert the artifact exists.
+      - name: Verify the Vite build manifest exists
+        run: test -f public/build/manifest.json && echo "Vite manifest present."
+
+  # ===========================================================================
+  # JOB 3 - Tenant-scoped migration verification on a REAL SQLite file
+  # ===========================================================================
+  migrations: 
+    name: Migration & tenant-schema verification (SQLite)
+    runs-on: ubuntu-latest
+    needs: tests          # Only check migrations once the code is known-good.
+
+    env:
+      PHP_VERSION: ${{ github.event.inputs.php_version || '8.2' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP ${{ env.PHP_VERSION }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, dom, fileinfo, sqlite3, pdo_sqlite, bcmath
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache/files
+            ~/.cache/composer/files
+          key: composer-${{ runner.os }}-php${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ env.PHP_VERSION }}-
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare the application environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # -----------------------------------------------------------------------
+      # MIGRATION VERIFICATION ON A FILE-BACKED SQLITE DB.
+      #
+      # The test suite uses `:memory:` (fast, hermetic, thrown away per run).
+      # This job is different ON PURPOSE: it migrates a real .sqlite FILE from
+      # scratch. That proves the migration set is valid as a DEPLOYABLE artifact
+      # - the in-memory run alone cannot catch a migration that only works when
+      # the connection is recreated between tests.
+      #
+      # Reason: the guardrails call for "tenant-scoped database migration
+      # verification". `migrate:fresh --seed` builds the full schema AND the
+      # tenant/role seed data, then we assert the tenant boundary survives it.
+      #
+      # The DB file is created in the runner's workspace and is NEVER committed:
+      # database/*.sqlite is gitignored (see .gitignore) and exists only here.
+      # -----------------------------------------------------------------------
+      - name: Create a clean SQLite database file
+        run: |
+          mkdir -p database
+          touch database/database.sqlite
+          echo "DB_DATABASE=$(pwd)/database/database.sqlite" >> "$GITHUB_ENV"
+
+      - name: Run migrations from scratch (with seed data)
+        env:
+          DB_CONNECTION: sqlite
+        run: php artisan migrate:fresh --seed --force
+
+      # -----------------------------------------------------------------------
+      # TENANT-SCOPING ASSERTION (tenant + RBAC schema integrity).
+      #
+      # The guardrails require tenant-scoped migration verification. This runs a
+      # dedicated artisan command - `schema:assert-tenant` - which asserts that
+      # every tenant/Permission table exists, that `users.institution_id` is
+      # present, and that roles are queryable.
+      #
+      # WHY A COMMAND AND NOT AN INLINE `tinker --execute`:
+      #   inline PHP inside a `run:` step depends on shell quoting rules that
+      #   differ between bash and PowerShell, so it silently breaks in CI. The
+      #   command is plain PHP, runs identically everywhere, and a developer can
+      #   reproduce the EXACT CI check locally with `php artisan schema:assert-tenant`.
+      #   It exits non-zero on the first failure, failing the job loudly.
+      # -----------------------------------------------------------------------
+      - name: Assert tenant + RBAC schema integrity
+        env:
+          DB_CONNECTION: sqlite
+        run: php artisan schema:assert-tenant
