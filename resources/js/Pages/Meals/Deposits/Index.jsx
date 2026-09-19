@@ -54,7 +54,7 @@ function Flash({ success, error }) {
 
 export default function Index({ deposits, students, kinds, filteredTotal, personalTotal, subsidyAllocated, subsidyGrants, filters }) {
     const { can } = useCan();
-    const { t } = useTerminology();
+    const { t, tTitle } = useTerminology();
     const { flash } = usePage().props;
     const money = useMoney();
     const { confirm } = useFeedback();
@@ -249,7 +249,7 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
                         <input
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search student or note..."
+                            placeholder={`Search ${t('member', 'member')} or note...`}
                             className="w-full rounded-lg border-slate-300 py-2 pl-9 pr-3 text-sm outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                         />
                     </form>
@@ -259,7 +259,7 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
                         onChange={(event) => applyFilters({ student: event.target.value })}
                         className="rounded-lg border-slate-300 text-sm text-slate-900 focus:border-indigo-500 focus:ring-indigo-500"
                     >
-                        <option value="">All students</option>
+                        <option value="">All {t('members', 'members')}</option>
                         {(students || []).map((student) => (
                             <option key={student.id} value={student.id}>
                                 {student.name}
@@ -479,7 +479,7 @@ export default function Index({ deposits, students, kinds, filteredTotal, person
             >
                 <form id="deposit-form" onSubmit={submit} className="space-y-4">
                     <Field
-                        label="Student"
+                        label={tTitle('member', 'Member')}
                         name="student_id"
                         type="select"
                         required

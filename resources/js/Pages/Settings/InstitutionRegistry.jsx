@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
+import ThemedText from '@/Components/UI/ThemedText';
 import useCan from '@/Utils/can';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, router, useForm } from '@inertiajs/react';
@@ -35,6 +36,11 @@ export default function InstitutionRegistry({ institutions, filters, totals, typ
         admin_name: '',
         admin_email: '',
         admin_password: '',
+        // FLEXIBLE ONBOARDING: trial vs immediate permanent subscription.
+        onboarding_mode: 'trial',
+        subscription_plan: '',
+        subscription_amount: '',
+        trial_days: 7,
     });
 
     const submitSearch = (e) => {
@@ -118,9 +124,9 @@ export default function InstitutionRegistry({ institutions, filters, totals, typ
                         { label: 'Administrators', value: totals?.admins ?? 0, tone: 'text-sky-600' },
                     ].map((card) => (
                         <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            <ThemedText as="div" variant="overline">
                                 {card.label}
-                            </div>
+                            </ThemedText>
                             <div className={`mt-1 text-2xl font-bold ${card.tone}`}>{card.value}</div>
                         </div>
                     ))}
@@ -362,6 +368,8 @@ export default function InstitutionRegistry({ institutions, filters, totals, typ
                         />
                     </div>
 
+                    <OnboardingFields data={data} setData={setData} errors={errors} />
+
                     <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
                         <p className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
                             Initial Institution Admin
@@ -402,5 +410,84 @@ export default function InstitutionRegistry({ institutions, filters, totals, typ
                 </form>
             </Modal>
         </SettingsLayout>
+    );
+}/* ------------------------------------------------------------------ *
+ * Flexible onboarding: trial vs immediate subscription.
+ *
+ * Extracted into its own component so the create-institution form stays
+ * readable. It reads/writes THROUGH the parent's useForm state (data/setData)
+ * so the values submit with everything else.
+ * ------------------------------------------------------------------ */
+function OnboardingFields({ data, setData, errors }) {
+    const modes = [
+        { value: 'trial', label: '7-Day Free Trial', desc: 'Full access, expires in 7 days' },
+        { value: 'subscription', label: 'Immediate Subscription', desc: 'Permanent, full access now' },
+    ];
+
+    return (
+        <div className="space-y-4 rounded-lg border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
+                Billing &amp; Onboarding
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {modes.map((option) => {
+                    const active = data.onboarding_mode === option.value;
+
+                    return (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setData('onboarding_mode', option.value)}
+                            className={`rounded-xl border p-3 text-left transition-all ${
+                                active
+                                    ? 'border-[var(--accent)] bg-white ring-2 ring-[var(--accent-ring)]'
+                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                            }`}
+                        >
+                            <span className="block text-sm font-bold text-slate-800">{option.label}</span>
+                            <span className="mt-0.5 block text-[11px] text-slate-500">{option.desc}</span>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {data.onboarding_mode === 'trial' ? (
+                <Field
+                    label="Trial length (days)"
+                    name="trial_days"
+                    type="number"
+                    value={data.trial_days}
+                    error={errors.trial_days}
+                    hint="Defaults to 7 days. A reminder email is sent automatically as it nears its end."
+                    onChange={(e) => setData('trial_days', e.target.value)}
+                />
+            ) : (
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <Field
+                        label="Plan name"
+                        name="subscription_plan"
+                        value={data.subscription_plan}
+                        error={errors.subscription_plan}
+                        placeholder="e.g. Standard"
+                        onChange={(e) => setData('subscription_plan', e.target.value)}
+                    />
+                    <Field
+                        label="Monthly amount"
+                        name="subscription_amount"
+                        type="number"
+                        value={data.subscription_amount}
+                        error={errors.subscription_amount}
+                        placeholder="0.00"
+                        onChange={(e) => setData('subscription_amount', e.target.value)}
+                    />
+                </div>
+            )}
+
+            <p className="text-[11px] leading-relaxed text-slate-500">
+                A professional welcome email is sent automatically to the admin, stating their billing
+                status clearly.
+            </p>
+        </div>
     );
 }

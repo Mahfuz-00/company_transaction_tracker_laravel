@@ -7,9 +7,14 @@ import Button from '@/Components/UI/Button';
 import Input from '@/Components/UI/Input';
 import Card from '@/Components/UI/Card';
 import { Spinner } from '@/Components/UI/Loading';
+import ThemePreviewFrame from '@/Components/ThemePreviewFrame';
+import ThemedText from '@/Components/UI/ThemedText';
+import useThemedText from '@/Utils/useThemedText';
 
 export default function Settings({ auth, currencies, currencySettings, canManage }) {
     const { props } = usePage();
+    // Theme-aware text classes, so the live preview adapts to dark mode + accent.
+    const { tx } = useThemedText();
     const source = currencySettings || props?.currency || {};
 
     const { data, setData, post, processing } = useForm({
@@ -314,8 +319,8 @@ export default function Settings({ auth, currencies, currencySettings, canManage
                     <Card className="lg:col-span-5 p-6 sm:p-7 border border-slate-200/80 shadow-xs rounded-2xl bg-gradient-to-b from-white to-slate-50/50 sticky top-6 space-y-6">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                             <div>
-                                <h3 className="text-base font-bold text-slate-900">Live Formatting Preview</h3>
-                                <p className="mt-0.5 text-xs text-slate-500">Test how numbers appear in real-time</p>
+                                <ThemedText as="h3" variant="heading" className="text-base">Live Formatting Preview</ThemedText>
+                                <ThemedText as="p" variant="muted" className="mt-0.5 text-xs">Test how numbers appear in real-time</ThemedText>
                             </div>
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100">
                                 Real-time
@@ -334,19 +339,36 @@ export default function Settings({ auth, currencies, currencySettings, canManage
 
                         <div className="space-y-4">
                             <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-                                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Standard Format</div>
-                                <div className="mt-1 text-2xl font-bold text-slate-900 tracking-tight" role="status" aria-live="polite">
+                                <ThemedText as="div" variant="overline">Standard Format</ThemedText>
+                                <div className={tx('heading', 'mt-1 text-2xl tracking-tight')} role="status" aria-live="polite">
                                     {formatNumber(previewValue, resolvedSettings, currencies)}
                                 </div>
                             </div>
 
                             <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-2xs">
-                                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Abbreviated Output</div>
-                                <div className="mt-1 text-2xl font-bold text-indigo-600 tracking-tight" role="status" aria-live="polite">
+                                <ThemedText as="div" variant="overline">Abbreviated Output</ThemedText>
+                                <div className={tx('accent', 'mt-1 text-2xl tracking-tight')} role="status" aria-live="polite">
                                     {data.abbreviations ? formatNumber(previewValue, { ...resolvedSettings, abbreviated: true }, currencies) : <span className="text-slate-400 font-normal text-base">— Disabled —</span>}
                                 </div>
                             </div>
                         </div>
+
+                        {/*
+                         * THEME-REACTIVE PREVIEW.
+                         *
+                         * A miniature of a real card that reads the ACTIVE theme
+                         * from the shared ThemeProvider context, so switching
+                         * accent / light-dark / radius / font in the Theme
+                         * Customizer repaints THIS block instantly - no reload.
+                         */}
+                        <ThemePreviewFrame
+                            title="Theme-aware preview"
+                            subtitle="Follows your live theme"
+                            rows={[
+                                { label: 'Standard', value: formatNumber(previewValue, resolvedSettings, currencies) },
+                                { label: 'Abbreviated', value: data.abbreviations ? formatNumber(previewValue, { ...resolvedSettings, abbreviated: true }, currencies) : '—' },
+                            ]}
+                        />
                     </Card>
 
                 </form>

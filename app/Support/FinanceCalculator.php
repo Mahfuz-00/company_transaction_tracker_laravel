@@ -42,6 +42,28 @@ class FinanceCalculator
         $this->institution = $institution ?? Institution::current();
     }
 
+    /**
+     * Run a figure computation pinned to THIS calculator's institution.
+     *
+     * The calculator is used both in normal scoped requests (where the active
+     * tenant already equals the institution) and in the Software Super Admin's
+     * registry, which computes several institutions in one request while the
+     * manager may be global. Pinning here - via withTenant, which always restores
+     * the previous context - guarantees each figure is that institution's own,
+     * with no leakage into the surrounding query stream.
+     */
+    protected function scoped(callable $callback): mixed
+    {
+        $tenantId = $this->institution?->id;
+
+        // No institution (a fresh install): run as-is under the active context.
+        if ($tenantId === null) {
+            return $callback();
+        }
+
+        return app(\App\Support\TenantManager::class)->withTenant((int) $tenantId, $callback);
+    }
+
     /* ------------------------------------------------------------------ *
      * Period helpers
      * ------------------------------------------------------------------ */
@@ -69,63 +91,71 @@ class FinanceCalculator
     /** Total meals eaten in a month. */
     public function mealsForMonth(string $month): int
     {
-        [$start, $end] = self::monthBounds($month);
+        return $this->scoped(function () use ($month) {
+            [$start, $end] = self::monthBounds($month);
 
-        return (int) MealEntry::query()
-            ->whereDate('date', '>=', $start->toDateString())
-            ->whereDate('date', '<=', $end->toDateString())
-            ->selectRaw('COALESCE(SUM(breakfast + lunch + dinner), 0) as total')
-            ->value('total');
+            return (int) MealEntry::query()
+                ->whereDate('date', '>=', $start->toDateString())
+                ->whereDate('date', '<=', $end->toDateString())
+                ->selectRaw('COALESCE(SUM(breakfast + lunch + dinner), 0) as total')
+                ->value('total');
+        });
     }
 
     /** Total expense (Cash Out) in a month. Subsidy reversals are excluded. */
     public function expensesForMonth(string $month): float
     {
-        [$start, $end] = self::monthBounds($month);
+        return $this->scoped(function () use ($month) {
+            [$start, $end] = self::monthBounds($month);
 
-        return (float) Transaction::query()
-            ->where('type', 'out')
-            // An out-transaction whose meal expense was later reversed is no
-            // longer a real expense - exclude it so the month total falls.
-            ->where(function ($q) {
-                $q->where('transactions.source', '!=', 'meal_expense')
-                    ->orWhereNotExists(function ($sub) {
-                        $sub->select(DB::raw(1))
-                            ->from('meal_expenses')
-                            ->whereColumn('meal_expenses.transaction_id', 'transactions.id')
-                            ->whereNotNull('meal_expenses.reversed_at');
-                    });
-            })
-            ->whereDate('created_at', '>=', $start->toDateString())
-            ->whereDate('created_at', '<=', $end->toDateString())
-            ->sum('amount');
+            return (float) Transaction::query()
+                ->where('type', 'out')
+                // An out-transaction whose meal expense was later reversed is no
+                // longer a real expense - exclude it so the month total falls.
+                ->where(function ($q) {
+                    $q->where('transactions.source', '!=', 'meal_expense')
+                        ->orWhereNotExists(function ($sub) {
+                            $sub->select(DB::raw(1))
+                                ->from('meal_expenses')
+                                ->whereColumn('meal_expenses.transaction_id', 'transactions.id')
+                                ->whereNotNull('meal_expenses.reversed_at');
+                        });
+                })
+                ->whereDate('created_at', '>=', $start->toDateString())
+                ->whereDate('created_at', '<=', $end->toDateString())
+                ->sum('amount');
+        });
     }
 
     /** Personal deposits (Cash In) in a month. */
     public function depositsForMonth(string $month): float
     {
-        [$start, $end] = self::monthBounds($month);
+        return $this->scoped(function () use ($month) {
+            [$start, $end] = self::monthBounds($month);
 
-        return (float) Transaction::query()
-            ->where('type', 'in')
-            // Reversal entries (cash-ins posted to cancel a reversed expense)
-            // are not deposits - exclude them from the deposit figure.
-            ->where(function ($q) {
-                $q->whereNull('transactions.category')
-                    ->orWhere('transactions.category', '!=', 'Expense Reversal');
-            })
-            ->whereDate('created_at', '>=', $start->toDateString())
-            ->whereDate('created_at', '<=', $end->toDateString())
-            ->sum('amount');
+            return (float) Transaction::query()
+                ->where('type', 'in')
+                // Reversal entries (cash-ins posted to cancel a reversed expense)
+                // are not deposits - exclude them from the deposit figure.
+                ->where(function ($q) {
+                    $q->whereNull('transactions.category')
+                        ->orWhere('transactions.category', '!=', 'Expense Reversal');
+                })
+                ->whereDate('created_at', '>=', $start->toDateString())
+                ->whereDate('created_at', '<=', $end->toDateString())
+                ->sum('amount');
+        });
     }
 
     /** Subsidy money recorded for a month. */
     public function subsidiesForMonth(string $month): float
     {
-        return (float) Subsidy::query()
-            ->active()
-            ->forMonth($month)
-            ->sum('amount');
+        return $this->scoped(function () use ($month) {
+            return (float) Subsidy::query()
+                ->active()
+                ->forMonth($month)
+                ->sum('amount');
+        });
     }
 
     /**
@@ -134,12 +164,14 @@ class FinanceCalculator
      */
     public function perMealRate(string $month): float
     {
-        $settings = MealRateSetting::current();
+        return $this->scoped(function () use ($month) {
+            $settings = MealRateSetting::current();
 
-        return $settings->resolveRate(
-            $this->expensesForMonth($month),
-            $this->mealsForMonth($month)
-        );
+            return $settings->resolveRate(
+                $this->expensesForMonth($month),
+                $this->mealsForMonth($month)
+            );
+        });
     }
 
     /* ------------------------------------------------------------------ *
@@ -170,7 +202,8 @@ class FinanceCalculator
         // What members still owe the pool once their own deposits are counted.
         $memberShortfall = max(0, round($mealCost - $deposits, 2));
 
-        $members = $memberCount ?? Student::active()->count();
+        // Roster size must be counted for THIS institution, not platform-wide.
+        $members = $memberCount ?? $this->scoped(fn () => Student::active()->count());
 
         return [
             'month' => $month,
@@ -220,36 +253,45 @@ class FinanceCalculator
         $rate = $this->perMealRate($month);
         $subsidyPool = $this->subsidiesForMonth($month);
 
-        $mealCounts = MealEntry::query()
-            ->whereDate('date', '>=', $start->toDateString())
-            ->whereDate('date', '<=', $end->toDateString())
-            ->select('student_id')
-            ->selectRaw('COALESCE(SUM(breakfast), 0) as breakfast')
-            ->selectRaw('COALESCE(SUM(lunch), 0) as lunch')
-            ->selectRaw('COALESCE(SUM(dinner), 0) as dinner')
-            ->selectRaw('COALESCE(SUM(breakfast + lunch + dinner), 0) as meals')
-            ->groupBy('student_id')
-            ->get()
-            ->keyBy('student_id');
+        /*
+         * The three aggregates below are pinned to this calculator's institution
+         * so a multi-institution caller (the SSA registry) gets EACH institution's
+         * own roster, meals and deposits - never a platform-wide blend.
+         */
+        [$mealCounts, $depositTotals, $members] = $this->scoped(function () use ($start, $end) {
+            $mealCounts = MealEntry::query()
+                ->whereDate('date', '>=', $start->toDateString())
+                ->whereDate('date', '<=', $end->toDateString())
+                ->select('student_id')
+                ->selectRaw('COALESCE(SUM(breakfast), 0) as breakfast')
+                ->selectRaw('COALESCE(SUM(lunch), 0) as lunch')
+                ->selectRaw('COALESCE(SUM(dinner), 0) as dinner')
+                ->selectRaw('COALESCE(SUM(breakfast + lunch + dinner), 0) as meals')
+                ->groupBy('student_id')
+                ->get()
+                ->keyBy('student_id');
 
-        // Deposits are sourced from the deposits table (not the ledger) so that
-        // a reversed deposit is excluded the moment it is flagged - this is what
-        // makes a reversal immediately drop the member's balance. Only deposits
-        // that have NOT been reversed count.
-        $depositTotals = Deposit::query()
-            ->whereNull('reversed_at')
-            ->whereDate('created_at', '>=', $start->toDateString())
-            ->whereDate('created_at', '<=', $end->toDateString())
-            ->select('student_id')
-            ->selectRaw('COALESCE(SUM(amount), 0) as total')
-            ->groupBy('student_id')
-            ->get()
-            ->keyBy('student_id');
+            // Deposits are sourced from the deposits table (not the ledger) so
+            // that a reversed deposit is excluded the moment it is flagged - this
+            // is what makes a reversal immediately drop the balance. Only
+            // deposits that have NOT been reversed count.
+            $depositTotals = Deposit::query()
+                ->whereNull('reversed_at')
+                ->whereDate('created_at', '>=', $start->toDateString())
+                ->whereDate('created_at', '<=', $end->toDateString())
+                ->select('student_id')
+                ->selectRaw('COALESCE(SUM(amount), 0) as total')
+                ->groupBy('student_id')
+                ->get()
+                ->keyBy('student_id');
 
-        $members = Student::query()
-            ->with('department:id,name')
-            ->orderBy('name')
-            ->get();
+            $members = Student::query()
+                ->with('department:id,name')
+                ->orderBy('name')
+                ->get();
+
+            return [$mealCounts, $depositTotals, $members];
+        });
 
         // Split the subsidy pool evenly for a per-head contribution figure.
         $subsidyPerHead = $members->count() > 0

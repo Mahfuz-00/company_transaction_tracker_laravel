@@ -59,6 +59,12 @@ class RolesAndPermissionsSeeder extends Seeder
             'institutions' => [
                 'institutions.view', 'institutions.manage',
             ],
+            // SSA business monitoring: the cross-tenant control tower. These are
+            // granted to the GLOBAL role ONLY - no institution-scoped role may
+            // ever see platform-wide revenue/health (see the tier notes below).
+            'monitoring' => [
+                'monitoring.view', 'monitoring.manage',
+            ],
             // Member claims & disputes. Members raise them (claims.submit);
             // managers review them (claims.review).
             'claims' => [
@@ -74,6 +80,17 @@ class RolesAndPermissionsSeeder extends Seeder
             'emails' => [
                 'emails.view',
             ],
+            // Currency formatting. A WORKSPACE setting: an Institution Admin
+            // manages their own institution's format; the SSA manages the one
+            // they have switched into. Individuals (members/managers) can view
+            // but never change it.
+            'currency' => [
+                'currency.view', 'currency.manage',
+            ],
+            // SSA pricing-tier management (create/edit plan definitions).
+            'plans' => [
+                'plans.view', 'plans.manage',
+            ],
         ];
 
         $allPermissions = [];
@@ -87,13 +104,24 @@ class RolesAndPermissionsSeeder extends Seeder
         }
 
         /* -------------------------------------------------------------- *
-         * Two-tier admin structure
+         * THE 3-TIER ACCESS HIERARCHY
          *
-         *  - Software Super Admin : global. Owns platform settings (currency,
-         *    institution type, roles) and sees every institution's audit trail.
-         *  - Institution Admin    : scoped to one institution. Runs members,
-         *    meals, deposits, subsidies and vendors for their own body, and
-         *    sees their own institution's audit trail.
+         *   Tier 1 - Software Super Admin (GLOBAL)
+         *     Platform oversight, institution provisioning, SaaS billing/health
+         *     monitoring, cross-tenant dashboard switching. The ONLY role that
+         *     holds monitoring.* / institutions.* and the only one whose queries
+         *     can run without a tenant scope.
+         *
+         *   Tier 2 - Institution Admin & Meal Manager (INSTITUTION-SCOPED)
+         *     Everything operational WITHIN one institution; zero cross-tenant
+         *     reach. They cannot see or hold the global monitoring/registry
+         *     permissions, and every query they run is auto-filtered to their
+         *     institution_id by the model tenant scope.
+         *
+         *   Tier 3 - Member (PERSONAL)
+         *     Personal dashboard, deposits, meal history, balance, claims. No
+         *     administrative module is reachable. Their queries are further
+         *     narrowed to their own records in the member controllers.
          * -------------------------------------------------------------- */
         // Exactly four core roles - no legacy aliases. Any account still on a
         // removed role was migrated by the streamline_core_roles migration.
@@ -102,7 +130,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $manager = Role::firstOrCreate(['name' => 'Meal Manager']);
         $member = Role::firstOrCreate(['name' => 'Member']);
 
-        // Software Super Admin gets everything, globally.
+        // ---- TIER 1: global role gets EVERYTHING ----------------------------
         $super->syncPermissions($allPermissions);
 
         // Institution Admin: everything operational, scoped to their body.
@@ -119,12 +147,15 @@ class RolesAndPermissionsSeeder extends Seeder
             $definitions['audit'],
             $definitions['institution'],
             $definitions['appearance'],
+            $definitions['currency'],
             $definitions['claims'],
             // Institution Admins can broadcast announcements to their institution.
             $definitions['notifications'],
             $definitions['emails'],
             ['users.view', 'users.create', 'users.edit', 'roles.view']
         );
+        // TIER 2: strictly within ONE institution. Deliberately EXCLUDES
+        // monitoring.* and institutions.* (Tier 1 only).
         $instAdmin->syncPermissions($instAdminPerms);
 
         // Meal Manager runs the mess: transactions + meals + roster + vendors.

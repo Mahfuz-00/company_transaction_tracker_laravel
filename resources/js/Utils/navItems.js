@@ -97,12 +97,82 @@ export const NAV_SECTIONS = [
      * Management / Administration module.
      * ------------------------------------------------------------------ */
     {
-        heading: 'Overview',
-        roles: ['Software Super Admin', 'Institution Admin', 'Meal Manager'],
+        /*
+         * SOFTWARE SUPER ADMIN - PLATFORM AREA.
+         *
+         * The SSA is a GLOBAL operator, not a tenant user: their navigation is
+         * entirely separate from any workspace. They never get the tenant
+         * Dashboard, tenant Analytics, Meal Management, or Claim Review here -
+         * the only way into a tenant's operational sheets is the "Access
+         * Dashboard" action inside the Institution Directory, which switches the
+         * session tenant and reveals the tenant modules below.
+         */
+        heading: 'Platform Overview',
+        roles: ['Software Super Admin'],
         rolesOnly: true,
         items: [
             {
-                // Org-wide dashboard for staff.
+                // The SSA's landing page IS the platform monitoring dashboard.
+                label: 'Business Dashboard',
+                route: 'ssa.dashboard',
+                match: 'ssa.dashboard',
+                icon: 'dashboard',
+            },
+            {
+                // Platform-wide SaaS financial engine (MRR/ARR, conversion).
+                label: 'SaaS Analytics',
+                route: 'ssa.analytics',
+                match: 'ssa.analytics',
+                icon: 'analytics',
+            },
+            {
+                label: 'Institution Directory',
+                route: 'settings.institutions.index',
+                match: 'settings.institutions.*',
+                icon: 'building',
+            },
+            {
+                label: 'Trial & Subscriptions',
+                route: 'settings.trials.index',
+                match: 'settings.trials.*',
+                icon: 'bank',
+            },
+            {
+                // SSA-only: create/edit pricing tiers and assign them.
+                label: 'Pricing & Plans',
+                route: 'ssa.plans.index',
+                match: 'ssa.plans.*',
+                icon: 'bank',
+                permission: 'plans.view',
+            },
+            {
+                label: 'Security & Audit',
+                route: 'ssa.audit.index',
+                match: 'ssa.audit.*',
+                icon: 'clipboard',
+            },
+            {
+                // Public demo requests / leads the SSA can approve into trials.
+                label: 'Landing Enquiries',
+                route: 'ssa.enquiries.index',
+                match: 'ssa.enquiries.*',
+                icon: 'clipboard',
+            },
+            {
+                label: 'Broadcasts',
+                route: 'ssa.broadcasts.index',
+                match: 'ssa.broadcasts.*',
+                icon: 'mail',
+            },
+        ],
+    },
+    {
+        heading: 'Workspace Overview',
+        roles: ['Institution Admin', 'Meal Manager'],
+        rolesOnly: true,
+        items: [
+            {
+                // Org-wide dashboard for tenant staff.
                 label: 'Dashboard',
                 route: 'dashboard',
                 match: 'dashboard',
@@ -118,9 +188,23 @@ export const NAV_SECTIONS = [
         ],
     },
     {
+        /*
+         * TENANT MEAL MANAGEMENT - only reachable inside a workspace.
+         *
+         * Deliberately EXCLUDES the Software Super Admin: the SSA must never see
+         * individual meal sheets on their primary workspace. When an SSA uses
+         * "Access Dashboard" from the Institution Directory, they are switched
+         * into a tenant and this whole section can also be surfaced for that
+         * session via the `can()` check on the underlying permissions - but the
+         * SSA's DEFAULT nav (above) shows none of it.
+         */
         heading: 'Meal Management',
-        roles: ['Software Super Admin', 'Institution Admin', 'Meal Manager'],
+        roles: ['Institution Admin', 'Meal Manager'],
         rolesOnly: true,
+        // Also shown to an SSA who has explicitly switched INTO a workspace
+        // (session tenant set). The renderer checks `tenantScoped` against the
+        // `switched` flag passed from the tenant prop.
+        tenantScoped: true,
         items: [
             {
                 // termKey lets the label follow the institution type
@@ -209,18 +293,40 @@ export const NAV_SECTIONS = [
             },
             {
                 // User Management lives in the Account module (above Settings).
+                // Admins and the SSA ONLY - a Meal Manager never sees it.
                 label: 'User Manager',
                 route: 'settings.users.index',
                 match: 'settings.users.*',
                 icon: 'users',
                 permission: 'users.view',
+                roles: ['Software Super Admin', 'Institution Admin'],
+                rolesOnly: true,
+            },
+            {
+                // Theme Customizer: a dedicated settings sub-module available to
+                // EVERY user. No permission gate - personalising one's own view
+                // is a personal preference, not an administrative act.
+                label: 'Theme Customizer',
+                route: 'settings.theme.edit',
+                match: 'settings.theme.*',
+                icon: 'settings',
+                permission: null,
             },
         ],
     },
     {
-        heading: 'Administration',
-        roles: ['Software Super Admin', 'Institution Admin', 'Meal Manager'],
+        /*
+         * WORKSPACE SETTINGS - institution-scoped ONLY.
+         *
+         * The Software Super Admin is deliberately EXCLUDED here: these modules
+         * (institution profile, currency, subsidy sources) configure ONE tenant
+         * and belong strictly inside that tenant's workspace. The SSA reaches
+         * them only by switching into an institution, never from the global view.
+         */
+        heading: 'Workspace Settings',
+        roles: ['Institution Admin', 'Meal Manager'],
         rolesOnly: true,
+        tenantScoped: true,
         items: [
             {
                 label: 'Settings',
@@ -237,13 +343,12 @@ export const NAV_SECTIONS = [
                         permission: 'institution.view',
                     },
                     {
+                        // Currency format for THIS institution. Institution Admins
+                        // manage it (currency.manage); managers can view only.
                         label: 'Currency Manager',
                         route: 'settings.currency',
                         match: 'settings.currency',
-                        // The route itself is auth-only, but the Administration
-                        // section is staff-only UI. users.view is the proxy for
-                        // "trusted staff", so members never see this group.
-                        permission: 'users.view',
+                        permission: 'currency.view',
                     },
                     {
                         label: 'Subsidy Sources',
@@ -252,24 +357,6 @@ export const NAV_SECTIONS = [
                         permission: 'subsidies.manage',
                     },
                     {
-                        // Software Super Admin only: every institution on the
-                        // platform, with its administrators.
-                        label: 'Institution Registry',
-                        route: 'settings.institutions.index',
-                        match: 'settings.institutions.*',
-                        permission: 'institutions.view',
-                    },
-                    {
-                        label: 'Role Manager',
-                        route: 'settings.roles.index',
-                        match: 'settings.roles.*',
-                        permission: 'roles.view',
-                    },
-                    // NOTE: User Manager intentionally lives in the Account section
-                    // above (not here), per the required sidebar ordering.
-                    {
-                        // Audit trail: visible to Software Super Admins (global)
-                        // and Institution Admins (their own institution).
                         label: 'Activity Log',
                         route: 'settings.activity.index',
                         match: 'settings.activity.*',
@@ -277,14 +364,61 @@ export const NAV_SECTIONS = [
                         permission: 'audit.view',
                     },
                     {
-                        // Email Log / Outbox: every dispatched email with its
-                        // rendered HTML. SSA = global; IA / Meal Manager = own
-                        // institution (scoped in the controller).
                         label: 'Email Log',
                         route: 'settings.emails.index',
                         match: 'settings.emails.*',
                         icon: 'mail',
                         permission: 'emails.view',
+                    },
+                ],
+            },
+        ],
+    },
+    {
+        /*
+         * PLATFORM SETTINGS - Software Super Admin ONLY.
+         *
+         * Roles and the platform-wide audit/email streams. The SSA is the only
+         * role that manages role definitions, and the only one whose audit and
+         * email views span every tenant. No tenant-scoped role reaches this
+         * group (rolesOnly + roles), and none of these items appear to a member.
+         */
+        heading: 'Platform Settings',
+        roles: ['Software Super Admin'],
+        rolesOnly: true,
+        items: [
+            {
+                label: 'Platform Settings',
+                icon: 'settings',
+                permission: null,
+                children: [
+                    {
+                        label: 'Role Manager',
+                        route: 'settings.roles.index',
+                        match: 'settings.roles.*',
+                        permission: 'roles.view',
+                    },
+                    {
+                        label: 'Global Audit Log',
+                        route: 'settings.activity.index',
+                        match: 'settings.activity.*',
+                        icon: 'clipboard',
+                        permission: 'audit.view',
+                    },
+                    {
+                        label: 'Email Log',
+                        route: 'settings.emails.index',
+                        match: 'settings.emails.*',
+                        icon: 'mail',
+                        permission: 'emails.view',
+                    },
+                    {
+                        // SSA-only: pricing tiers + plan management.
+                        label: 'Pricing & Plans',
+                        route: 'ssa.plans.index',
+                        match: 'ssa.plans.*',
+                        icon: 'bank',
+                        permission: 'plans.view',
                     },
                 ],
             },
@@ -310,6 +444,15 @@ export const NAV_SECTIONS = [
                 roles: ['Member'],
                 rolesOnly: true,
             },
+            {
+                // Theme Customizer is a per-user preference, so members get it too.
+                label: 'Theme Customizer',
+                route: 'settings.theme.edit',
+                match: 'settings.theme.*',
+                icon: 'settings',
+                roles: ['Member'],
+                rolesOnly: true,
+            },
         ],
     },
 ];
@@ -321,7 +464,7 @@ export const NAV_SECTIONS = [
  *
  * @param {function(string|string[]): boolean} isAllowed - predicate from useCan
  */
-export function buildVisibleNav(sections, { can, hasRole } = {}) {
+export function buildVisibleNav(sections, { can, hasRole, switched = false } = {}) {
     if (typeof can !== 'function') return [];
 
     const allows = (permission, roles, rolesOnly = false) => {
@@ -348,10 +491,26 @@ export function buildVisibleNav(sections, { can, hasRole } = {}) {
 
     return sections
         .map((section) => {
-            // SECTION-LEVEL GATE: a whole section can be role-exclusive (e.g. the
-            // member area, or the staff areas). If the section does not pass, it
-            // is dropped entirely before its items are even considered.
-            if (!allows(section.permission, section.roles, section.rolesOnly)) {
+            /*
+             * SECTION-LEVEL GATE.
+             *
+             * `tenantScoped` sections (Meal Management and friends) belong to a
+             * WORKSPACE and are normally hidden from the global SSA. But an SSA
+             * who has explicitly switched into an institution (session tenant
+             * set -> `switched === true`) IS operating inside that workspace and
+             * should see them. So a tenantScoped section is allowed for:
+             *   - the normal workspace roles (Institution Admin / Meal Manager), OR
+             *   - any user while they are in a switched tenant session.
+             */
+            if (section.tenantScoped) {
+                const normalRoles = allows(section.permission, section.roles, section.rolesOnly);
+
+                if (!normalRoles && !switched) {
+                    return null;
+                }
+            } else if (!allows(section.permission, section.roles, section.rolesOnly)) {
+                // A whole section can be role-exclusive (member area, staff areas).
+                // If it does not pass, it is dropped before items are considered.
                 return null;
             }
 

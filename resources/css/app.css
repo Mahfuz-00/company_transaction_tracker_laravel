@@ -4,16 +4,48 @@
 
 @layer base {
   body {
-    font-family: 'Figtree', 'Hind Siliguri', sans-serif;
+    font-family: var(--font-family, 'Figtree', 'Hind Siliguri', sans-serif);
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    transition: background-color 200ms ease, color 200ms ease;
   }
 
-  /* Theme variables. Overwritten at runtime by ThemeProvider once the
-     institution's settings are known, so these are only the fallbacks. */
+  /*
+   * ============================================================
+   * LIVE THEME TOKENS
+   * ============================================================
+   * Every surface in the app reads its colours through these semantic
+   * custom properties rather than a hard-coded Tailwind colour, so flipping
+   * `data-theme-mode` (or the `.dark` class) on <html> repaints the WHOLE UI
+   * instantly - background, sidebar, cards, borders and text - with no reload.
+   *
+   * The values below are the LIGHT defaults. ThemeProvider overwrites them at
+   * runtime from the user's saved theme (localStorage + database). The dark
+   * values live in the `.dark` block further down and are switched on by the
+   * same provider.
+   */
   :root {
+    /* Accent / brand */
     --accent: #4f46e5;
     --accent-soft: #eef2ff;
     --accent-ring: #4f46e533;
     --radius: 0.75rem;
+
+    /* Semantic surfaces (light) */
+    --bg-color: #f8fafc;          /* app background behind cards */
+    --surface: #ffffff;           /* cards, panels, sidebar */
+    --surface-soft: #f8fafc;      /* subtle inset panels / hover */
+    --surface-muted: #f1f5f9;     /* chips, dividers */
+    --border-color: #e2e8f0;      /* card + table borders */
+
+    /* Semantic text */
+    --text-primary: #0f172a;      /* headings, primary copy */
+    --text-secondary: #475569;    /* body copy */
+    --text-muted: #94a3b8;        /* captions, hints */
+
+    /* Layout density (overwritten by the provider) */
+    --font-scale: 15px;
+    --font-family: 'Figtree', 'Hind Siliguri', sans-serif;
   }
 }
 
@@ -47,6 +79,60 @@
       animation: none;
     }
   }
+
+  /*
+   * GLOBAL LANDING/AUTH ENTRANCE ANIMATIONS (`wa-*`).
+   *
+   * These were originally declared only inside the landing page's
+   * LandingAnimationStyles component, which meant the login / register screens
+   * had no access to them and looked static by comparison. Declaring the
+   * keyframes here makes the SAME animation vocabulary available everywhere -
+   * the landing page and the guest/auth shell share one source, so the two look
+   * like one continuous product. Delay utilities stagger child entrances.
+   *
+   * Only opacity/transform animate (compositor-friendly, no layout shift) and
+   * everything is disabled under prefers-reduced-motion.
+   */
+  .wa-rise { animation: wa-rise 0.75s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .wa-fade { animation: wa-fade 0.9s ease-out both; }
+  .wa-float { animation: wa-float 6s ease-in-out infinite; }
+  .wa-pulse { animation: wa-pulse 5s ease-in-out infinite; }
+
+  .wa-delay-1 { animation-delay: 0.08s; }
+  .wa-delay-2 { animation-delay: 0.16s; }
+  .wa-delay-3 { animation-delay: 0.24s; }
+  .wa-delay-4 { animation-delay: 0.32s; }
+  .wa-delay-5 { animation-delay: 0.4s; }
+  .wa-delay-6 { animation-delay: 0.48s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wa-rise,
+    .wa-fade,
+    .wa-float,
+    .wa-pulse {
+      animation: none !important;
+    }
+  }
+}
+
+@keyframes wa-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes wa-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes wa-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes wa-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.08); }
 }
 
 @keyframes page-in {
@@ -80,10 +166,310 @@
   }
 }
 
-/* Themed focus rings instead of a hard-coded indigo. */
+/* ------------------------------------------------------------------ *
+ * DARK MODE
+ *
+ * Switched on by ThemeProvider adding `.dark` to <html>. Because every
+ * component reads the semantic tokens below (not raw slate-* classes), this
+ * single block inverts the entire application.
+ * ------------------------------------------------------------------ */
+.dark {
+  --bg-color: #0b1120;
+  --surface: #111827;
+  --surface-soft: #1e293b;
+  --surface-muted: #1e293b;
+  --border-color: #1f2937;
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+
+  /* Accent tints need to darken for contrast against the dark surface. */
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, #0b1120);
+}
+
+/*
+ * ------------------------------------------------------------------ *
+ * GLOBAL DARK-MODE UTILITY REMAP
+ *
+ * The existing components were authored with literal Tailwind colours
+ * (bg-white, text-slate-900, border-slate-200, ...). Rewriting every one of
+ * them for a theme would be enormous and error-prone. Instead, inside `.dark`
+ * we REMAP the handful of neutral utility classes to the semantic tokens, so a
+ * single `.dark` flip on <html> recolours the whole application instantly -
+ * backgrounds, cards, borders, headings and body text alike.
+ *
+ * Brand/status colours (emerald, rose, amber, sky, indigo accents) are left
+ * alone: they are meaningful signals and read fine on both surfaces.
+ *
+ * Specificity: these selectors match on `.dark <class>`, one class more than
+ * the utility itself, so they win without !important - EXCEPT where a
+ * component pairs two utilities (bg-white + hover:bg-slate-50), which the
+ * `hover:` rules below handle explicitly.
+ * ------------------------------------------------------------------ */
+.dark body {
+  background-color: var(--bg-color);
+}
+
+/* Surfaces: white / near-white panels become the dark surface. */
+.dark .bg-white,
+.dark .bg-white\/90,
+.dark .bg-white\/80,
+.dark .bg-white\/70,
+.dark .bg-white\/60,
+.dark .bg-white\/50 {
+  background-color: var(--surface) !important;
+}
+
+.dark .bg-gray-50,
+.dark .bg-slate-50,
+.dark .bg-slate-50\/80,
+.dark .bg-slate-50\/60,
+.dark .bg-slate-50\/50,
+.dark .bg-slate-100,
+.dark .bg-slate-100\/80 {
+  background-color: var(--surface-soft) !important;
+}
+
+.dark .bg-slate-200 {
+  background-color: var(--surface-muted) !important;
+}
+
+/*
+ * TEXT - full neutral scale, so NOTHING is left unreadable in dark mode.
+ *
+ * The three semantic text tokens map the Tailwind slate/gray/neutral scales:
+ *   - darkest (900/800/700)  -> --text-primary   (headings, body)
+ *   - mid     (600/500)      -> --text-secondary (sub-labels, secondary copy)
+ *   - lightest(400/300/200)  -> --text-muted     (captions, placeholders, hints)
+ *
+ * Every slate AND gray AND neutral variant is listed, because components were
+ * authored against all three names; missing one leaks a dark-on-dark or
+ * light-on-light label - the exact "subtitles fail to adapt" bug.
+ */
+.dark .text-slate-900, .dark .text-slate-800, .dark .text-slate-700,
+.dark .text-gray-900, .dark .text-gray-800, .dark .text-gray-700,
+.dark .text-neutral-900, .dark .text-neutral-800, .dark .text-neutral-700,
+.dark .text-zinc-900, .dark .text-zinc-800 {
+  color: var(--text-primary) !important;
+}
+
+.dark .text-slate-600, .dark .text-slate-500,
+.dark .text-gray-600, .dark .text-gray-500,
+.dark .text-neutral-600, .dark .text-neutral-500,
+.dark .text-zinc-600, .dark .text-zinc-500 {
+  color: var(--text-secondary) !important;
+}
+
+.dark .text-slate-400, .dark .text-slate-300, .dark .text-slate-200,
+.dark .text-gray-400, .dark .text-gray-300, .dark .text-gray-200,
+.dark .text-neutral-400, .dark .text-neutral-300,
+.dark .text-zinc-400, .dark .text-zinc-300 {
+  color: var(--text-muted) !important;
+}
+
+/*
+ * BORDERS - full neutral scale. A border left at its light value draws a
+ * bright line across a dark card (or a dark line across a light one); mapping
+ * the whole scale to --border-color keeps every divider correct.
+ */
+.dark .border-slate-200, .dark .border-slate-200\/80, .dark .border-slate-200\/60,
+.dark .border-slate-100, .dark .border-slate-300, .dark .border-slate-400,
+.dark .border-gray-200, .dark .border-gray-200\/80, .dark .border-gray-100,
+.dark .border-gray-300, .dark .border-neutral-200, .dark .border-zinc-200,
+.dark .border-white {
+  border-color: var(--border-color) !important;
+}
+
+/*
+ * SUBTITLE / HINT HELPERS.
+ *
+ * A few components use small semantic helper classes (.subtitle, .hint,
+ * .text-muted) for secondary copy rather than a Tailwind colour. They must
+ * follow the theme too, or the subtitle stays dark on a dark surface.
+ */
+.dark .subtitle,
+.dark .hint {
+  color: var(--text-muted) !important;
+}
+
+.dark .text-muted { color: var(--text-muted) !important; }
+.dark .text-secondary { color: var(--text-secondary) !important; }
+.dark .text-primary { color: var(--text-primary) !important; }
+
+/*
+ * PLACEHOLDERS across every neutral input, plus selects' option list.
+ */
+.dark input::placeholder,
+.dark textarea::placeholder,
+.dark select::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Native <option> popups render with the OS palette - hint them to match. */
+.dark option {
+  background-color: var(--surface);
+  color: var(--text-primary);
+}
+
+/* Hover states that would otherwise jump back to a light tint. */
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-50\/50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-100:hover {
+  background-color: var(--surface-muted) !important;
+}
+
+/* Dividers and table row lines. */
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border-color) !important;
+}
+
+/* Form controls: keep inputs legible on the dark surface. */
+.dark input:not([type='checkbox']):not([type='radio']),
+.dark textarea,
+.dark select {
+  background-color: var(--surface-soft);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* The sidebar keeps its own surface token so it can differ from cards. */
+.dark aside {
+  background-color: var(--surface);
+  border-color: var(--border-color);
+}
+
 @layer components {
+  /* Themed focus rings instead of a hard-coded indigo. */
   .focus-theme:focus {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
+
+  /*
+   * Semantic surface helpers. Components use these instead of bg-white /
+   * border-slate-200 / text-slate-900 so a theme change repaints them.
+   */
+  .surface {
+    background-color: var(--surface);
+    border-color: var(--border-color);
+  }
+
+  .surface-soft {
+    background-color: var(--surface-soft);
+  }
+
+  .text-primary { color: var(--text-primary); }
+  .text-secondary { color: var(--text-secondary); }
+  .text-muted { color: var(--text-muted); }
+  .border-theme { border-color: var(--border-color); }
+
+  /* A themed card: surface + border + radius in one class. */
+  .card-theme {
+    background-color: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+  }
+}/* ------------------------------------------------------------------ *
+ * DARK MODE - COMPLETENESS LAYER
+ *
+ * The blocks above map the common neutral scale. This layer closes the
+ * remaining gaps that leak "dark text on a dark surface":
+ *   1. opacity variants  (bg-slate-100/60, text-slate-900/70, ...)
+ *   2. ring + divide gray variants not listed above
+ *   3. accent/status tint CHIPS (bg-indigo-50 text-indigo-700) whose
+ *      text stays dark on the darkened chip
+ *   4. nested surfaces that re-declare bg-white / bg-gray-50
+ * ------------------------------------------------------------------ */
+
+/* 1. Background opacity variants -> the correct surface token. */
+.dark .bg-white\/95,
+.dark .bg-white\/40,
+.dark .bg-white\/30,
+.dark .bg-white\/20,
+.dark .bg-white\/10 {
+  background-color: color-mix(in srgb, var(--surface) 60%, transparent) !important;
+}
+/* 2. Ring + divide gray variants. */
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-50 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border-color) !important;
+}
+
+.dark .ring-slate-200,
+.dark .ring-slate-100,
+.dark .ring-gray-200,
+.dark .ring-white,
+.dark .ring-slate-900\/5,
+.dark .ring-slate-900\/10 {
+  --tw-ring-color: var(--border-color) !important;
+}
+
+/* 3. Status / accent tint chips: keep the chip readable on a dark surface.
+ *    A light chip (bg-indigo-50) becomes a translucent tint of its own hue,
+ *    and its dark text (text-indigo-700) is lifted to a bright tint of the
+ *    same hue, so "indigo on indigo" keeps contrast in BOTH modes. */
+.dark .bg-indigo-50, .dark .bg-indigo-50\/80, .dark .bg-indigo-50\/40,
+.dark .bg-emerald-50, .dark .bg-emerald-50\/80, .dark .bg-emerald-50\/70,
+.dark .bg-sky-50, .dark .bg-sky-50\/80,
+.dark .bg-amber-50, .dark .bg-amber-50\/80,
+.dark .bg-rose-50, .dark .bg-rose-50\/80,
+.dark .bg-violet-50, .dark .bg-violet-50\/40 {
+  background-color: color-mix(in srgb, currentColor 12%, transparent) !important;
+}
+
+.dark .text-indigo-700, .dark .text-indigo-600 { color: #a5b4fc !important; }
+.dark .text-emerald-700, .dark .text-emerald-600 { color: #6ee7b7 !important; }
+.dark .text-sky-700, .dark .text-sky-600 { color: #7dd3fc !important; }
+.dark .text-amber-700, .dark .text-amber-600 { color: #fcd34d !important; }
+.dark .text-rose-700, .dark .text-rose-600 { color: #fda4af !important; }
+.dark .text-violet-700, .dark .text-violet-600 { color: #c4b5fd !important; }
+
+/* 4. Nested surfaces that re-declare a light background inside a dark card. */
+.dark .bg-slate-100\/50,
+.dark .bg-slate-50\/40,
+.dark .bg-slate-50\/30,
+.dark .bg-gray-50\/50,
+.dark .bg-gray-100\/50,
+.dark .bg-gray-100\/30 {
+  background-color: var(--surface-soft) !important;
+}
+
+/* 5. Themed focus rings on inputs (replaces hard-coded indigo). */
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: var(--accent);
+  --tw-ring-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* 6. Table rows + headers: subtle striping and a legible header. */
+.dark thead,
+.dark .bg-slate-50 > thead,
+.dark thead.bg-slate-50 {
+  background-color: var(--surface-soft) !important;
+}
+
+/* 7. Checkbox / radio accents follow the theme accent. */
+.dark input[type='checkbox'],
+.dark input[type='radio'] {
+  background-color: var(--surface-soft);
+  border-color: var(--border-color);
+}
+
+/* 8. Scrollbars (best-effort, WebKit) so they do not glare white. */
+.dark ::-webkit-scrollbar { width: 10px; height: 10px; }
+.dark ::-webkit-scrollbar-track { background: var(--surface-soft); }
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 9999px;
 }

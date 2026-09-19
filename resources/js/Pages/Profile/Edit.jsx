@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/react';
 import DeleteUserForm from './Partials/DeleteUserForm';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
+import usePlatformBranding from '@/Utils/usePlatformBranding';
 
 /**
  * Profile Manager - a universal module available to every role.
@@ -29,6 +30,10 @@ function RoleBadge({ role }) {
 }
 
 export default function Edit({ mustVerifyEmail, status, profile = {}, avatarUrl = null }) {
+    // Operator guardrail: when false, the SSA password form is replaced with the
+    // CLI instructions (config/platform.php -> PasswordGuard).
+    const { ssaSelfServicePassword } = usePlatformBranding();
+
     const initials = (profile.name || 'U')
         .trim()
         .split(/\s+/)
@@ -130,7 +135,29 @@ export default function Edit({ mustVerifyEmail, status, profile = {}, avatarUrl 
                     </section>
 
                     <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                        <UpdatePasswordForm />
+                        {/*
+                         * SSA CREDENTIAL GUARDRAIL (config/platform.php).
+                         *
+                         * Normally the SSA changes their password here like any
+                         * user. When an operator sets
+                         * PLATFORM_SSA_ALLOW_SELF_SERVICE_PASSWORD=false, the form
+                         * is replaced with the CLI path so credentials can only
+                         * move through the audited operator command.
+                         */}
+                        {profile?.is_super_admin && !ssaSelfServicePassword ? (
+                            <div>
+                                <h2 className="text-lg font-medium text-slate-900">Password</h2>
+                                <p className="mt-1 text-sm text-slate-600">
+                                    Super Admin credentials are locked to the operator path on this
+                                    deployment. Ask your platform operator to rotate the password with:
+                                </p>
+                                <code className="mt-3 block rounded-lg bg-slate-900 px-4 py-3 text-xs text-slate-100">
+                                    php artisan ssa:reset-password {profile?.email}
+                                </code>
+                            </div>
+                        ) : (
+                            <UpdatePasswordForm />
+                        )}
                     </section>
 
                     <section className="rounded-2xl border border-rose-200 bg-white p-6 shadow-sm sm:p-8">

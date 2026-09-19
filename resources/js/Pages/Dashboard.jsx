@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import useMoney from '@/Utils/useMoney';
+import useTerminology from '@/Utils/useTerminology';
 import { Head, Link } from '@inertiajs/react';
 import {
     Chart as ChartJS,
@@ -81,7 +82,13 @@ export default function Dashboard({
     reconciliation = {},
 }) {
     const money = useMoney();
+    const { t, tTitle } = useTerminology();
     const [expenseView, setExpenseView] = useState('doughnut');
+
+    // Terminology-aware nouns, so a company sees "Employees" and a dorm
+    // "Students" - no hardcoded roster label anywhere on the dashboard.
+    const memberWord = tTitle('members', 'Members');
+    const memberWordOne = tTitle('member', 'Member');
 
     const poolHealthy = (metrics.pool_balance ?? 0) >= 0;
 
@@ -308,7 +315,7 @@ export default function Dashboard({
                         icon="M5 10l7-7m0 0l7 7m-7-7v18"
                     />
                     <MetricCard
-                        label="Active Students"
+                        label={`Active ${memberWord}`}
                         value={metrics.active_students ?? 0}
                         tone="slate"
                         hint={`${metrics.total_students ?? 0} on the roster`}
@@ -325,7 +332,7 @@ export default function Dashboard({
                         hint={`${metrics.month_meals ?? 0} meals × ${money(metrics.cost_per_meal ?? 0, false)}`}
                     />
                     <MetricCard
-                        label="Students With Dues"
+                        label={`${memberWord} With Dues`}
                         value={metrics.students_with_dues ?? 0}
                         tone={(metrics.students_with_dues ?? 0) > 0 ? 'rose' : 'emerald'}
                         hint="Owe money to the mess"
@@ -430,11 +437,11 @@ export default function Dashboard({
                         )}
                     </div>
 
-                    {/* Top students by meals */}
+                    {/* Top members by meals */}
                     <div className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm lg:col-span-3">
                         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
                             <div>
-                                <h3 className="text-base font-bold text-slate-900">Student Balances</h3>
+                                <h3 className="text-base font-bold text-slate-900">{memberWord} Balances</h3>
                                 <p className="text-xs text-slate-500">Top meal consumers this month</p>
                             </div>
                             <Link
@@ -449,7 +456,7 @@ export default function Dashboard({
                             <table className="w-full border-collapse text-left">
                                 <thead>
                                     <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                                        <th className="px-6 py-2.5">Student</th>
+                                        <th className="px-6 py-2.5">{memberWordOne}</th>
                                         <th className="px-4 py-2.5 text-right">Meals</th>
                                         <th className="px-4 py-2.5 text-right">Deposited</th>
                                         <th className="px-6 py-2.5 text-right">Balance</th>
@@ -494,7 +501,7 @@ export default function Dashboard({
                                     ) : (
                                         <tr>
                                             <td colSpan="4" className="py-10 text-center text-xs italic text-slate-400">
-                                                No students on the roster yet.
+                                                No {t('members', 'members')} on the roster yet.
                                             </td>
                                         </tr>
                                     )}

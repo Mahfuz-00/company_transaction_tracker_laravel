@@ -14,6 +14,7 @@ class Institution extends Model
         'name',
         'subtitle',
         'slug',
+        'invite_code',
         'type',
         'currency_code',
         'currency_settings',
@@ -27,6 +28,19 @@ class Institution extends Model
         'terminology',
         'settings',
         'subsidy_mode',
+        'subscription_plan',
+        'subscription_status',
+        'subscription_amount',
+        'subscription_started_at',
+        'subscription_renews_at',
+        'member_limit',
+        'health_notes',
+        'last_reviewed_at',
+        'onboarding_mode',
+        'trial_started_at',
+        'trial_ends_at',
+        'trial_reminder_sent_at',
+        'converted_at',
         'is_active',
     ];
 
@@ -36,7 +50,187 @@ class Institution extends Model
         'currency_settings' => 'array',
         'theme' => 'array',
         'is_active' => 'boolean',
+        'subscription_amount' => 'decimal:2',
+        'subscription_started_at' => 'date',
+        'subscription_renews_at' => 'date',
+        'member_limit' => 'integer',
+        'last_reviewed_at' => 'datetime',
+        'trial_started_at' => 'datetime',
+        'trial_ends_at' => 'datetime',
+        'trial_reminder_sent_at' => 'datetime',
+        'converted_at' => 'datetime',
     ];
+
+    /* ------------------------------------------------------------------ *
+     * Subscription / tenant health (Software Super Admin monitoring)
+     * ------------------------------------------------------------------ */
+
+    /** Billing lifecycle states an institution can be in. */
+    public const SUBSCRIPTION_STATUSES = [
+        'trial' => ['label' => 'Trial', 'tone' => 'sky'],
+        'paid' => ['label' => 'Paid', 'tone' => 'emerald'],
+        'pending' => ['label' => 'Pending', 'tone' => 'amber'],
+        'overdue' => ['label' => 'Overdue', 'tone' => 'rose'],
+        'suspended' => ['label' => 'Suspended', 'tone' => 'slate'],
+        'cancelled' => ['label' => 'Cancelled', 'tone' => 'slate'],
+    ];
+
+    /** Human label + UI tone for the current subscription status. */
+    public function subscriptionLabel(): string
+    {
+        return self::SUBSCRIPTION_STATUSES[$this->subscription_status]['label']
+            ?? ucfirst((string) $this->subscription_status);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Trial lifecycle (7-day free trial)
+     * ------------------------------------------------------------------ */
+
+    /** How long a default trial runs, in days. */
+    public const TRIAL_DAYS = 7;
+
+    /** Is this institution currently inside its free trial window? */
+    public function isOnTrial(): bool
+    {
+        return $this->onboarding_mode === 'trial'
+            && $this->trial_ends_at !== null
+            && $this->trial_ends_at->isFuture();
+    }
+
+    /** Has the trial lapsed (ended, still not converted)? */
+    public function trialExpired(): bool
+    {
+        return $this->onboarding_mode === 'trial'
+            && $this->trial_ends_at !== null
+            && $this->trial_ends_at->isPast()
+            && $this->converted_at === null;
+    }
+
+    /** Whole days remaining in the trial (0 when expired, null when not trialing). */
+    public function trialDaysLeft(): ?int
+    {
+        if ($this->onboarding_mode !== 'trial' || $this->trial_ends_at === null) {
+            return null;
+        }
+
+        // ceil so "3 hours left" still reads as "1 day left" rather than 0.
+        return max(0, (int) ceil(now()->diffInMinutes($this->trial_ends_at, false) / 1440));
+    }
+
+    /**
+     * A trial-specific status used by the Trial Management module, layered on
+     * top of the generic subscription status.
+     */
+    public function trialState(): array
+    {
+        if ($this->onboarding_mode !== 'trial') {
+            return ['key' => 'subscribed', 'label' => 'Subscribed', 'tone' => 'emerald'];
+        }
+
+        if ($this->converted_at !== null) {
+            return ['key' => 'converted', 'label' => 'Converted', 'tone' => 'emerald'];
+        }
+
+        $days = $this->trialDaysLeft();
+
+        if ($days === null) {
+            return ['key' => 'trial', 'label' => 'Trial', 'tone' => 'sky'];
+        }
+
+        if ($days <= 0) {
+            return ['key' => 'expired', 'label' => 'Trial expired', 'tone' => 'rose'];
+        }
+
+        if ($days <= 2) {
+            return ['key' => 'ending', 'label' => "Ending in {$days}d", 'tone' => 'amber'];
+        }
+
+        return ['key' => 'trial', 'label' => "{$days} days left", 'tone' => 'sky'];
+    }
+
+    /**
+     * Apply a 7-day trial window. Called at onboarding when the SSA chooses the
+     * trial option.
+     */
+    public function startTrial(?int $days = null): void
+    {
+        $days ??= self::TRIAL_DAYS;
+
+        $this->forceFill([
+            'onboarding_mode' => 'trial',
+            'subscription_status' => 'trial',
+            'trial_started_at' => now(),
+            'trial_ends_at' => now()->addDays($days),
+            'trial_reminder_sent_at' => null,
+            'converted_at' => null,
+        ])->save();
+    }
+
+    /**
+     * Convert this institution to a permanent subscription (leaving the trial).
+     * Used by the SSA when a trial converts.
+     */
+    public function convertToSubscription(array $attributes = []): void
+    {
+        $this->forceFill(array_merge([
+            'onboarding_mode' => 'subscription',
+            'subscription_status' => 'paid',
+            'converted_at' => now(),
+            'subscription_started_at' => $this->subscription_started_at ?? now()->toDateString(),
+        ], $attributes))->save();
+    }
+
+    public function subscriptionTone(): string
+    {
+        return self::SUBSCRIPTION_STATUSES[$this->subscription_status]['tone'] ?? 'slate';
+    }
+
+    /**
+     * A single health verdict the registry can render as a traffic light.
+     *
+     * Combines subscription state, billing date and usage against the plan's
+     * member cap so the Software Super Admin sees a problem at a glance rather
+     * than having to read three separate columns.
+     */
+    public function health(): array
+    {
+        $members = $this->members_count ?? $this->students()->count();
+        $renews = $this->subscription_renews_at;
+        $overdue = $renews !== null && $renews->isPast()
+            && ! in_array($this->subscription_status, ['paid'], true);
+        $nearCap = $this->member_limit !== null && $this->member_limit > 0
+            && $members >= (int) round($this->member_limit * 0.9);
+
+        if (in_array($this->subscription_status, ['suspended', 'cancelled'], true) || ! $this->is_active) {
+            return ['key' => 'critical', 'label' => 'Critical', 'tone' => 'rose'];
+        }
+
+        if ($this->subscription_status === 'overdue' || $overdue) {
+            return ['key' => 'at_risk', 'label' => 'Overdue', 'tone' => 'amber'];
+        }
+
+        if ($nearCap) {
+            return ['key' => 'at_risk', 'label' => 'Near capacity', 'tone' => 'amber'];
+        }
+
+        if ($this->subscription_status === 'pending') {
+            return ['key' => 'attention', 'label' => 'Pending', 'tone' => 'sky'];
+        }
+
+        return ['key' => 'healthy', 'label' => 'Healthy', 'tone' => 'emerald'];
+    }
+
+    /** Usage of the plan's member cap, 0-100 (null when there is no cap). */
+    public function usagePercent(): ?float
+    {
+        $members = $this->members_count ?? $this->students()->count();
+
+        if ($this->member_limit === null || $this->member_limit <= 0) {
+            return null;
+        }
+
+        return round(min(100, ($members / $this->member_limit) * 100), 1);
+    }
 
     /**
      * Accent colours a workspace can pick from. Each entry supplies the
@@ -193,7 +387,50 @@ class Institution extends Model
             if (blank($institution->slug)) {
                 $institution->slug = Str::slug($institution->name) ?: 'institution';
             }
+
+            // Every institution gets an invite code on first save, so a public
+            // signup can always be mapped to a tenant (never orphaned).
+            if (blank($institution->invite_code)) {
+                $institution->invite_code = static::generateInviteCode();
+            }
         });
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Invite code (public-signup tenant mapping)
+     * ------------------------------------------------------------------ */
+
+    /** A short, human-shareable code that is guaranteed unique. */
+    public static function generateInviteCode(): string
+    {
+        do {
+            $code = strtoupper(Str::random(8));
+        } while (static::query()->where('invite_code', $code)->exists());
+
+        return $code;
+    }
+
+    /**
+     * Resolve an institution from a user-supplied invite code.
+     * Case-insensitive and trimmed, so "abc123xy" works as "ABC123XY".
+     */
+    public static function findByInviteCode(?string $code): ?static
+    {
+        $code = trim((string) $code);
+
+        if ($code === '') {
+            return null;
+        }
+
+        return static::query()->where('invite_code', strtoupper($code))->first();
+    }
+
+    /** Rotate the invite code, revoking old signup links. */
+    public function regenerateInviteCode(): string
+    {
+        $this->forceFill(['invite_code' => static::generateInviteCode()])->save();
+
+        return $this->invite_code;
     }
 
     /* ------------------------------------------------------------------ *
@@ -348,6 +585,8 @@ class Institution extends Model
     {
         return $this->hasMany(User::class);
     }
+
+
 
     /* ------------------------------------------------------------------ *
      * Theme + branding

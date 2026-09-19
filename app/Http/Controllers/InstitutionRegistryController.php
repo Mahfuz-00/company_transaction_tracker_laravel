@@ -6,6 +6,8 @@ use App\Models\Institution;
 use App\Models\User;
 use App\Support\AuditLogger;
 use App\Support\FinanceCalculator;
+use App\Support\InstitutionProvisioner;
+use App\Support\TenantManager;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -22,56 +24,111 @@ class InstitutionRegistryController extends Controller
     {
         $search = trim((string) $request->query('search', ''));
 
-        $institutions = Institution::query()
-            ->withCount([
-                'students as members_count',
-                'vendors as vendors_count',
-                'subsidies as subsidies_count',
-            ])
-            ->when($search !== '', function ($q) use ($search) {
-                $term = '%'.$search.'%';
-                $q->where(fn ($sub) => $sub->where('name', 'like', $term)
-                    ->orWhere('type', 'like', $term));
-            })
-            ->orderBy('name')
-            ->get()
-            ->map(function (Institution $institution) {
-                // Admins attached to this institution.
-                $admins = User::query()
-                    ->where('institution_id', $institution->id)
-                    ->whereHas('roles', fn ($q) => $q->whereIn('name', ['Institution Admin', 'Meal Manager']))
-                    ->get(['id', 'name', 'email', 'status', 'designation'])
-                    ->map(fn (User $u) => [
-                        'id' => $u->id,
-                        'name' => $u->name,
-                        'email' => $u->email,
-                        'status' => $u->status,
-                        'designation' => $u->designation,
-                        'avatar_url' => $u->avatarUrl(),
-                        'role' => $u->getRoleNames()->first(),
-                    ]);
+        /*
+         * GLOBAL (cross-tenant) READ - the one sanctioned exception.
+         *
+         * The registry is the Software Super Admin's platform-wide view. It must
+         * list EVERY institution even when the SSA has switched into one of them
+         * (in which case TenantManager would otherwise scope every query to that
+         * single workspace). `runGlobally` temporarily lifts the tenant scope for
+         * exactly this block, then restores it - so the rest of the request stays
+         * isolated.
+         */
+        $institutions = app(TenantManager::class)->runGlobally(function () use ($search) {
+            return Institution::query()
+                ->withCount([
+                    'students as members_count',
+                    'vendors as vendors_count',
+                    'subsidies as subsidies_count',
+                ])
+                ->when($search !== '', function ($q) use ($search) {
+                    $term = '%'.$search.'%';
+                    $q->where(fn ($sub) => $sub->where('name', 'like', $term)
+                        ->orWhere('type', 'like', $term));
+                })
+                ->orderBy('name')
+                ->get()
+                ->map(function (Institution $institution) {
+                    // Admins attached to this institution (scoped explicitly here,
+                    // because the global student/vendor scopes are lifted above).
+                    $admins = User::query()
+                        ->where('institution_id', $institution->id)
+                        ->whereHas('roles', fn ($q) => $q->whereIn('name', ['Institution Admin', 'Meal Manager']))
+                        ->get(['id', 'name', 'email', 'status', 'designation'])
+                        ->map(fn (User $u) => [
+                            'id' => $u->id,
+                            'name' => $u->name,
+                            'email' => $u->email,
+                            'status' => $u->status,
+                            'designation' => $u->designation,
+                            'avatar_url' => $u->avatarUrl(),
+                            'role' => $u->getRoleNames()->first(),
+                        ]);
 
-                return [
-                    'id' => $institution->id,
-                    'name' => $institution->name,
-                    'subtitle' => $institution->subtitle,
-                    'slug' => $institution->slug,
-                    'type' => $institution->type,
-                    'type_label' => $institution->typeLabel(),
-                    'is_active' => (bool) $institution->is_active,
-                    'currency_code' => $institution->currency_code,
-                    'logo_url' => $institution->logoUrl(),
-                    'accent' => $institution->themeSettings()['accent'],
-                    'accent_hex' => $institution->accentPalette()['hex'],
-                    'members_count' => $institution->members_count,
-                    'vendors_count' => $institution->vendors_count,
-                    'subsidies_count' => $institution->subsidies_count,
-                    'admins' => $admins,
-                    'admin_count' => $admins->count(),
-                    // Headline money figures for the current month.
-                    'month_summary' => $this->monthSummary($institution),
-                ];
-            });
+                    return [
+                        'id' => $institution->id,
+                        'name' => $institution->name,
+                        'subtitle' => $institution->subtitle,
+                        'slug' => $institution->slug,
+                        'type' => $institution->type,
+                        'type_label' => $institution->typeLabel(),
+                        'is_active' => (bool) $institution->is_active,
+                        'currency_code' => $institution->currency_code,
+                        'logo_url' => $institution->logoUrl(),
+                        'accent' => $institution->themeSettings()['accent'],
+                        'accent_hex' => $institution->accentPalette()['hex'],
+                        'members_count' => $institution->members_count,
+                        'vendors_count' => $institution->vendors_count,
+                        'subsidies_count' => $institution->subsidies_count,
+                        'admins' => $admins,
+                        'admin_count' => $admins->count(),
+                        // Headline money figures for the current month.
+                        'month_summary' => $this->monthSummary($institution),
+
+                        /*
+                         * DIRECTORY & HEALTH FIELDS.
+                         * The master table needs creation date, subscription vs
+                         * 7-day trial, a live trial countdown, active user load
+                         * and a health verdict - so the SSA can scan the whole
+                         * platform and act (switch in, or nudge an upgrade).
+                         */
+                        'created_at' => $institution->created_at?->format('j M Y'),
+                        'created_human' => $institution->created_at?->diffForHumans(),
+                        'onboarding_mode' => $institution->onboarding_mode,
+                        'subscription_status' => $institution->subscription_status,
+                        'subscription_label' => $institution->subscriptionLabel(),
+                        'subscription_tone' => $institution->subscriptionTone(),
+                        'subscription_plan' => $institution->subscription_plan,
+                        'subscription_amount' => (float) $institution->subscription_amount,
+                        'trial_state' => $institution->trialState(),
+                        'trial_ends_at' => $institution->trial_ends_at?->format('j M Y'),
+                        'trial_days_left' => $institution->trialDaysLeft(),
+                        'is_on_trial' => $institution->isOnTrial(),
+                        'health' => $institution->health(),
+                        'active_users' => User::query()
+                            ->where('institution_id', $institution->id)
+                            ->where('status', 'active')
+                            ->count(),
+                        'total_users' => User::query()
+                            ->where('institution_id', $institution->id)
+                            ->count(),
+                    ];
+                });
+        });
+
+        // Optional status filter for the directory table (paid | trial | overdue).
+        $statusFilter = (string) $request->query('status', '');
+        if ($statusFilter !== '') {
+            $institutions = $institutions->filter(function ($row) use ($statusFilter) {
+                return match ($statusFilter) {
+                    'trial' => $row['is_on_trial'],
+                    'paid' => $row['subscription_status'] === 'paid',
+                    'overdue' => $row['subscription_status'] === 'overdue',
+                    'pending' => $row['subscription_status'] === 'pending',
+                    default => true,
+                };
+            })->values();
+        }
 
         return Inertia::render('Settings/InstitutionRegistry', [
             'institutions' => $institutions,
@@ -141,55 +198,76 @@ class InstitutionRegistryController extends Controller
             'address' => ['nullable', 'string', 'max:255'],
             'currency_code' => ['nullable', 'string', 'max:10'],
             'timezone' => ['nullable', 'string', 'max:64'],
+            // FLEXIBLE ONBOARDING: the SSA chooses a 7-day free trial or an
+            // immediate permanent subscription. Defaults to the trial so a
+            // mis-configured form never silently commits a customer to billing.
+            'onboarding_mode' => ['nullable', Rule::in(['trial', 'subscription'])],
+            // Subscription details (only relevant for the subscription path).
+            'subscription_plan' => ['nullable', 'string', 'max:40'],
+            'subscription_amount' => ['nullable', 'numeric', 'min:0'],
+            'trial_days' => ['nullable', 'integer', 'min:1', 'max:90'],
             // The institution admin account provisioned alongside the workspace.
             'admin_name' => ['required', 'string', 'max:255'],
             'admin_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'admin_password' => ['required', 'string', 'min:8'],
         ]);
 
-        $result = DB::transaction(function () use ($data) {
-            $institution = Institution::create([
-                'name' => $data['name'],
-                'subtitle' => $data['subtitle'] ?? null,
-                'type' => $data['type'],
-                'contact_email' => $data['contact_email'] ?? null,
-                'contact_phone' => $data['contact_phone'] ?? null,
-                'address' => $data['address'] ?? null,
-                'currency_code' => $data['currency_code'] ?? null,
-                'timezone' => $data['timezone'] ?? null,
-                'is_active' => true,
-            ]);
+        $mode = $data['onboarding_mode'] ?? 'trial';
 
-            // The institution acts as its own hub vendor from day one.
-            $institution->ensureHubVendor();
+        /*
+         * PROVISION VIA THE CENTRAL SERVICE.
+         *
+         * The registry used to assemble the institution + admin + welcome email
+         * itself, and sent the email WITHOUT a temporary password or setup link -
+         * which locked the new admin out. InstitutionProvisioner is now the ONE
+         * provisioning path: it creates everything, generates a temporary
+         * password when none is supplied, and emails both the password AND a
+         * signed setup link.
+         */
+        [$institution, $admin, $plainPassword] = InstitutionProvisioner::provision([
+            'name' => $data['name'],
+            'type' => $data['type'],
+            'subtitle' => $data['subtitle'] ?? null,
+            'contact_email' => $data['contact_email'] ?? null,
+            'contact_phone' => $data['contact_phone'] ?? null,
+            'address' => $data['address'] ?? null,
+            'currency_code' => $data['currency_code'] ?? null,
+            'timezone' => $data['timezone'] ?? null,
+            'onboarding_mode' => $mode,
+            'subscription_plan' => $data['subscription_plan'] ?? null,
+            'subscription_amount' => $data['subscription_amount'] ?? 0,
+            'trial_days' => $data['trial_days'] ?? null,
+            'admin_name' => $data['admin_name'],
+            'admin_email' => $data['admin_email'],
+            'admin_password' => $data['admin_password'],
+        ], $request->user());
 
-            // Provision the Institution Admin, scoped to the new workspace.
-            $admin = User::create([
-                'institution_id' => $institution->id,
-                'name' => $data['admin_name'],
-                'email' => $data['admin_email'],
-                'password' => Hash::make($data['admin_password']),
-                'status' => 'active',
-                'designation' => 'Institution Admin',
-            ]);
+        AuditLogger::log('created', "created institution \"{$institution->name}\" with admin {$admin->name}", $institution, [
+            'type' => $institution->type,
+            'admin_email' => $admin->email,
+            'onboarding_mode' => $mode,
+        ], ['subject_label' => $institution->name, 'institution_id' => $institution->id]);
 
-            // SAFE ROLE ASSIGNMENT: route through the whitelist guard so the new
-            // institution admin can only ever receive an institution-scoped role
-            // (here explicitly Institution Admin). It can never become a global
-            // Software Super Admin through this path.
-            $admin->assignInstitutionRole('Institution Admin');
-
-            AuditLogger::log('created', "created institution \"{$institution->name}\" with admin {$admin->name}", $institution, [
-                'type' => $institution->type,
-                'admin_email' => $admin->email,
-            ], ['subject_label' => $institution->name, 'institution_id' => $institution->id]);
-
-            return $institution;
-        });
+        $label = $mode === 'trial'
+            ? 'a '.Institution::TRIAL_DAYS.'-day free trial'
+            : 'a permanent subscription';
 
         return redirect()
             ->route('settings.institutions.index')
-            ->with('success', "Institution \"{$result->name}\" created with its administrator account.");
+            ->with('success', "Institution \"{$institution->name}\" created with {$label}, and a welcome email sent to {$admin->email}.");
+    }
+
+    /**
+     * Fire the institution welcome email, tolerating mail failures.
+     *
+     * @deprecated Provisioning (and the credentials-bearing welcome email) now
+     *             lives in App\Support\InstitutionProvisioner, so every path
+     *             emails the admin a temporary password + signed setup link.
+     *             Retained only for any legacy caller; prefer the service.
+     */
+    protected function sendWelcome(Institution $institution, User $admin, string $mode): void
+    {
+        \App\Support\InstitutionProvisioner::sendWelcomeEmail($institution, $admin, $mode);
     }
 
     /**

@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToInstitution;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Deposit extends Model
 {
-    use HasFactory;
+    use BelongsToInstitution, HasFactory;
 
     protected $fillable = [
-        'student_id', 'amount', 'kind', 'subsidy_id',
+        'institution_id', 'student_id', 'amount', 'kind', 'subsidy_id',
         'payment_method', 'recorded_by', 'transaction_id', 'notes',
         'reversed_at', 'reversed_by', 'reversal_transaction_id',
     ];

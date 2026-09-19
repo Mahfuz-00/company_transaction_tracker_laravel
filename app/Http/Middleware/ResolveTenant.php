@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Institution;
+use App\Support\TenantManager;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -33,6 +34,8 @@ class ResolveTenant
             return $next($request);
         }
 
+        $manager = app(TenantManager::class);
+
         $sessionTenantId = $request->session()->get('tenant_id');
 
         if ($sessionTenantId) {
@@ -56,6 +59,24 @@ class ResolveTenant
             : ($user->institution_id ? (int) $user->institution_id : null);
 
         $request->attributes->set('tenant_id', $resolved);
+
+        /* 4. PIN the tenant onto the shared TenantManager.
+         *
+         * This is the linchpin of strict isolation: from here on, EVERY
+         * tenant-owned model's global scope reads this value and filters to it,
+         * so no controller can accidentally query another institution's rows.
+         *
+         * $resolved is null ONLY for a Software Super Admin who has not switched
+         * into an institution - the deliberate, global platform view. A bound
+         * user (Institution Admin / Meal Manager / Member) always has a non-null
+         * institution_id, so they can never reach the unscoped context.
+         */
+        if ($resolved === null && $user->isSuperAdmin()) {
+            // SSA on the platform view: cross-tenant by design.
+            $manager->withoutScope();
+        } else {
+            $manager->force($resolved);
+        }
 
         return $next($request);
     }

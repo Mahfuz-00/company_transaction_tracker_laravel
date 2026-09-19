@@ -171,10 +171,67 @@ class Notifier
         $recipients = static::institutionUsers($institution?->id)
             ->reject(fn (User $u) => $actor !== null && $u->id === $actor->id);
 
+        return static::push($recipients, $title, $body, $actor);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Platform-wide broadcasts (Software Super Admin)
+     * ------------------------------------------------------------------ */
+
+    /**
+     * Audience resolution for a platform broadcast, in plain terms:
+     *   - 'admins'       -> every Institution Admin / Meal Manager (tenant staff)
+     *   - 'members'      -> every user holding the Member role
+     *   - 'institution_admins' -> only Institution Admins
+     *   - 'all'          -> literally every account on the platform
+     * The SSA who sends it is always excluded (nobody needs their own broadcast).
+     */
+    public static function platformAudience(string $audience): Collection
+    {
+        $roleMap = [
+            'institution_admins' => ['Institution Admin'],
+            'admins' => ['Institution Admin', 'Meal Manager'],
+            'members' => ['Member'],
+        ];
+
+        $query = User::query()->where('status', 'active');
+
+        if (isset($roleMap[$audience])) {
+            $query->whereHas('roles', fn ($q) => $q->whereIn('name', $roleMap[$audience]));
+        }
+        // 'all' applies no role filter.
+
+        return $query->get();
+    }
+
+    /**
+     * Send a platform-wide broadcast to a resolved audience.
+     *
+     * @return array{sent: int, audience: string}
+     */
+    public static function broadcast(string $audience, string $title, string $body, ?User $actor = null, string $kind = 'announcement'): array
+    {
+        $recipients = static::platformAudience($audience);
+        $sent = static::push($recipients, $title, $body, $actor, $kind);
+
+        return ['sent' => $sent, 'audience' => $audience];
+    }
+
+    /**
+     * Write one notification to each user in the list, best-effort, excluding
+     * the actor. Shared by the tenant announcement and the platform broadcast.
+     */
+    public static function push(Collection $recipients, string $title, string $body, ?User $actor = null, string $kind = 'announcement'): int
+    {
         $count = 0;
+
         foreach ($recipients as $user) {
+            if ($actor !== null && $user->id === $actor->id) {
+                continue;
+            }
+
             try {
-                $user->notify(new AppNotification('announcement', $title, $body, [
+                $user->notify(new AppNotification($kind, $title, $body, [
                     'url' => route('notifications.index', [], false),
                 ]));
                 $count++;

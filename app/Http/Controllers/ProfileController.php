@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Support\MemberProfileSynchronizer;
+use App\Support\PasswordGuard;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -70,6 +71,12 @@ class ProfileController extends Controller
          */
         if ($user->isDirty('name')) {
             MemberProfileSynchronizer::syncName($user, $user->name, save: false);
+        } elseif ($user->isDirty('email')) {
+            // The name was not touched but the email was: realign any open
+            // invitation queued to the previous address. syncName() is skipped
+            // (it would be a no-op) so we call the email realignment directly.
+            $user->save();
+            MemberProfileSynchronizer::syncEmail($user);
         }
 
         // --- Profile picture -------------------------------------------
@@ -116,12 +123,21 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
-        $user->forceFill([
-            'password' => Hash::make($data['password']),
-            // The temporary password has been replaced - lift the restriction.
-            'must_change_password' => false,
-            'password_changed_at' => now(),
-        ])->save();
+        /*
+         * SELF-SERVICE password change - an AUTHORISED path.
+         *
+         * The user is changing their OWN password, which is always permitted
+         * (including for the Software Super Admin, whose credential can only
+         * move this way or via the dedicated reset action). Routing through the
+         * guard stamps `password_changed_at` and writes an audit entry, and
+         * satisfies the model hook so the write is not blocked.
+         */
+        PasswordGuard::changePassword(
+            $user,
+            $data['password'],
+            'self_service',
+            forceSsa: true,
+        );
 
         return redirect()
             ->route('dashboard')

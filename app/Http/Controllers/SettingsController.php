@@ -27,19 +27,47 @@ class SettingsController extends Controller
         // per-user currency setting: removing 'userSettings' means a member can
         // never override the institution's chosen format. Every screen reads the
         // one shared `currency` prop (see HandleInertiaRequests).
+        /*
+         * WHO MAY MANAGE CURRENCY.
+         *
+         * The currency format is a WORKSPACE setting, so it belongs to the
+         * institution's own administrator - not only the Software Super Admin.
+         * Both may edit it for the workspace they are currently in:
+         *   - Institution Admin : their own institution, always.
+         *   - Software Super Admin : the workspace they have switched into.
+         * A regular member/manager can still VIEW the page (so they understand
+         * the format) but canManage is false and the POST is refused.
+         */
+        $canManage = $user->isSuperAdmin()
+            || ($user->isInstitutionAdmin()
+                && $institution
+                && $user->belongsToInstitution($institution->id));
+
         return Inertia::render('Settings/CurrencyManager', [
             'currencies' => Currency::orderBy('name')->get(),
             'currencySettings' => $institution?->currencySettings()
                 ?? Institution::DEFAULT_CURRENCY_SETTINGS,
-            'canManage' => $user->isSuperAdmin(),
+            'canManage' => $canManage,
         ]);
     }
 
     public function store(Request $request)
     {
-        // Only the Software Super Admin may change global formatting.
-        if (! $request->user()->isSuperAdmin()) {
-            return back()->with('error', 'Only a Software Super Admin can change global currency settings.');
+        $user = $request->user();
+        $institution = Institution::current();
+
+        /*
+         * AUTHORISATION: the Software Super Admin OR the Institution Admin of
+         * the active workspace. Everyone else (members, meal managers) is
+         * refused so an individual user can never alter currency formatting.
+         */
+        $allowed = $user->isSuperAdmin()
+            || ($user->isInstitutionAdmin()
+                && $institution
+                && $user->belongsToInstitution($institution->id));
+
+        if (! $allowed) {
+            return back()->with('error', 'You do not have permission to change this institution\'s currency format.');
         }
 
         $validated = $request->validate([
@@ -92,11 +120,11 @@ class SettingsController extends Controller
         ]);
         $institution->save();
 
-        AuditLogger::log('updated', 'updated global currency settings', $institution, [
+        AuditLogger::log('updated', 'updated currency settings for '.$institution->name, $institution, [
             'currency_code' => $code,
             'settings' => $settings,
-        ], ['subject_label' => 'Global Currency']);
+        ], ['subject_label' => 'Currency', 'institution_id' => $institution->id]);
 
-        return redirect()->back()->with('success', 'Global currency settings saved.');
+        return redirect()->back()->with('success', 'Currency settings saved for this institution.');
     }
 }

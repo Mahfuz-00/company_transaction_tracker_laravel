@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Meals;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Models\Institution;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -48,13 +49,24 @@ class DepartmentController extends Controller
 
     public function store(Request $request)
     {
+        $institution = Institution::current();
+
+        /*
+         * Names/slugs must be unique WITHIN an institution, not across the whole
+         * platform. A plain Rule::unique() checks every row in the table (it does
+         * not run through the model's tenant scope), so two institutions could
+         * not both have a "Kitchen" department. Scoping the rule with
+         * where('institution_id', ...) restores per-tenant uniqueness.
+         */
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')],
-            'slug' => ['nullable', 'string', 'max:255', Rule::unique('departments', 'slug')],
+            'name' => ['required', 'string', 'max:255',
+                Rule::unique('departments', 'name')->where('institution_id', $institution?->id)],
+            'slug' => ['nullable', 'string', 'max:255',
+                Rule::unique('departments', 'slug')->where('institution_id', $institution?->id)],
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $department = Department::create($data);
+        $department = Department::create($data + ['institution_id' => $institution?->id]);
 
         return redirect()
             ->route('meals.departments.index')
@@ -68,9 +80,14 @@ class DepartmentController extends Controller
 
     public function update(Request $request, Department $department)
     {
+        // Route-model binding already ran through the tenant scope, so a
+        // cross-institution department cannot reach here. Uniqueness is checked
+        // within the department's own institution.
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')->ignore($department->id)],
-            'slug' => ['nullable', 'string', 'max:255', Rule::unique('departments', 'slug')->ignore($department->id)],
+            'name' => ['required', 'string', 'max:255',
+                Rule::unique('departments', 'name')->where('institution_id', $department->institution_id)->ignore($department->id)],
+            'slug' => ['nullable', 'string', 'max:255',
+                Rule::unique('departments', 'slug')->where('institution_id', $department->institution_id)->ignore($department->id)],
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 

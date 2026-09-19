@@ -9,9 +9,17 @@ use App\Http\Controllers\PasswordSetupController;
 use App\Http\Controllers\EmailLogController;
 use App\Http\Controllers\InstitutionController;
 use App\Http\Controllers\InstitutionRegistryController;
+use App\Http\Controllers\GlobalAuditController;
+use App\Http\Controllers\LandingEnquiryController;
 use App\Http\Controllers\MemberInvitationController;
+use App\Http\Controllers\MonitoringController;
+use App\Http\Controllers\PlatformBroadcastController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SaaSAnalyticsController;
+use App\Http\Controllers\SubscriptionPlanController;
 use App\Http\Controllers\SubsidySourceController;
+use App\Http\Controllers\ThemeController;
+use App\Http\Controllers\TrialManagementController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\VendorController;
 use App\Http\Controllers\RoleController;
@@ -35,8 +43,13 @@ Route::get('/', function () {
         return redirect()->route('dashboard');
     }
 
-    return Inertia::render('Welcome');
+    return app(\App\Http\Controllers\LandingController::class)->index();
 })->name('home');
+
+// Public lead capture from the landing page's "Request a demo" form.
+Route::post('/contact', [\App\Http\Controllers\LandingController::class, 'contact'])
+    ->middleware('throttle:10,1')
+    ->name('landing.contact');
 
 /**
  * Password setup from a signed link (invitation OR reset).
@@ -148,10 +161,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Settings area: redirect to currency manager
     Route::redirect('/settings', '/settings/currency')->name('settings');
 
-    // Currency manager (global). Owned by the Software Super Admin; the POST
-    // is additionally guarded inside the controller.
-    Route::get('/settings/currency', [SettingsController::class, 'index'])->name('settings.currency');
-    Route::post('/settings/currency', [SettingsController::class, 'store'])->name('settings.currency.store');
+    /*
+     * CURRENCY MANAGER - a WORKSPACE setting.
+     *
+     * Reachable by anyone who can VIEW it (admins + managers), but the POST is
+     * gated by `currency.manage`, which only Institution Admins (for their own
+     * institution) and the SSA hold. The controller re-asserts ownership, so an
+     * individual user can never alter the format even if the route leaked.
+     */
+    Route::get('/settings/currency', [SettingsController::class, 'index'])
+        ->name('settings.currency')
+        ->middleware('permission:currency.view');
+    Route::post('/settings/currency', [SettingsController::class, 'store'])
+        ->name('settings.currency.store')
+        ->middleware('permission:currency.manage');
+
+    /*
+     * Theme Customizer - a dedicated settings sub-module available to EVERY
+     * authenticated user (member included). It is deliberately NOT gated by a
+     * permission: personalising one's own view is a personal preference, not an
+     * administrative act. Each user only ever edits their OWN `users.theme`.
+     */
+    Route::get('/settings/theme', [ThemeController::class, 'edit'])->name('settings.theme.edit');
+    Route::put('/settings/theme', [ThemeController::class, 'update'])->name('settings.theme.update');
+    Route::post('/settings/theme/reset', [ThemeController::class, 'reset'])->name('settings.theme.reset');
 
     // Audit trail / activity log. Super Admins see everything; Institution
     // Admins see their own institution (scoped in the controller).
@@ -192,30 +225,36 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('settings.roles.destroy')
         ->middleware('permission:roles.manage');
 
-    // Settings - User management under /settings/users
+    /*
+     * USER MANAGER - Admins and the SSA ONLY.
+     *
+     * Every route requires the `users.*` permission (which a Meal Manager does
+     * NOT hold) AND an admin role. The controller ALSO re-asserts the role and
+     * excludes global Super Admin accounts from an Institution Admin's scope.
+     */
     Route::get('/settings/users', [UserController::class, 'index'])
         ->name('settings.users.index')
-        ->middleware('permission:users.view');
+        ->middleware(['permission:users.view', 'role:Software Super Admin|Institution Admin']);
 
     Route::post('/settings/users', [UserController::class, 'store'])
         ->name('settings.users.store')
-        ->middleware('permission:users.create');
+        ->middleware(['permission:users.create', 'role:Software Super Admin|Institution Admin']);
 
     Route::put('/settings/users/{user}', [UserController::class, 'update'])
         ->name('settings.users.update')
-        ->middleware('permission:users.edit');
+        ->middleware(['permission:users.edit', 'role:Software Super Admin|Institution Admin']);
 
     Route::patch('/settings/users/{user}/deactivate', [UserController::class, 'deactivate'])
         ->name('settings.users.deactivate')
-        ->middleware('permission:users.edit');
+        ->middleware(['permission:users.edit', 'role:Software Super Admin|Institution Admin']);
 
     Route::patch('/settings/users/{user}/activate', [UserController::class, 'activate'])
         ->name('settings.users.activate')
-        ->middleware('permission:users.edit');
+        ->middleware(['permission:users.edit', 'role:Software Super Admin|Institution Admin']);
 
     Route::delete('/settings/users/{user}', [UserController::class, 'destroy'])
         ->name('settings.users.destroy')
-        ->middleware('permission:users.delete');
+        ->middleware(['permission:users.delete', 'role:Software Super Admin|Institution Admin']);
 
     // Settings - Institution configuration (type, terminology, identity,
     // theme + branding).
@@ -259,6 +298,125 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Return the SSA to the global platform view (clears the session tenant).
     Route::post('/settings/institutions/exit', [InstitutionRegistryController::class, 'exitTenant'])
         ->name('settings.institutions.exit');
+
+    /*
+     * SSA BUSINESS MONITORING - the platform control tower.
+     *
+     * Cross-tenant by design (its queries run inside a sanctioned global scope),
+     * so it is gated to the global role only. The controller re-asserts
+     * isSuperAdmin() on every action as defence in depth.
+     */
+    Route::get('/settings/monitoring', [MonitoringController::class, 'index'])
+        ->name('settings.monitoring.index')
+        ->middleware('permission:monitoring.view');
+    Route::put('/settings/monitoring/{institution}/subscription', [MonitoringController::class, 'updateSubscription'])
+        ->name('settings.monitoring.subscription')
+        ->middleware('permission:monitoring.manage');
+    Route::get('/settings/monitoring/audit/export', [MonitoringController::class, 'exportAudit'])
+        ->name('settings.monitoring.audit.export')
+        ->middleware('permission:monitoring.view');
+
+    /*
+     * THE SSA'S DEFAULT LANDING PAGE - the Global SaaS Business Dashboard.
+     *
+     * `dashboard` redirects a Software Super Admin here when they have NOT
+     * switched into a tenant, so an SSA never lands inside an individual
+     * institution. It reuses the monitoring screen (same cross-tenant data) but
+     * gets its own named route so the redirect target is explicit and greppable.
+     */
+    Route::get('/platform', [MonitoringController::class, 'index'])
+        ->name('ssa.dashboard')
+        ->middleware('permission:monitoring.view');
+
+    /*
+     * GLOBAL SAAS BUSINESS ANALYTICS - the platform-wide financial engine.
+     * Replaces the tenant-scoped analytics view for the SSA (subscription
+     * revenue, conversion, retention), NOT individual meal counts.
+     */
+    Route::get('/platform/analytics', [SaaSAnalyticsController::class, 'index'])
+        ->name('ssa.analytics')
+        ->middleware('permission:monitoring.view');
+
+    /*
+     * GLOBAL SYSTEM AUDIT & SECURITY LOG - cross-tenant activity, filterable by
+     * institution and severity, with an exportable slice for compliance.
+     */
+    Route::get('/platform/audit', [GlobalAuditController::class, 'index'])
+        ->name('ssa.audit.index')
+        ->middleware('permission:monitoring.view');
+    Route::get('/platform/audit/export', [GlobalAuditController::class, 'export'])
+        ->name('ssa.audit.export')
+        ->middleware('permission:monitoring.view');
+
+    /*
+     * PLATFORM ANNOUNCEMENTS & SYSTEM BROADCASTS - the SSA composing one message
+     * for the whole platform (all staff / all members / everyone).
+     */
+    /*
+     * LANDING ENQUIRIES / DEMO REQUESTS - SSA only.
+     *
+     * Turn a public demo request into a live institution: approve to provision
+     * on a trial (or a plan), or mark contacted / rejected.
+     */
+    Route::get('/platform/enquiries', [LandingEnquiryController::class, 'index'])
+        ->name('ssa.enquiries.index')
+        ->middleware('permission:monitoring.view');
+    Route::post('/platform/enquiries/{enquiry}/approve', [LandingEnquiryController::class, 'approve'])
+        ->name('ssa.enquiries.approve')
+        ->middleware('permission:monitoring.manage');
+    Route::post('/platform/enquiries/{enquiry}/contact', [LandingEnquiryController::class, 'markContacted'])
+        ->name('ssa.enquiries.contact')
+        ->middleware('permission:monitoring.manage');
+    Route::post('/platform/enquiries/{enquiry}/reject', [LandingEnquiryController::class, 'reject'])
+        ->name('ssa.enquiries.reject')
+        ->middleware('permission:monitoring.manage');
+
+    Route::get('/platform/broadcasts', [PlatformBroadcastController::class, 'index'])
+        ->name('ssa.broadcasts.index')
+        ->middleware('permission:monitoring.view');
+    Route::post('/platform/broadcasts', [PlatformBroadcastController::class, 'store'])
+        ->name('ssa.broadcasts.store')
+        ->middleware('permission:monitoring.manage');
+
+    /*
+     * PRICING & SUBSCRIPTION PLAN MANAGER - SSA only.
+     *
+     * Define the SaaS tiers and assign them to institutions. Gated by
+     * `plans.*` (held by the global role alone) and re-asserted in the controller.
+     */
+    Route::get('/platform/plans', [SubscriptionPlanController::class, 'index'])
+        ->name('ssa.plans.index')
+        ->middleware('permission:plans.view');
+    Route::post('/platform/plans', [SubscriptionPlanController::class, 'store'])
+        ->name('ssa.plans.store')
+        ->middleware('permission:plans.manage');
+    Route::put('/platform/plans/{plan}', [SubscriptionPlanController::class, 'update'])
+        ->name('ssa.plans.update')
+        ->middleware('permission:plans.manage');
+    Route::delete('/platform/plans/{plan}', [SubscriptionPlanController::class, 'destroy'])
+        ->name('ssa.plans.destroy')
+        ->middleware('permission:plans.manage');
+    Route::post('/platform/plans/assign/{institution}', [SubscriptionPlanController::class, 'assign'])
+        ->name('ssa.plans.assign')
+        ->middleware('permission:plans.manage');
+
+    /*
+     * TRIAL & SUBSCRIPTION MANAGEMENT - the SSA's view of who is on a 7-day
+     * trial vs a permanent subscription, with expiry countdowns and one-click
+     * upgrade prompts.
+     */
+    Route::get('/settings/trials', [TrialManagementController::class, 'index'])
+        ->name('settings.trials.index')
+        ->middleware('permission:monitoring.view');
+    Route::post('/settings/trials/{institution}/remind', [TrialManagementController::class, 'sendUpgradePrompt'])
+        ->name('settings.trials.remind')
+        ->middleware('permission:monitoring.manage');
+    Route::post('/settings/trials/{institution}/convert', [TrialManagementController::class, 'convert'])
+        ->name('settings.trials.convert')
+        ->middleware('permission:monitoring.manage');
+    Route::post('/settings/trials/{institution}/extend', [TrialManagementController::class, 'extendTrial'])
+        ->name('settings.trials.extend')
+        ->middleware('permission:monitoring.manage');
 
     // Profile Routes
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

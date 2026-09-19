@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\MemberWelcomeMail;
 use App\Models\MemberInvitation;
 use App\Models\Student;
 use App\Models\User;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 
@@ -120,6 +122,12 @@ class PasswordSetupController extends Controller
                     $existing->removeRole('Software Super Admin');
                 }
 
+                // This is an AUTHORISED credential write: the invitee followed a
+                // signed link and set their own password. Marking the write
+                // authorised lets it through the model's SSA safety net and keeps
+                // `password_changed_at` in step.
+                $existing->passwordWriteAuthorised = true;
+
                 // ---- COMPLETE STATE: update password AND name together. ----
                 $existing->forceFill([
                     'name' => $name,
@@ -193,6 +201,27 @@ class PasswordSetupController extends Controller
             'state' => $existing ? 'complete' : 'incomplete',
             'name' => $user->name,
         ], ['subject_label' => $invitation->email, 'institution_id' => $invitation->institution_id]);
+
+        /*
+         * AUTOMATED MEMBER WELCOME EMAIL.
+         *
+         * Sent only on a FIRST-TIME setup ($existing === null) - a genuine new
+         * account activation. We deliberately do NOT send it when an existing
+         * user merely reset their password, since that is not a "welcome aboard"
+         * moment and would be noise.
+         *
+         * Failures are swallowed: a mail problem must never undo a completed
+         * account setup.
+         */
+        if (! $existing) {
+            try {
+                Mail::to($user->email)->send(
+                    new MemberWelcomeMail($user, $invitation->institution)
+                );
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
 
         /*
          * SECURE SESSION HANDLING.

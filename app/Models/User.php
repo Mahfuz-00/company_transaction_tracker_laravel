@@ -16,6 +16,54 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
     /**
+     * Set true by PasswordGuard (and the auth controllers) to signal that a
+     * password write has been AUTHORISED. The `saving` hook below refuses to
+     * let a Super Admin password move without it.
+     *
+     * This is the model-level safety net for the credential-integrity bug: even
+     * if a seeder, a migration, or a stray script reaches for the `password`
+     * column directly, the write is rejected unless it came through the guard.
+     */
+    public bool $passwordWriteAuthorised = false;
+
+    protected static function booted(): void
+    {
+        static::saving(function (User $user) {
+            $passwordDirty = $user->isDirty('password');
+
+            // Let an authorised write through, and stamp the change time.
+            if ($user->passwordWriteAuthorised) {
+                if ($passwordDirty && $user->password_changed_at === null) {
+                    $user->password_changed_at = now();
+                }
+
+                return;
+            }
+
+            /*
+             * An UNAUTHORISED password write to an EXISTING Super Admin is
+             * blocked outright: we restore the original hash so the row is
+             * untouched. This is deliberately scoped to rows that ALREADY have
+             * a password (a real credential that could be lost) - creating a
+             * brand-new account or a test fixture is never what the guard is
+             * protecting against.
+             */
+            $hadPassword = filled($user->getOriginal('password'));
+            $wasSuperAdmin = $user->exists
+                && $user->roles()->where('name', 'Software Super Admin')->exists();
+
+            if ($passwordDirty && $hadPassword && ($wasSuperAdmin || $user->isSuperAdmin())) {
+                $user->password = $user->getOriginal('password');
+
+                report(new \RuntimeException(
+                    'Blocked an unauthorised password write to the Software Super Admin account '
+                    .$user->email.'. Use App\\Support\\PasswordGuard::changePassword() instead.'
+                ));
+            }
+        });
+    }
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -26,6 +74,7 @@ class User extends Authenticatable
         'email',
         'avatar_path',
         'designation',
+        'theme',
         'phone',
         'status',
         'invitation_pending',
@@ -97,7 +146,52 @@ class User extends Authenticatable
         'must_change_password' => 'boolean',
         'password_changed_at' => 'datetime',
         'password' => 'hashed',
+        'theme' => 'array',
     ];
+
+    /* ------------------------------------------------------------------ *
+     * Personal theme
+     * ------------------------------------------------------------------ */
+
+    /**
+     * The user's personal theme, merged over the platform defaults.
+     *
+     * A member may personalise light/dark, accent, font and density; their
+     * choice is stored here (database half) and mirrored into the browser's
+     * localStorage (PC half). Merging over the defaults guarantees every token
+     * is present even for an account that has never opened the customiser.
+     */
+    public function themeSettings(): array
+    {
+        return array_merge(static::DEFAULT_THEME, $this->theme ?? []);
+    }
+
+    /**
+     * The appearance tokens a user can customise, with defaults and the allowed
+     * values. Shared with the ThemeCustomizer UI so both sides never drift.
+     */
+    public const DEFAULT_THEME = [
+        'mode' => 'light',
+        'accent' => 'indigo',
+        'radius' => 'lg',
+        'density' => 'comfortable',
+        'font' => 'inter',
+    ];
+
+    /** Font families the user can choose, mapped to a stack + Google family. */
+    public const THEME_FONTS = [
+        'inter' => ['label' => 'Inter', 'stack' => "'Inter', ui-sans-serif, system-ui, sans-serif", 'google' => 'Inter'],
+        'roboto' => ['label' => 'Roboto', 'stack' => "'Roboto', ui-sans-serif, system-ui, sans-serif", 'google' => 'Roboto'],
+        'poppins' => ['label' => 'Poppins', 'stack' => "'Poppins', ui-sans-serif, system-ui, sans-serif", 'google' => 'Poppins'],
+        'nunito' => ['label' => 'Nunito', 'stack' => "'Nunito', ui-sans-serif, system-ui, sans-serif", 'google' => 'Nunito'],
+        'system' => ['label' => 'System default', 'stack' => 'ui-sans-serif, system-ui, sans-serif', 'google' => null],
+    ];
+
+    /** Accent tokens (reused from the institution palette). */
+    public static function themeAccents(): array
+    {
+        return Institution::THEMES;
+    }
 
     /**
      * Is the account currently active?
@@ -215,6 +309,23 @@ class User extends Authenticatable
             ->all();
 
         $this->syncRoles($safe !== [] ? $safe : ['Member']);
+    }
+
+    /**
+     * Change this user's password through the AUTHORISED guard.
+     *
+     * The only sanctioned way to move a credential: it stamps the change time,
+     * writes the audit entry, and (for a Super Admin) requires an explicit
+     * opt-in path. Direct `$user->password = ...` writes on an SSA are refused
+     * by the model hook above.
+     */
+    public function setPassword(string $plain, string $reason = 'password_change', bool $authorised = false): bool
+    {
+        // The guard owns the write-authorisation flag and the audit entry, so we
+        // simply delegate. A Super Admin write additionally requires $authorised.
+        $authorised = $authorised || ! $this->isSuperAdmin();
+
+        return \App\Support\PasswordGuard::changePassword($this, $plain, $reason, $authorised);
     }
 
     /**

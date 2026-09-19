@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import useMoney from '@/Utils/useMoney';
+import useTerminology from '@/Utils/useTerminology';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, Link, router } from '@inertiajs/react';
 
@@ -46,6 +47,8 @@ function KindChip({ kind, label }) {
 
 export default function Review({ claims, stats = {}, kinds = [], filters = {} }) {
     const money = useMoney();
+    // Terminology-aware nouns for member-facing copy in this queue.
+    const { t, tTitle } = useTerminology();
     const { confirm } = useFeedback();
 
     const rows = claims?.data || [];
@@ -122,7 +125,7 @@ export default function Review({ claims, stats = {}, kinds = [], filters = {} })
                 <div>
                     <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">Claim Review</h2>
                     <p className="mt-0.5 text-xs font-medium text-slate-500">
-                        Approve or reject the claims your members have raised.
+                        Approve or reject the claims your {t('members', 'members')} have raised.
                     </p>
                 </div>
             }
@@ -243,7 +246,7 @@ export default function Review({ claims, stats = {}, kinds = [], filters = {} })
                         <div className="py-16 text-center">
                             <p className="text-sm font-semibold text-slate-600">Nothing to review here.</p>
                             <p className="mt-1 text-xs text-slate-400">
-                                Member claims will appear here as they are submitted.
+                                {tTitle('member', 'Member')} claims will appear here as they are submitted.
                             </p>
                         </div>
                     )}
@@ -334,7 +337,7 @@ export default function Review({ claims, stats = {}, kinds = [], filters = {} })
                         )}
 
                         <Field
-                            label="Note to the member"
+                            label={`Note to the ${t('member', 'member')}`}
                             name="review_notes"
                             type="textarea"
                             value={notes}

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from '@inertiajs/react';
 import { formatRoleName } from '@/Utils/roleFormatters';
 import { roleBadgeClasses } from '@/Utils/userFormatters';
@@ -32,10 +32,27 @@ function FieldError({ message }) {
     );
 }
 
-export default function UserFormModal({ open, onClose, editing = null, availableRoles = [] }) {
+export default function UserFormModal({
+    open,
+    onClose,
+    editing = null,
+    availableRoles = [],
+    // SSA GLOBAL MODE: when true (and not editing), the form shows a TARGET
+    // INSTITUTION selector so the SSA can create a user/admin directly against
+    // ANY workspace from the global directory.
+    globalScope = false,
+    institutions = [],
+    defaultInstitutionId = null,
+}) {
     const isEditing = Boolean(editing);
 
     const { data, setData, post, put, processing, errors, reset, clearErrors } = useForm({ ...EMPTY_FORM });
+
+    // The institution the new account is created in. Required in global mode
+    // (SSA); an Institution Admin never sends this (their own workspace is used).
+    const [institutionId, setInstitutionId] = useState(
+        defaultInstitutionId ? String(defaultInstitutionId) : ''
+    );
 
     // Load / reset whenever the modal opens.
     useEffect(() => {
@@ -54,9 +71,25 @@ export default function UserFormModal({ open, onClose, editing = null, available
                 roles: (editing.roles || []).map((r) => r.name),
                 creation_mode: 'password',
             });
+            // Default the target institution (global mode) to the first available
+            // one, or the active scope, so a valid value is always preselected.
+            setInstitutionId(
+                defaultInstitutionId
+                    ? String(defaultInstitutionId)
+                    : globalScope && institutions.length
+                        ? String(institutions[0].id)
+                        : ''
+            );
         } else {
             reset();
             setData({ ...EMPTY_FORM });
+            setInstitutionId(
+                defaultInstitutionId
+                    ? String(defaultInstitutionId)
+                    : globalScope && institutions.length
+                        ? String(institutions[0].id)
+                        : ''
+            );
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, editing?.id]);
@@ -82,9 +115,20 @@ export default function UserFormModal({ open, onClose, editing = null, available
         if (isEditing) {
             put(route('settings.users.update', editing.id), options);
         } else {
-            post(route('settings.users.store'), options);
+            // SSA global mode: send the chosen TARGET institution so the new
+            // user lands in the intended workspace. Other admins omit it and the
+            // server uses their own institution.
+            post(
+                route('settings.users.store'),
+                globalScope
+                    ? { ...options, preserveState: true, data: { ...data, institution_id: institutionId } }
+                    : options
+            );
         }
     };
+
+    // In global mode a target institution is mandatory before creating.
+    const needsInstitution = globalScope && !isEditing && !institutionId;
 
     if (!open) return null;
 
@@ -155,6 +199,32 @@ export default function UserFormModal({ open, onClose, editing = null, available
                         {/* Left: details */}
                         <div className="space-y-4 lg:col-span-3">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600">Account Details</h4>
+
+                            {/* SSA global mode: pick the TARGET workspace. */}
+                            {globalScope && !isEditing && (
+                                <div>
+                                    <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                                        Institution
+                                    </label>
+                                    <select
+                                        value={institutionId}
+                                        onChange={(e) => setInstitutionId(e.target.value)}
+                                        className="w-full rounded-lg border-gray-300 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500"
+                                    >
+                                        <option value="">Select an institution…</option>
+                                        {(institutions || []).map((i) => (
+                                            <option key={i.id} value={i.id}>
+                                                {i.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="mt-1 text-xs text-gray-400">
+                                        The new account is created inside this workspace and can hold any
+                                        institution-scoped role.
+                                    </p>
+                                    <FieldError message={errors.institution_id} />
+                                </div>
+                            )}
 
                             <div>
                                 <label className="mb-1.5 block text-sm font-semibold text-gray-700">Full Name</label>
@@ -305,7 +375,7 @@ export default function UserFormModal({ open, onClose, editing = null, available
                         </button>
                         <button
                             type="submit"
-                            disabled={processing || passwordMismatch}
+                            disabled={processing || passwordMismatch || needsInstitution}
                             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50"
                         >
                             {processing && (

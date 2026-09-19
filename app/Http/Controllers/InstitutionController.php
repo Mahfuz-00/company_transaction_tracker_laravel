@@ -48,10 +48,11 @@ class InstitutionController extends Controller
                 'contact_phone' => $institution->contact_phone,
                 'terminology' => $institution->terminology ?? [],
                 'terms' => $institution->terminologyMap(),
-                // Branding + theme.
+                // Branding only. Theme customisation deliberately lives in its
+                // OWN sub-module (Settings > Theme Customizer), reachable by all
+                // users, so it is no longer configured here.
                 'logo_url' => $institution->logoUrl(),
                 'banner_url' => $institution->bannerUrl(),
-                'theme' => $institution->themeSettings(),
             ] : null,
             'types' => collect(Institution::TYPES)
                 ->map(fn ($preset, $key) => [
@@ -63,10 +64,6 @@ class InstitutionController extends Controller
                 ->values(),
             'termKeys' => collect(self::EDITABLE_TERMS)
                 ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])
-                ->values(),
-            // Accent options the theme customiser offers.
-            'themes' => collect(Institution::THEMES)
-                ->map(fn ($meta, $key) => ['value' => $key, 'label' => $meta['label'], 'hex' => $meta['hex']])
                 ->values(),
         ]);
     }
@@ -92,12 +89,9 @@ class InstitutionController extends Controller
             'terminology' => ['nullable', 'array'],
             // Reject unknown term keys rather than storing dead config.
             'terminology.*' => ['nullable', 'string', 'max:60'],
-            // Theme customisation.
-            'theme' => ['nullable', 'array'],
-            'theme.accent' => ['nullable', Rule::in(array_keys(Institution::THEMES))],
-            'theme.mode' => ['nullable', Rule::in(['light', 'dark'])],
-            'theme.radius' => ['nullable', Rule::in(['sm', 'md', 'lg', 'xl'])],
-            'theme.density' => ['nullable', Rule::in(['compact', 'comfortable', 'spacious'])],
+            // NOTE: Theme is no longer accepted here - it moved to the dedicated
+            // Theme Customizer (per-user). Institution Settings only manages
+            // identity, type, terminology and branding.
             // Branding images.
             'logo' => ['nullable', 'image', 'mimes:png,jpg,jpeg,svg,webp', 'max:2048'],
             'banner' => ['nullable', 'image', 'mimes:png,jpg,jpeg,svg,webp', 'max:4096'],
@@ -138,15 +132,6 @@ class InstitutionController extends Controller
             $data['banner_path'] = $request->file('banner')->store('institution/banners', 'public');
         }
 
-        // Theme arrives as a nested array; merge over the defaults so a
-        // partial submission never wipes an existing choice.
-        if (isset($data['theme'])) {
-            $data['theme'] = array_filter(
-                array_merge($institution->themeSettings(), array_filter($data['theme'])),
-                fn ($v) => $v !== null && $v !== ''
-            );
-        }
-
         unset($data['logo'], $data['banner'], $data['remove_logo'], $data['remove_banner']);
 
         $institution->fill($data);
@@ -155,12 +140,11 @@ class InstitutionController extends Controller
 
         AuditLogger::log('updated', 'updated institution settings', $institution, [
             'type' => $institution->type,
-            'theme' => $institution->theme,
             'terminology_count' => count($overrides),
         ], ['subject_label' => $institution->name]);
 
         return redirect()
             ->route('settings.institution.edit')
-            ->with('success', 'Institution settings saved. Terminology and theme updated across the app.');
+            ->with('success', 'Institution settings saved. Terminology updated across the app.');
     }
 }

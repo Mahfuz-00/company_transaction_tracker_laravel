@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToInstitution;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class MealEntry extends Model
 {
-    use HasFactory;
+    use BelongsToInstitution, HasFactory;
 
-    protected $fillable = ['student_id', 'date', 'breakfast', 'lunch', 'dinner', 'recorded_by', 'notes'];
+    protected $fillable = ['institution_id', 'student_id', 'date', 'breakfast', 'lunch', 'dinner', 'recorded_by', 'notes'];
 
     protected $casts = [
         'date' => 'date',

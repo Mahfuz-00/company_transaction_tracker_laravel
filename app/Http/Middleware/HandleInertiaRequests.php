@@ -54,6 +54,10 @@ class HandleInertiaRequests extends Middleware
                     // Drives the two-tier admin UI (global vs institution).
                     'institution_id' => $user->institution_id,
                     'is_super_admin' => $user->isSuperAdmin(),
+                    // The DATABASE half of the dual-persistence theme. ThemeProvider
+                    // re-hydrates from this on any new device; localStorage keeps
+                    // the instant, PC-local copy. Both speak the same tokens.
+                    'theme' => $user->themeSettings(),
                 ] : null,
                 'roles' => $user ? $user->getRoleNames()->toArray() : [],
                 'permissions' => $user ? $user->getAllPermissions()->pluck('name')->toArray() : [],
@@ -93,6 +97,20 @@ class HandleInertiaRequests extends Middleware
                 'error' => fn () => $request->session()->get('error'),
                 'status' => fn () => $request->session()->get('status'),
             ],
+
+            // PLATFORM BRANDING (single source of truth).
+            //
+            // The master software name + chrome labels, read by the landing
+            // header, the login top bar and the SSA sidebar through the
+            // usePlatformBranding() hook. Changing config/platform.php updates
+            // all three at once.
+            'platform' => fn () => array_merge(\App\Support\PlatformBranding::toArray(), [
+                // SSA credential guardrails (see config/platform.php). The Profile
+                // Manager reads these to hide/lock the password form when an
+                // operator has bound SSA credentials to the CLI/seeder path.
+                'ssa_profile_editable' => (bool) config('platform.profile_editable', true),
+                'ssa_self_service_password' => (bool) config('platform.allow_self_service_password', true),
+            ]),
 
             // Tenant context: whether the current user is viewing a workspace via
             // an SSA "switched view" (so the UI can show / clear it).

@@ -4,6 +4,7 @@ import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
+import useTerminology from '@/Utils/useTerminology';
 import { Spinner } from '@/Components/UI/Loading';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
@@ -46,6 +47,8 @@ function StatCard({ label, value, tone = 'text-slate-900', hint }) {
 
 export default function Index({ subsidies, sources, applyModes, departments, students, totals, sourceTotals, months, month, filters }) {
     const { can } = useCan();
+    // Terminology-aware nouns, so labels follow the institution type.
+    const { tTitle } = useTerminology();
     const { flash } = usePage().props;
     const money = useMoney();
     const { confirm } = useFeedback();
@@ -370,7 +373,7 @@ export default function Index({ subsidies, sources, applyModes, departments, stu
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         <Field label="Scope (optional)" name="department_id" type="select" value={data.department_id} error={errors.department_id} options={departmentOptions} onChange={(e) => setData('department_id', e.target.value)} />
-                        <Field label="Member (optional)" name="student_id" type="select" value={data.student_id} error={errors.student_id} options={memberOptions} onChange={(e) => setData('student_id', e.target.value)} />
+                        <Field label={`${tTitle('member', 'Member')} (optional)`} name="student_id" type="select" value={data.student_id} error={errors.student_id} options={memberOptions} onChange={(e) => setData('student_id', e.target.value)} />
                     </div>
 
                     <Field label="Notes" name="notes" type="textarea" value={data.notes} error={errors.notes} placeholder="Reference number, grant details..." onChange={(e) => setData('notes', e.target.value)} />

@@ -3,15 +3,16 @@
 namespace App\Http\Controllers\Meals;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StudentRequest;
 use App\Models\Department;
 use App\Models\Institution;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\FinanceCalculator;
+use App\Support\MemberProfileSynchronizer;
 use App\Support\Money;
 use App\Support\ReportExporter;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class StudentController extends Controller
@@ -160,9 +161,11 @@ class StudentController extends Controller
         return redirect()->route('meals.students.index');
     }
 
-    public function store(Request $request)
+    public function store(StudentRequest $request)
     {
-        $data = $request->validate($this->rules());
+        // Validation (incl. tenant-scoped unique `roll`) is handled by the Form
+        // Request, so the rules live in ONE place shared with update().
+        $data = $request->validated();
 
         // Stamp the active institution so the record is scoped correctly.
         $data['institution_id'] = Institution::current()?->id;
@@ -324,9 +327,12 @@ class StudentController extends Controller
         return redirect()->route('meals.students.index');
     }
 
-    public function update(Request $request, Student $student)
+    public function update(StudentRequest $request, Student $student)
     {
-        $data = $request->validate($this->rules($student));
+        // Tenant-scoped uniqueness (roll ignored for THIS record) is enforced in
+        // the Form Request, which resolves scope from the existing record so an
+        // update can never re-scope itself to another institution.
+        $data = $request->validated();
 
         // Backfill institution scope for records created before multi-tenancy.
         if (blank($student->institution_id)) {
@@ -342,6 +348,22 @@ class StudentController extends Controller
         }
 
         $student->update($data);
+
+        /*
+         * REVERSE SYNC: roster -> account.
+         *
+         * The reported bug was one-directional (account edit left the roster
+         * stale). The same drift happens the other way: an admin correcting a
+         * member's name from the roster used to leave the linked `users` row on
+         * the old value, so the User Manager still showed the placeholder.
+         *
+         * When this member has a linked login and the name actually changed, push
+         * it across (and realign the email) so BOTH tables and the User Manager
+         * agree - the "universally consistent" requirement.
+         */
+        if ($student->wasChanged('name') && $student->user) {
+            MemberProfileSynchronizer::syncName($student->user, $student->name);
+        }
 
         return redirect()
             ->route('meals.students.index')
@@ -393,24 +415,9 @@ class StudentController extends Controller
         return (int) $student->user_id === (int) $user->id;
     }
 
-    protected function rules(?Student $student = null): array
-    {
-        return [
-            'user_id' => [
-                'nullable',
-                'exists:users,id',
-                // One login should not back two student records.
-                Rule::unique('students', 'user_id')->ignore($student?->id),
-            ],
-            // Who owns/manages this member record (manager or member account).
-            'manager_id' => ['nullable', 'exists:users,id'],
-            'name' => ['required', 'string', 'max:255'],
-            'roll' => ['nullable', 'string', 'max:100'],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            'join_date' => ['nullable', 'date'],
-            'status' => ['required', Rule::in(['active', 'inactive'])],
-        ];
-    }
+    // The create/update rules (including the tenant-scoped unique `roll`)
+    // now live in app/Http/Requests/StudentRequest.php so they are shared and
+    // cannot drift between the two entry points.
 
     /**
      * Users eligible to be linked: those not already tied to another student,
@@ -418,12 +425,22 @@ class StudentController extends Controller
      */
     protected function linkableUsers()
     {
+        $institution = Institution::current();
+
         $takenIds = Student::query()
             ->whereNotNull('user_id')
             ->pluck('user_id')
             ->all();
 
         return User::query()
+            /*
+             * STRICT TENANCY. This picker used to list every user on the
+             * platform, so an Institution Admin in one workspace could link a
+             * member to an account belonging to a DIFFERENT institution - a
+             * cross-tenant data link and a serious leak. It is now pinned to the
+             * active institution, so only that workspace's accounts are offered.
+             */
+            ->where('institution_id', $institution?->id)
             ->whereNotIn('id', $takenIds)
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
@@ -436,11 +453,22 @@ class StudentController extends Controller
      */
     protected function managerOptions()
     {
+        $institution = Institution::current();
+
         return User::query()
+            /*
+             * STRICT TENANCY. A member may only ever be overseen by a manager of
+             * their OWN institution. The previous query listed managers from
+             * every workspace (and even the global Super Admin), so a member in
+             * one institution could be assigned a manager from another. Scoped to
+             * the active institution here.
+             */
+            ->where('institution_id', $institution?->id)
             ->where(function ($q) {
                 $q->whereHas('roles', function ($r) {
+                    // Note: 'Software Super Admin' is deliberately excluded - it is
+                    // a global role and must never manage a tenant member record.
                     $r->whereIn('name', [
-                        'Software Super Admin',
                         'Institution Admin',
                         'Meal Manager',
                     ]);

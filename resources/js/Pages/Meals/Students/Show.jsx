@@ -2,6 +2,7 @@ import React from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
 import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
+import useTerminology from '@/Utils/useTerminology';
 import { Head, Link } from '@inertiajs/react';
 
 const initials = (name) =>
@@ -28,6 +29,9 @@ function StatCard({ label, value, tone = 'text-slate-900', hint }) {
 }
 
 export default function Show({ student, costPerMeal, balance, totalMeals, totalDeposits }) {
+    // Terminology-aware labels so this detail page reads "Employee"/"Boarder"
+    // in a company/college workspace rather than always "Student".
+    const { t, tTitle } = useTerminology();
     const { can } = useCan();
     const money = useMoney();
     const canManage = can('students.manage');
@@ -38,7 +42,7 @@ export default function Show({ student, costPerMeal, balance, totalMeals, totalD
     const owed = Number(balance || 0) < 0;
 
     return (
-        <MealsLayout title="Student Details">
+        <MealsLayout title={`${tTitle('member', 'Member')} Details`}>
             <Head title={student.name} />
 
             {/* Header card */}

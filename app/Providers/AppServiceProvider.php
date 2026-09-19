@@ -15,6 +15,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Support\RecordActivity;
+use App\Support\TenantManager;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -26,7 +27,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // The tenant resolver is a per-request singleton: middleware forces the
+        // validated tenant onto it once, and every tenant-owned model's global
+        // scope reads it back. Sharing one instance keeps the resolve cheap and
+        // makes the active tenant consistent everywhere in the request.
+        $this->app->singleton(TenantManager::class, fn () => new TenantManager());
     }
 
     /**

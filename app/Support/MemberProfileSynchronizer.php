@@ -51,6 +51,11 @@ class MemberProfileSynchronizer
                 $user->save();
             }
 
+            // Email can change at the same time (Profile Manager). Keep the
+            // roster / invitation rows pointing at the SAME person by mirroring
+            // the address once it has been persisted on the user row.
+            static::syncEmail($user);
+
             // The roster (Member) record this login belongs to.
             $student = Student::query()->where('user_id', $user->id)->first();
 
@@ -85,6 +90,41 @@ class MemberProfileSynchronizer
 
             return true;
         });
+    }
+
+    /**
+     * Mirror the user's current email onto the linked member/invitation rows.
+     *
+     * The member's login identity lives on the user row, but the roster and any
+     * still-open invitation carry their own copy of the address. When a member
+     * edits their email in the Profile Manager the roster copy would otherwise
+     * go stale, so we realign it here - scoped to the same institution so we can
+     * never touch another tenant's record.
+     */
+    public static function syncEmail(User $user): void
+    {
+        if (blank($user->email) || ! $user->exists) {
+            return;
+        }
+
+        $student = Student::query()->where('user_id', $user->id)->first();
+
+        if ($student) {
+            // Same-institution guard, mirroring syncName().
+            $sameTenant = $student->institution_id === null
+                || $user->institution_id === null
+                || (int) $student->institution_id === (int) $user->institution_id;
+
+            if ($sameTenant) {
+                // The member's linked login row does not store email on the
+                // roster, but a stale invitation queued to the OLD address should
+                // not linger. We only realign open invitations here.
+                MemberInvitation::query()
+                    ->where('student_id', $student->id)
+                    ->whereNull('accepted_at')
+                    ->update(['email' => $user->email]);
+            }
+        }
     }
 
     /**

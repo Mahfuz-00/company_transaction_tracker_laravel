@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Deposit;
+use App\Models\Institution;
 use App\Models\MealEntry;
 use App\Models\MealRate;
 use App\Models\Student;
@@ -16,9 +17,35 @@ class DashboardController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
+
+        /*
+         * SOFTWARE SUPER ADMIN -> GLOBAL BUSINESS DASHBOARD.
+         *
+         * The SSA is the SaaS operator, not a tenant operator. Landing them in
+         * a single institution's meal/expense sheets was the reported bug: it
+         * looked like they "belonged" to whichever workspace happened to be the
+         * current tenant.
+         *
+         * Rule: an SSA ALWAYS lands on the platform dashboard - UNLESS they have
+         * deliberately switched INTO a workspace via the Institution Registry's
+         * "Access Dashboard", in which case they see that tenant's dashboard on
+         * purpose (and the amber "switched view" banner lets them leave).
+         */
+        if ($user && $user->isSuperAdmin()) {
+            // A session tenant is set only by an explicit "Access Dashboard"
+            // switch. With none set, keep them on the global view.
+            $switchedInto = Institution::sessionTenantId() !== null;
+
+            if (! $switchedInto) {
+                return redirect()->route('ssa.dashboard');
+            }
+
+            // Intentional tenant view: fall through to the scoped dashboard.
+        }
+
         // Members get their OWN dashboard, not the manager's pooled overview.
         // Sending them there also keeps the org-wide figures off their screen.
-        $user = $request->user();
         if ($user && $user->isMember() && ! $user->isSuperAdmin() && ! $user->isInstitutionAdmin()) {
             return redirect()->route('member.dashboard');
         }

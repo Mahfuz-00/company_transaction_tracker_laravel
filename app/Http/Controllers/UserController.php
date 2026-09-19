@@ -10,6 +10,8 @@ use Inertia\Inertia;
 use App\Models\Institution;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\PasswordGuard;
+use App\Support\TenantManager;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
@@ -17,45 +19,109 @@ class UserController extends Controller
     /**
      * List users with their currently assigned roles and status.
      *
-     * Strictly institution-scoped: an Institution Admin sees only their own
-     * institution's users. A Software Super Admin sees the users of whichever
-     * institution they have switched into via "Access Dashboard" - they are
-     * never shown a flat, unscoped list of every user on the platform.
+     * TWO MODES, decided by the actor's role:
+     *
+     *   SOFTWARE SUPER ADMIN - the GLOBAL DIRECTORY.
+     *     The SSA is a platform operator, so the User Manager is a GLOBAL module
+     *     listing users across EVERY institution (plus platform-level accounts).
+     *     Each row carries its institution so the SSA can see the whole estate at
+     *     a glance, filter by institution, and create users directly against any
+     *     chosen institution without having to "switch in" first.
+     *     `globalScope` is passed to the UI so it can show the institution column,
+     *     the institution filter and the target-institution selector on create.
+     *
+     *   INSTITUTION ADMIN - strictly institution-scoped.
+     *     Sees only their own institution's users, and can never see (or act on) a
+     *     global Super Admin account. `scopeInstitution` is passed so the UI can
+     *     name the workspace.
      */
     public function index(Request $request)
     {
         $user = $request->user();
         $institution = Institution::current();
 
+        // Only Admins and the SSA may open the User Manager at all. The route is
+        // also permission-gated (`users.view`), but this is defence in depth: a
+        // manager (or a crafted request) can never reach the roster.
+        abort_unless(
+            $user->isSuperAdmin() || $user->isInstitutionAdmin(),
+            403,
+            'The User Manager is available to administrators only.'
+        );
+
+        // The SSA sees the platform-wide directory; everyone else is tenant-scoped.
+        $globalScope = $user->isSuperAdmin();
+
         $search = (string) $request->query('search', '');
         $role = (string) $request->query('role', '');
         $status = (string) $request->query('status', '');
+        // Only meaningful in the SSA's global mode.
+        $institutionFilter = (string) $request->query('institution', '');
 
-        $users = User::query()
-            ->with('roles:id,name')
-            // Every listing is limited to the active institution.
-            ->where('institution_id', $institution?->id)
-            ->when($search !== '', function ($query) use ($search) {
-                $term = '%'.$search.'%';
-                $query->where(function ($q) use ($term) {
-                    $q->where('name', 'like', $term)
-                        ->orWhere('email', 'like', $term)
-                        ->orWhere('phone', 'like', $term);
-                });
-            })
-            ->when($role !== '', function ($query) use ($role) {
-                $query->role($role);
-            })
-            ->when($status !== '', function ($query) use ($status) {
-                $query->where('status', $status);
-            })
-            ->orderBy('name')
-            ->paginate(10)
-            ->withQueryString();
+        // The SSAs directory is a cross-tenant read, so it must run outside the
+        // tenant scope (otherwise Institution::current() would hide every other
+        // workspace). Institution Admins stay inside their own scope.
+        $query = app(TenantManager::class)->runGlobally(function () use (
+            $globalScope, $institution, $search, $role, $status, $institutionFilter
+        ) {
+            return User::query()
+                ->with(['roles:id,name', 'institution:id,name'])
+                // INSTITUTION ADMIN: limited to the active institution.
+                // SSA (global): no institution restriction - but they may still
+                // narrow to one via the filter below.
+                ->when(! $globalScope, fn ($q) => $q->where('institution_id', $institution?->id))
+                // GLOBAL-ROLE GUARD: a Software Super Admin account is a platform
+                // record, not a tenant member. It must NEVER appear in an
+                // Institution Admin's roster (and cannot be searched, edited or
+                // deactivated from here). Only the SSA sees other SSAs.
+                ->when(! $globalScope, function ($q) {
+                    $q->whereDoesntHave('roles', fn ($r) => $r->where('name', 'Software Super Admin'))
+                        ->whereNotNull('institution_id');
+                })
+                // SSA-only institution filter.
+                ->when($globalScope && $institutionFilter !== '', function ($q) use ($institutionFilter) {
+                    if ($institutionFilter === 'none') {
+                        $q->whereNull('institution_id');
+                    } else {
+                        $q->where('institution_id', (int) $institutionFilter);
+                    }
+                })
+                ->when($search !== '', function ($query) use ($search) {
+                    $term = '%'.$search.'%';
+                    $query->where(function ($q) use ($term) {
+                        $q->where('name', 'like', $term)
+                            ->orWhere('email', 'like', $term)
+                            ->orWhere('phone', 'like', $term);
+                    });
+                })
+                ->when($role !== '', function ($query) use ($role) {
+                    $query->role($role);
+                })
+                ->when($status !== '', function ($query) use ($status) {
+                    $query->where('status', $status);
+                })
+                ->orderBy('name')
+                ->paginate(10)
+                ->withQueryString();
+        });
 
         return Inertia::render('Settings/UserManager', [
-            'users' => $users,
-            'roles' => Role::orderBy('name')->get(['id', 'name']),
+            'users' => $query,
+            // Only roles an admin may confer are offered - the global role is
+            // never listed to an Institution Admin.
+            'roles' => Role::query()
+                ->when(! $globalScope, fn ($q) => $q->where('name', '!=', 'Software Super Admin'))
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            // TRUE only for the SSA: switches the module into the global-directory
+            // mode (institution column + institution filter + target selector).
+            'globalScope' => $globalScope,
+            // The institutions the SSA may assign a new user to.
+            'institutions' => $globalScope
+                ? Institution::query()->orderBy('name')->get(['id', 'name'])
+                    ->map(fn (Institution $i) => ['id' => $i->id, 'name' => $i->name])
+                    ->all()
+                : [],
             // Surfaced so the UI can name the workspace users are being created
             // in, and warn when there is none.
             'scopeInstitution' => $institution ? [
@@ -66,33 +132,45 @@ class UserController extends Controller
                 'search' => $search,
                 'role' => $role,
                 'status' => $status,
+                'institution' => $institutionFilter,
             ],
         ]);
     }
 
     /**
-     * Create a new user, strictly scoped to the ACTIVE institution.
+     * Create a new user, scoped to a target institution.
      *
-     * A user is never created globally. The institution is resolved from
-     * Institution::current(), which is whichever workspace is active - either
-     * the Institution Admin's own institution, or the one a Software Super
-     * Admin switched into via the registry's "Access Dashboard" button.
+     * TWO CALLERS:
      *
-     * A Software Super Admin who has NOT switched into an institution has no
-     * scope, and is refused here with a clear instruction rather than silently
-     * creating an orphaned, institution-less user.
+     *   INSTITUTION ADMIN - the institution is the ACTIVE one (their own). A
+     *     tenant admin can only ever create users in their own workspace.
+     *
+     *   SOFTWARE SUPER ADMIN - the GLOBAL module. The SSA explicitly chooses the
+     *     TARGET institution for the new account (posted as `institution_id`),
+     *     so they can create a user or an institution admin for ANY workspace
+     *     directly from the global directory, without switching in first. When
+     *     the SSA posts no institution, the active one (if any) is used, so the
+     *     old "switch then create" flow still works.
      */
     public function store(Request $request)
     {
-        $institution = Institution::current();
         $actor = $request->user();
 
-        // No active workspace => no scope => cannot create. (Almost always an SSA
-        // who has not yet picked an institution through Access Dashboard.)
+        // Resolve the TARGET institution.
+        //   - SSA: their explicit choice wins; otherwise fall back to the active
+        //     tenant so the legacy "Access Dashboard then add user" flow works.
+        //   - Institution Admin: always their own (active) institution.
+        $institution = $actor->isSuperAdmin()
+            ? ($request->filled('institution_id')
+                ? Institution::findOrFail($request->input('institution_id'))
+                : Institution::current())
+            : Institution::current();
+
+        // No active/target workspace => no scope => cannot create.
         if (! $institution) {
             return back()->with(
                 'error',
-                'Select an institution first. Open the Institution Registry and use "Access Dashboard" to enter a workspace, then add its users there.'
+                'Select an institution first - pick a target workspace in the create form, or open the Institution Registry and use "Access Dashboard".'
             );
         }
 
@@ -125,6 +203,9 @@ class UserController extends Controller
             'creation_mode' => ['required', Rule::in(['invite', 'password'])],
             // Password is required only in password mode; checked below.
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+            // SSA-only: the TARGET institution for the new account. Ignored for
+            // an Institution Admin (their own workspace is always used).
+            'institution_id' => ['nullable', 'integer', 'exists:institutions,id'],
         ]);
 
         // Does this email already have an account? In 'invite' mode that is fine
@@ -232,11 +313,32 @@ class UserController extends Controller
             'status' => $data['status'],
         ]);
 
-        if (! empty($data['password'])) {
-            $user->password = Hash::make($data['password']);
+        /*
+         * CREDENTIAL GUARDRAIL.
+         *
+         * A generic user-update MUST NOT be able to change a Software Super
+         * Admin's password - that was the credential-integrity hole. An SSA may
+         * only change their own password via self-service or the dedicated reset
+         * action; here we refuse anything else with a clear message.
+         */
+        $passwordChangeRequested = ! empty($data['password']);
+
+        if ($passwordChangeRequested && ! PasswordGuard::mayChangePassword($user, $request->user())) {
+            return back()->with('error', 'A Super Admin password can only be changed by that account itself, through a dedicated reset.');
         }
 
         $user->save();
+
+        // Apply the password through the authorised guard (stamps the change
+        // time + audits it) rather than writing the column directly.
+        if ($passwordChangeRequested) {
+            PasswordGuard::changePassword(
+                $user,
+                $data['password'],
+                'admin_user_update',
+                forceSsa: $request->user()->isSuperAdmin() && $request->user()->id === $user->id,
+            );
+        }
 
         /*
          * ROLE WHITELIST ENFORCEMENT.
@@ -352,6 +454,13 @@ class UserController extends Controller
 
         if ($actor->isSuperAdmin()) {
             return true;
+        }
+
+        // HARD BOUNDARY: a non-SSA may never act on a global Super Admin account
+        // (nor on any account that belongs to no institution), no matter which
+        // institution id the target happens to carry.
+        if ($user->isSuperAdmin()) {
+            return false;
         }
 
         return $user->institution_id !== null

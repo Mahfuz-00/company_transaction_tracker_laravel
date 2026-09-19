@@ -214,6 +214,16 @@ class MemberInvitationController extends Controller
             'user_id' => $user->id,
         ], ['subject_label' => $invitation->email]);
 
+        // Welcome & account-activation email (first-time setup only). Legacies
+        // share the copy with the primary PasswordSetupController path.
+        try {
+            Mail::to($user->email)->send(
+                new \App\Mail\MemberWelcomeMail($user, $invitation->institution)
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         // Send them straight to sign in with their new credentials.
         return redirect()
             ->route('login')

@@ -1,6 +1,7 @@
 import React from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
 import useCan from '@/Utils/can';
+import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 
 const MEAL_COLUMNS = [
@@ -10,6 +11,7 @@ const MEAL_COLUMNS = [
 ];
 
 export default function Index({ entries, students, filters, dayTotals }) {
+    const { t, tTitle } = useTerminology();
     const { can } = useCan();
     const { flash } = usePage().props;
     const canEntry = can('meals.entry');
@@ -102,7 +104,7 @@ export default function Index({ entries, students, filters, dayTotals }) {
                             onChange={(event) => applyFilters({ student: event.target.value })}
                             className="rounded-lg border-slate-300 text-sm text-slate-900 focus:border-indigo-500 focus:ring-indigo-500"
                         >
-                            <option value="">All students</option>
+                            <option value="">All {t('members', 'members')}</option>
                             {(students || []).map((student) => (
                                 <option key={student.id} value={student.id}>
                                     {student.name}
@@ -128,7 +130,7 @@ export default function Index({ entries, students, filters, dayTotals }) {
                         <thead>
                             <tr className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-400">
                                 <th className="px-6 py-3">Date</th>
-                                <th className="px-6 py-3">Student</th>
+                                <th className="px-6 py-3">{tTitle('member', 'Member')}</th>
                                 <th className="px-4 py-3 text-center">B</th>
                                 <th className="px-4 py-3 text-center">L</th>
                                 <th className="px-4 py-3 text-center">D</th>

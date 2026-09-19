@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToInstitution;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class SubsidySource extends Model
 {
-    use HasFactory;
+    use BelongsToInstitution, HasFactory;
 
     protected $fillable = [
         'institution_id',
@@ -63,7 +64,10 @@ class SubsidySource extends Model
     public static function ensureDefaults(?int $institutionId): void
     {
         foreach (self::DEFAULTS as $source) {
-            static::firstOrCreate(
+            // Without scoping, firstOrCreate could match a row belonging to a
+            // DIFFERENT institution that happens to share the default name.
+            // The explicit scope keeps the create/lookup pinned to $institutionId.
+            static::withoutTenantScope()->firstOrCreate(
                 ['institution_id' => $institutionId, 'name' => $source['name']],
                 [
                     'key' => $source['key'],
@@ -72,5 +76,34 @@ class SubsidySource extends Model
                 ]
             );
         }
+    }
+
+    /**
+     * Subsidy sources are SLIGHTLY special: the platform ships a set of global
+     * default sources with a NULL institution_id, and each institution may add
+     * its own. A scoped query must therefore see "mine OR the shared defaults"
+     * rather than ONLY its own rows.
+     *
+     * We override the trait's blanket scope for this model to express exactly
+     * that: no cross-institution leakage (another institution's custom sources
+     * stay hidden), while the shared, institution-less defaults remain visible
+     * to everyone.
+     */
+    protected static function bootBelongsToInstitution(): void
+    {
+        static::addGlobalScope('institution', function ($query) {
+            $tenantId = app(\App\Support\TenantManager::class)->resolveTenantId();
+
+            // Global/SSA context: no filter at all.
+            if ($tenantId === null) {
+                return;
+            }
+
+            $column = $query->getModel()->getTable().'.institution_id';
+
+            $query->where(function ($sub) use ($column, $tenantId) {
+                $sub->where($column, $tenantId)->orWhereNull($column);
+            });
+        });
     }
 }

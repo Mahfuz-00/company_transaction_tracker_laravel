@@ -2,14 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToInstitution;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Transaction extends Model
 {
-    use HasFactory;
+    use BelongsToInstitution, HasFactory;
 
     protected $fillable = [
+        'institution_id',
         'user_id',
         'student_id',
         'vendor_id',

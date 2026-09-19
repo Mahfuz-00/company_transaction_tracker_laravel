@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import Field from '@/Components/UI/Field';
+import ThemePreviewFrame from '@/Components/ThemePreviewFrame';
 import useCan from '@/Utils/can';
 import { Head, Link, useForm } from '@inertiajs/react';
 
@@ -50,9 +51,13 @@ function TerminologyPreview({ terms, effect }) {
  * Page
  * ------------------------------------------------------------------ */
 
-export default function InstitutionSettings({ institution, types = [], termKeys = [], themes = [] }) {
+export default function InstitutionSettings({ institution, types = [], termKeys = [] }) {
     const { can } = useCan();
     const canManage = can('institution.manage');
+
+    // A human label for the currently-selected institution type, used by the
+    // theme-reactive preview below.
+    const typeLabel = types.find((t) => t.value === (institution?.type))?.label || institution?.type || '—';
 
     const { data, setData, post, processing, errors, clearErrors } = useForm({
         // Method spoofing - see submit() below for why we do not use put().
@@ -65,8 +70,6 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
         contact_email: institution?.contact_email || '',
         contact_phone: institution?.contact_phone || '',
         terminology: institution?.terminology || {},
-        // Theme customisation.
-        theme: institution?.theme || { accent: 'indigo', mode: 'light', radius: 'lg', density: 'comfortable' },
         // Branding images (file inputs).
         logo: null,
         banner: null,
@@ -142,8 +145,6 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
             forceFormData: true,
         });
     };
-
-    const setTheme = (key, value) => setData('theme', { ...data.theme, [key]: value });
 
     const onLogoChange = (event) => {
         const file = event.target.files?.[0];
@@ -285,65 +286,37 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
                         )}
                     </section>
 
-                    {/* Theme customiser */}
+                    {/* Theme moved to the dedicated Theme Customizer sub-module (per-user). */}
                     <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs sm:p-7">
-                        <div className="border-b border-slate-100 pb-4">
-                            <h3 className="text-base font-bold text-slate-900">Theme</h3>
-                            <p className="mt-0.5 text-xs text-slate-500">
-                                Colour and shape of this workspace. Applies instantly across the app.
-                            </p>
-                        </div>
-
-                        {/* Accent swatches */}
-                        <div className="mt-5">
-                            <span className="mb-2.5 block text-xs font-semibold text-slate-700">Accent colour</span>
-                            <div className="flex flex-wrap gap-3">
-                                {themes.map((theme) => {
-                                    const active = (data.theme?.accent || 'indigo') === theme.value;
-
-                                    return (
-                                        <button
-                                            key={theme.value}
-                                            type="button"
-                                            disabled={!canManage}
-                                            onClick={() => setTheme('accent', theme.value)}
-                                            title={theme.label}
-                                            aria-label={theme.label}
-                                            className={`h-9 w-9 rounded-full border-2 transition-transform disabled:opacity-60 ${
-                                                active ? 'scale-110 border-slate-900 shadow-sm' : 'border-transparent hover:scale-105'
-                                            }`}
-                                            style={{ backgroundColor: theme.hex }}
-                                        />
-                                    );
-                                })}
+ <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">Appearance &amp; Theme</h3>
+                                <p className="mt-0.5 max-w-md text-xs text-slate-500">
+                                    Mode, accent colour, font, corner radius and layout density now live
+                                    in the dedicated Theme Customizer - open to every user and saved to
+                                    your account so it follows you to any device.
+                                </p>
                             </div>
+                            <Link
+                                href={route('settings.theme.edit')}
+                                className="flex-shrink-0 rounded-xl bg-slate-900 px-4 py-2 text-center text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+                            >
+                                Open Theme Customizer
+                            </Link>
                         </div>
 
-                        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                            <Field
-                                label="Corner radius"
-                                name="theme_radius"
-                                type="select"
-                                value={data.theme?.radius || 'lg'}
-                                options={[
-                                    { value: 'sm', label: 'Sharp' },
-                                    { value: 'md', label: 'Slightly rounded' },
-                                    { value: 'lg', label: 'Rounded' },
-                                    { value: 'xl', label: 'Very rounded' },
+                        {/* A live, theme-reactive miniature: it reads the active
+                            theme from context, so any change in the Customizer
+                            repaints this block instantly. */}
+                        <div className="mt-5">
+                            <ThemePreviewFrame
+                                title="Institution theme"
+                                subtitle="Reflects your active theme"
+                                rows={[
+                                    { label: 'Institution', value: institution?.name || 'Your institution' },
+                                    { label: 'Type', value: typeLabel },
+                                    { label: 'Currency', value: institution?.currency_code || 'Default' },
                                 ]}
-                                onChange={(e) => setTheme('radius', e.target.value)}
-                            />
-                            <Field
-                                label="Density"
-                                name="theme_density"
-                                type="select"
-                                value={data.theme?.density || 'comfortable'}
-                                options={[
-                                    { value: 'compact', label: 'Compact' },
-                                    { value: 'comfortable', label: 'Comfortable' },
-                                    { value: 'spacious', label: 'Spacious' },
-                                ]}
-                                onChange={(e) => setTheme('density', e.target.value)}
                             />
                         </div>
                     </section>

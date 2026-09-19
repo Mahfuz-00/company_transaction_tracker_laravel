@@ -32,7 +32,9 @@ export default function AuthenticatedLayout({ header, children }) {
 
     return (
         <ThemeProvider>
-        <div className="min-h-screen bg-gray-50 text-gray-900">
+        {/* The shell itself reads the theme tokens, so flipping dark mode recolours
+            the page background and default text instantly. */}
+        <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}>
             <div className="flex min-h-screen">
                 {/* Docked sidebar (desktop) */}
                 <div className="hidden lg:block lg:flex-shrink-0">
@@ -57,7 +59,10 @@ export default function AuthenticatedLayout({ header, children }) {
                 {/* Main column */}
                 <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
                     {/* Mobile top bar with drawer trigger */}
-                    <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
+                    <div
+                        className="sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-3 backdrop-blur lg:hidden"
+                        style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-color)' }}
+                    >
                         <button
                             type="button"
                             onClick={() => setDrawerOpen((open) => !open)}

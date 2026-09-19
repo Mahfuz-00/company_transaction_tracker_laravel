@@ -23,13 +23,16 @@ function getPasswordStrength(password) {
     return { score, label: 'Strong', tone: 'bg-emerald-500 text-emerald-600' };
 }
 
-export default function Register() {
+export default function Register({ inviteCode = '', institutionName = null, roles = [] }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
         email: '',
         phone: '',
         password: '',
         password_confirmation: '',
+        // Tenant-mapping key: an account is always created inside an institution.
+        invite_code: inviteCode,
+        role: roles[0] || 'Member',
     });
 
     const [showPassword, setShowPassword] = useState(false);
@@ -50,11 +53,40 @@ export default function Register() {
     return (
         <GuestLayout
             heading="Create your account"
-            subheading="Join the platform and keep every meal and expense accounted for."
+            subheading={institutionName
+                ? `You're joining ${institutionName}.`
+                : 'Enter your institution invite code to join your workspace.'}
         >
             <Head title="Register" />
 
             <form onSubmit={submit} className="space-y-4">
+                {/* Invitation code - the tenant-mapping key */}
+                <div>
+                    <InputLabel htmlFor="invite_code" value="Institution Invite Code" />
+
+                    <TextInput
+                        id="invite_code"
+                        name="invite_code"
+                        value={data.invite_code}
+                        className="mt-1 block w-full uppercase tracking-widest"
+                        placeholder="e.g. AB12CD34"
+                        onChange={(e) => setData('invite_code', e.target.value.toUpperCase())}
+                        required
+                    />
+
+                    {institutionName ? (
+                        <p className="mt-1.5 text-xs font-medium text-emerald-600">
+                            ✓ Matched: {institutionName}
+                        </p>
+                    ) : (
+                        <p className="mt-1.5 text-xs text-slate-500">
+                            Ask your institution admin for this code - it maps your account to the
+                            right workspace.
+                        </p>
+                    )}
+
+                    <InputError message={errors.invite_code} className="mt-2" />
+                </div>
                 {/* Name */}
                 <div>
                     <InputLabel htmlFor="name" value="Full Name" />
@@ -210,8 +242,8 @@ export default function Register() {
                 </div>
 
                 <p className="text-center text-xs leading-relaxed text-slate-500">
-                    New accounts are created with the <strong>Student</strong> role.
-                    A meal manager can grant additional access later.
+                    New accounts join as a <strong>Member</strong> (or Meal Manager if your institution
+                    allows it). An admin can grant additional access later.
                 </p>
 
                 <p className="text-center text-sm text-slate-600">

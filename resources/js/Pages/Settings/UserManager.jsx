@@ -57,7 +57,17 @@ function Avatar({ name }) {
  * Page
  * ------------------------------------------------------------------ */
 
-export default function UserManager({ users, roles: availableRoles, filters, scopeInstitution = null }) {
+export default function UserManager({
+    users,
+    roles: availableRoles,
+    filters,
+    scopeInstitution = null,
+    // TRUE for the Software Super Admin: the module becomes a GLOBAL directory -
+    // an institution column, an institution filter, and a target-institution
+    // selector when creating a user.
+    globalScope = false,
+    institutions = [],
+}) {
     const { can } = useCan();
     const { confirm } = useFeedback();
 
@@ -147,8 +157,19 @@ export default function UserManager({ users, roles: availableRoles, filters, sco
         <SettingsLayout title="Settings">
             <Head title="User Manager" />
 
-            {/* Scope banner: which institution users are created into. */}
-            {scopeInstitution ? (
+            {/* Scope banner: global directory for the SSA, workspace scope for an admin. */}
+            {globalScope ? (
+                <div className="mb-4 flex items-center gap-2 rounded-lg border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    <svg className="h-4 w-4 flex-shrink-0 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>
+                        <strong className="font-semibold text-slate-800">Global directory</strong> — showing
+                        users across <strong className="font-semibold text-slate-800">every institution</strong>.
+                        You can create a user or admin and assign them to any workspace.
+                    </span>
+                </div>
+            ) : scopeInstitution ? (
                 <div className="mb-4 flex items-center gap-2 rounded-lg border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
                     <svg className="h-4 w-4 flex-shrink-0 text-[var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -183,8 +204,11 @@ export default function UserManager({ users, roles: availableRoles, filters, sco
                     {canCreate && (
                         <button
                             onClick={openCreate}
-                            disabled={!scopeInstitution}
-                            title={scopeInstitution ? undefined : 'Select an institution first'}
+                            // The SSA's global module always has a target institution
+                            // available (chosen in the form); an admin needs an
+                            // active workspace.
+                            disabled={!globalScope && !scopeInstitution}
+                            title={globalScope || scopeInstitution ? undefined : 'Select an institution first'}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium text-sm rounded-lg shadow-sm transition-all disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -237,6 +261,23 @@ export default function UserManager({ users, roles: availableRoles, filters, sco
                         <option value="inactive">Inactive</option>
                     </select>
 
+                    {/* SSA only: narrow the global directory to one workspace. */}
+                    {globalScope && (
+                        <select
+                            value={filters?.institution || ''}
+                            onChange={(e) => applyFilters({ institution: e.target.value })}
+                            className="border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-indigo-500 focus:border-indigo-500"
+                        >
+                            <option value="">All institutions</option>
+                            {(institutions || []).map((i) => (
+                                <option key={i.id} value={i.id}>
+                                    {i.name}
+                                </option>
+                            ))}
+                            <option value="none">Platform users (no institution)</option>
+                        </select>
+                    )}
+
                     {hasFilters && (
                         <button
                             type="button"
@@ -255,6 +296,8 @@ export default function UserManager({ users, roles: availableRoles, filters, sco
                             <tr className="bg-gray-50 text-gray-400 text-xs uppercase tracking-wider font-semibold border-b border-gray-100">
                                 <th className="py-3 px-6">User</th>
                                 <th className="py-3 px-6">Contact</th>
+                                {/* Global directory only: which workspace each user belongs to. */}
+                                {globalScope && <th className="py-3 px-6">Institution</th>}
                                 <th className="py-3 px-6">Roles</th>
                                 <th className="py-3 px-6">Status</th>
                                 <th className="py-3 px-6 text-right">Actions</th>
@@ -278,6 +321,17 @@ export default function UserManager({ users, roles: availableRoles, filters, sco
                                                 <div className="text-xs text-gray-400">{u.phone}</div>
                                             )}
                                         </td>
+                                        {globalScope && (
+                                            <td className="py-4 px-6">
+                                                {u.institution?.name ? (
+                                                    <span className="inline-flex items-center rounded-full border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                                                        {u.institution.name}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs italic text-gray-400">Platform</span>
+                                                )}
+                                            </td>
+                                        )}
                                         <td className="py-4 px-6">
                                             <div className="flex flex-wrap gap-1.5">
                                                 {(u.roles || []).length > 0 ? (
@@ -326,7 +380,7 @@ export default function UserManager({ users, roles: availableRoles, filters, sco
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="5" className="py-12 text-center text-gray-400">
+                                    <td colSpan={globalScope ? 6 : 5} className="py-12 text-center text-gray-400">
                                         No users found.
                                     </td>
                                 </tr>
@@ -368,6 +422,10 @@ export default function UserManager({ users, roles: availableRoles, filters, sco
                 onClose={closeModal}
                 editing={editingUser}
                 availableRoles={availableRoles}
+                // SSA global mode: the form shows a target-institution selector.
+                globalScope={globalScope}
+                institutions={institutions}
+                defaultInstitutionId={scopeInstitution?.id || null}
             />
         </SettingsLayout>
     );
