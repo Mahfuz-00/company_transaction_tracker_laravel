@@ -122,7 +122,7 @@ jobs:
       - name: Compliant coding style (Laravel Pint)
         # Fails the build on style violations so reviews focus on logic, not
         # formatting. `--test` checks WITHOUT writing, leaving the tree clean.
-        run: vendor/bin/pint --test
+        run: composer run phpcs
 
       # -----------------------------------------------------------------------
       # RUN THE TEST SUITE.
