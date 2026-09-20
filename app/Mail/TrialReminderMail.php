@@ -20,21 +20,23 @@ use Illuminate\Queue\SerializesModels;
  */
 class TrialReminderMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable;
+    use SerializesModels;
 
     public function __construct(
         public Institution $institution,
         public User $admin,
         // 'ending' (still inside the window) | 'expired' (window closed).
         public string $state = 'ending',
-    ) {}
+    ) {
+    }
 
     public function envelope(): Envelope
     {
         return new Envelope(
             subject: $this->state === 'expired'
-                ? 'Your free trial has ended - '.$this->institution->name
-                : 'Your free trial ends soon - '.$this->institution->name,
+                ? 'Your free trial has ended - ' . $this->institution->name
+                : 'Your free trial ends soon - ' . $this->institution->name,
             tags: ['trial_reminder', $this->state],
         );
     }

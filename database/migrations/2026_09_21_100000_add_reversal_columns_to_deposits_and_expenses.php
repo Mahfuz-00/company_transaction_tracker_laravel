@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Schema;
  * would orphan the linked ledger transaction), a reversal keeps the original row
  * for the audit trail and flags it, while posting a matching counter-transaction.
  */
+
 return new class extends Migration
 {
     public function up(): void

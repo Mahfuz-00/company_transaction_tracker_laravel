@@ -16,7 +16,6 @@ use Inertia\Inertia;
 
 class MealExpenseController extends Controller
 {
-
     public function index(Request $request)
     {
         $search = trim((string) $request->query('search', ''));
@@ -39,7 +38,7 @@ class MealExpenseController extends Controller
             ->when($category !== '', fn ($q) => $q->where('category', $category))
             ->when($vendorId !== '', fn ($q) => $q->where('vendor_id', $vendorId))
             ->when($search !== '', function ($q) use ($search) {
-                $term = '%'.$search.'%';
+                $term = '%' . $search . '%';
                 $q->where(fn ($sub) => $sub->where('description', 'like', $term)
                     ->orWhere('category', 'like', $term)
                     ->orWhereHas('vendor', fn ($v) => $v->where('name', 'like', $term)));
@@ -56,7 +55,7 @@ class MealExpenseController extends Controller
         $filteredTotal = MealExpense::query()
             ->join('transactions', 'transactions.id', '=', 'meal_expenses.transaction_id')
             ->when($category !== '', fn ($q) => $q->where('meal_expenses.category', $category))
- ->when($vendorId !== '', fn ($q) => $q->where('meal_expenses.vendor_id', $vendorId))
+        ->when($vendorId !== '', fn ($q) => $q->where('meal_expenses.vendor_id', $vendorId))
             // Reversed expenses no longer count toward the month total.
             ->whereNull('meal_expenses.reversed_at')
             ->when($start, fn ($q) => $q->whereDate('meal_expenses.created_at', '>=', $start->toDateString()))
@@ -261,10 +260,10 @@ class MealExpenseController extends Controller
             $reversal = Transaction::create([
                 'user_id' => $request->user()->id,
                 'type' => 'in',
-                'item' => 'Expense reversal - '.($expense->description ?: 'Meal Expense'),
+                'item' => 'Expense reversal - ' . ($expense->description ?: 'Meal Expense'),
                 'amount' => $amount,
                 'category' => 'Expense Reversal',
-                'reason' => 'Reversal of expense #'.$expense->id,
+                'reason' => 'Reversal of expense #' . $expense->id,
                 'source' => 'meal_expense',
             ]);
 

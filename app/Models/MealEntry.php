@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class MealEntry extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = ['institution_id', 'student_id', 'date', 'breakfast', 'lunch', 'dinner', 'recorded_by', 'notes'];
 

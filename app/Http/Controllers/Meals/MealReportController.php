@@ -76,8 +76,8 @@ class MealReportController extends Controller
         $format = $request->input('format', 'excel');
 
         $exporter = new ReportExporter(
-            filename: 'meal-report-'.$month,
-            title: 'Meal Report - '.$label,
+            filename: 'meal-report-' . $month,
+            title: 'Meal Report - ' . $label,
             columns: [
                 'name' => 'Name',
                 'roll' => 'Roll ID',
@@ -106,7 +106,7 @@ class MealReportController extends Controller
                 : $value,
         );
 
-        ActivityLogController::recordExport($request, 'Meal Report - '.$label, [
+        ActivityLogController::recordExport($request, 'Meal Report - ' . $label, [
             'month' => $month,
             'format' => $format,
         ]);

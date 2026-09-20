@@ -47,7 +47,12 @@ class GlobalAuditController extends Controller
         $to = $request->query('to');
 
         return Inertia::render('SSA/Audit', app(TenantManager::class)->runGlobally(function () use (
-            $search, $institutionId, $event, $severity, $from, $to
+            $search,
+            $institutionId,
+            $event,
+            $severity,
+            $from,
+            $to
         ) {
             $eventsForSeverity = $this->eventsForSeverity($severity);
 
@@ -58,7 +63,7 @@ class GlobalAuditController extends Controller
                 ->when($from, fn ($q) => $q->whereDate('created_at', '>=', $from))
                 ->when($to, fn ($q) => $q->whereDate('created_at', '<=', $to))
                 ->when($search !== '', function ($q) use ($search) {
-                    $term = '%'.$search.'%';
+                    $term = '%' . $search . '%';
                     $q->where(function ($sub) use ($term) {
                         $sub->where('description', 'like', $term)
                             ->orWhere('subject_label', 'like', $term)
@@ -188,7 +193,7 @@ class GlobalAuditController extends Controller
         $format = $request->query('format', 'excel');
 
         $exporter = new ReportExporter(
-            filename: 'global-audit-'.now()->format('Ymd'),
+            filename: 'global-audit-' . now()->format('Ymd'),
             title: 'Global System Audit & Security Log',
             columns: [
                 'when' => 'When',

@@ -45,7 +45,7 @@ class EmailLogController extends Controller
             ->when($status !== '', fn ($q) => $q->where('status', $status))
             ->when($kind !== '', fn ($q) => $q->where('kind', $kind))
             ->when($search !== '', function ($q) use ($search) {
-                $term = '%'.$search.'%';
+                $term = '%' . $search . '%';
                 $q->where(function ($sub) use ($term) {
                     $sub->where('to', 'like', $term)
                         ->orWhere('subject', 'like', $term)

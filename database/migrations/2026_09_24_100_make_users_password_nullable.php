@@ -1,4 +1,5 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Schema;
  *   - password         : NULL until the invitee sets one via the signed link.
  *   - setup_completed_at: stamped when they finish; NULL = still pending.
  */
+
 return new class extends Migration
 {
     public function up(): void

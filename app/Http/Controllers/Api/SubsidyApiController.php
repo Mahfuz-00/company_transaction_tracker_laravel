@@ -88,7 +88,7 @@ class SubsidyApiController extends Controller
             $tx = Transaction::create([
                 'user_id' => $request->user()->id,
                 'type' => 'in',
-                'item' => 'Institutional Subsidy ('.$label.')',
+                'item' => 'Institutional Subsidy (' . $label . ')',
                 'amount' => $data['amount'],
                 'category' => 'Subsidy',
                 'by_whom' => $label,

@@ -9,7 +9,8 @@ use Illuminate\Support\Str;
 
 class Department extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = ['institution_id', 'name', 'slug', 'description'];
 

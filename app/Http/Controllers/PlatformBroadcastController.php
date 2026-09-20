@@ -106,7 +106,7 @@ class PlatformBroadcastController extends Controller
         // users, not just the SSA's (empty) institution scope.
         $sent = app(TenantManager::class)->runGlobally(fn () => Notifier::broadcast(
             $data['audience'],
-            $prefix.$data['title'],
+            $prefix . $data['title'],
             $data['body'],
             $actor,
             'broadcast',

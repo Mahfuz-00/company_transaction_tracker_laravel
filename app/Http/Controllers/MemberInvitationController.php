@@ -51,8 +51,10 @@ class MemberInvitationController extends Controller
 
         // Tenancy guard: an existing user from another institution cannot be
         // re-invited into this one.
-        if ($existingUser && $existingUser->institution_id
-            && (int) $existingUser->institution_id !== (int) $institution->id) {
+        if (
+            $existingUser && $existingUser->institution_id
+            && (int) $existingUser->institution_id !== (int) $institution->id
+        ) {
             return back()->with('error', 'That email already belongs to a user in another institution.');
         }
 
@@ -130,7 +132,7 @@ class MemberInvitationController extends Controller
             )
         );
 
-        AuditLogger::log('invited', 'invited '.$invitation->email, $invitation, [
+        AuditLogger::log('invited', 'invited ' . $invitation->email, $invitation, [
             'email' => $invitation->email,
             'role' => $invitation->role,
             'state' => $existingUser ? 'complete' : 'incomplete',
@@ -210,7 +212,7 @@ class MemberInvitationController extends Controller
             return $user;
         });
 
-        AuditLogger::log('accepted', 'accepted invite for '.$invitation->email, $invitation, [
+        AuditLogger::log('accepted', 'accepted invite for ' . $invitation->email, $invitation, [
             'user_id' => $user->id,
         ], ['subject_label' => $invitation->email]);
 

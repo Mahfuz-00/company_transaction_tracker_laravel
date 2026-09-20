@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Schema;
  * The stock Laravel users migration is left untouched; these columns are added
  * in a separate, idempotent migration so it is safe to run on an existing DB.
  */
+
 return new class extends Migration
 {
     public function up(): void

@@ -408,7 +408,7 @@ class MonitoringController extends Controller
 
         $data = $request->validate([
             'subscription_plan' => ['nullable', 'string', 'max:40'],
-            'subscription_status' => ['required', 'string', 'in:'.implode(',', array_keys(Institution::SUBSCRIPTION_STATUSES))],
+            'subscription_status' => ['required', 'string', 'in:' . implode(',', array_keys(Institution::SUBSCRIPTION_STATUSES))],
             'subscription_amount' => ['nullable', 'numeric', 'min:0'],
             'subscription_renews_at' => ['nullable', 'date'],
             'member_limit' => ['nullable', 'integer', 'min:0'],
@@ -458,7 +458,7 @@ class MonitoringController extends Controller
         $format = $request->query('format', 'excel');
 
         $exporter = new ReportExporter(
-            filename: 'platform-audit-'.now()->format('Ymd'),
+            filename: 'platform-audit-' . now()->format('Ymd'),
             title: 'Platform-Wide Audit Report',
             columns: [
                 'date' => 'When',
@@ -472,7 +472,7 @@ class MonitoringController extends Controller
             rows: $logs,
             meta: [
                 'Generated' => now()->format('j M Y, H:i'),
-                'Range' => ($from ?: 'start').' to '.($to ?: 'now'),
+                'Range' => ($from ?: 'start') . ' to ' . ($to ?: 'now'),
                 'Rows' => $logs->count(),
             ],
         );

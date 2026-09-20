@@ -68,9 +68,11 @@ class MemberProfileSynchronizer
             if ($student) {
                 // Guard: never let a name-sync tamper with a member record that
                 // belongs to a different institution.
-                if ($student->institution_id === null
+                if (
+                    $student->institution_id === null
                     || $user->institution_id === null
-                    || (int) $student->institution_id === (int) $user->institution_id) {
+                    || (int) $student->institution_id === (int) $user->institution_id
+                ) {
                     $student->name = $name;
 
                     // Heal the ownership link if it is still missing.

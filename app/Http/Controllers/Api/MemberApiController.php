@@ -21,7 +21,7 @@ class MemberApiController extends Controller
         $search = trim((string) $request->query('search', ''));
         $status = (string) $request->query('status', '');
 
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
         $breakdown = $finance->memberBreakdown($month)->keyBy('id');
         $rate = $finance->perMealRate($month);
 
@@ -77,7 +77,7 @@ class MemberApiController extends Controller
     public function show(Request $request, Student $member)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
 
         $row = $finance->memberBreakdown($month)->firstWhere('id', $member->id);
 

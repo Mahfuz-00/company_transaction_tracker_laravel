@@ -66,7 +66,7 @@ class PlatformBranding
             $url = $disk->url($path);
 
             if ($disk->exists($path)) {
-                $url .= '?v='.$disk->lastModified($path);
+                $url .= '?v=' . $disk->lastModified($path);
             }
 
             return $url;

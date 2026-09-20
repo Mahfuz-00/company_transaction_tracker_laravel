@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Schema;
  * Once SMTP is wired up and creation switches to invitation-only, these columns
  * simply stay false and the flag has no effect - so the fallback is safe to keep.
  */
+
 return new class extends Migration
 {
     public function up(): void

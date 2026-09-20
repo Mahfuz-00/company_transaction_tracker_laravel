@@ -62,7 +62,12 @@ class UserController extends Controller
         // tenant scope (otherwise Institution::current() would hide every other
         // workspace). Institution Admins stay inside their own scope.
         $query = app(TenantManager::class)->runGlobally(function () use (
-            $globalScope, $institution, $search, $role, $status, $institutionFilter
+            $globalScope,
+            $institution,
+            $search,
+            $role,
+            $status,
+            $institutionFilter
         ) {
             return User::query()
                 ->with(['roles:id,name', 'institution:id,name'])
@@ -87,7 +92,7 @@ class UserController extends Controller
                     }
                 })
                 ->when($search !== '', function ($query) use ($search) {
-                    $term = '%'.$search.'%';
+                    $term = '%' . $search . '%';
                     $query->where(function ($q) use ($term) {
                         $q->where('name', 'like', $term)
                             ->orWhere('email', 'like', $term)

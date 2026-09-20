@@ -15,7 +15,8 @@ use Illuminate\Queue\SerializesModels;
  */
 class MemberInvitationMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable;
+    use SerializesModels;
 
     public function __construct(
         public MemberInvitation $invitation,
@@ -24,14 +25,15 @@ class MemberInvitationMail extends Mailable
         // true when re-issuing for an already-existing account (password reset),
         // false for a first-time invitation. Only the copy changes.
         public bool $isReset = false,
-    ) {}
+    ) {
+    }
 
     public function envelope(): Envelope
     {
         return new Envelope(
             subject: $this->isReset
-                ? 'Reset your password'.($this->institutionName ? ' - '.$this->institutionName : '')
-                : 'You are invited to '.($this->institutionName ?: config('app.name')),
+                ? 'Reset your password' . ($this->institutionName ? ' - ' . $this->institutionName : '')
+                : 'You are invited to ' . ($this->institutionName ?: config('app.name')),
             // Surfaced to the outbox listener so rows are grouped by kind.
             tags: [$this->isReset ? 'password_reset' : 'invitation'],
         );

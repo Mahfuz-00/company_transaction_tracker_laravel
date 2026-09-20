@@ -638,7 +638,7 @@ class Institution extends Model
 
         try {
             if ($disk->exists($path)) {
-                $url .= '?v='.$disk->lastModified($path);
+                $url .= '?v=' . $disk->lastModified($path);
             }
         } catch (\Throwable $e) {
             // Fall through with the plain URL if the disk is unavailable.
@@ -688,7 +688,7 @@ class Institution extends Model
     public function ensureHubVendor(): Vendor
     {
         return $this->hubVendor() ?? $this->vendors()->create([
-            'name' => $this->name.' (Central)',
+            'name' => $this->name . ' (Central)',
             'category' => 'other',
             'is_institution_hub' => true,
             'status' => 'active',

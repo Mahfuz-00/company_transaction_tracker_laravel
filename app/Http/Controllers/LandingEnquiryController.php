@@ -118,7 +118,7 @@ class LandingEnquiryController extends Controller
             return back()->withErrors(['plan_id' => 'Choose a plan, or provision on a free trial.']);
         }
 
-        $institutionName = $data['name'] ?? $enquiry->institution_name ?? ($enquiry->name."'s Institution");
+        $institutionName = $data['name'] ?? $enquiry->institution_name ?? ($enquiry->name . "'s Institution");
         $adminEmail = $enquiry->email;
         $adminName = $data['admin_name'] ?? $enquiry->name;
 
@@ -159,13 +159,13 @@ class LandingEnquiryController extends Controller
             'plan' => $plan?->key,
         ], ['subject_label' => $institution->name, 'institution_id' => $institution->id]);
 
-        $label = $mode === 'plan' && $plan ? "the {$plan->name} plan" : 'a '.Institution::TRIAL_DAYS.'-day free trial';
+        $label = $mode === 'plan' && $plan ? "the {$plan->name} plan" : 'a ' . Institution::TRIAL_DAYS . '-day free trial';
 
         return back()->with(
             'success',
             "Institution \"{$institution->name}\" provisioned on {$label}. Welcome email sent to {$admin->email}"
             // Show the generated password only when the SSA did NOT supply one.
-            .(filled($data['admin_password'] ?? null) ? '.' : " with a temporary password: {$plainPassword}")
+            . (filled($data['admin_password'] ?? null) ? '.' : " with a temporary password: {$plainPassword}")
         );
     }
 

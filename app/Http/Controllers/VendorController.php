@@ -33,7 +33,7 @@ class VendorController extends Controller
             ->withCount('expenses')
             ->withSum(['transactions as total_purchased' => fn ($q) => $q->where('type', 'out')], 'amount')
             ->when($search !== '', function ($query) use ($search) {
-                $term = '%'.$search.'%';
+                $term = '%' . $search . '%';
                 $query->where(function ($q) use ($term) {
                     $q->where('name', 'like', $term)
                         ->orWhere('contact_person', 'like', $term)
@@ -137,7 +137,7 @@ class VendorController extends Controller
         $format = $request->query('format', 'excel');
 
         $exporter = new ReportExporter(
-            filename: 'vendors-'.now()->format('Ymd'),
+            filename: 'vendors-' . now()->format('Ymd'),
             title: 'Vendor & Supplier Ledger',
             columns: [
                 'name' => 'Vendor',

@@ -36,7 +36,7 @@ class MemberDashboardController extends Controller
             ]);
         }
 
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
         $month = FinanceCalculator::resolveMonth($request->query('month'));
         $costPerMeal = $finance->perMealRate($month);
 
@@ -168,7 +168,7 @@ class MemberDashboardController extends Controller
                 'dinner' => (int) ($totals->dinner ?? 0),
                 'total' => (int) ($totals->total ?? 0),
             ],
-            'costPerMeal' => (new FinanceCalculator)->perMealRate($month),
+            'costPerMeal' => (new FinanceCalculator())->perMealRate($month),
             'months' => $this->monthOptions(),
             'month' => $month,
         ]);
@@ -228,7 +228,7 @@ class MemberDashboardController extends Controller
         }
 
         $month = FinanceCalculator::resolveMonth($request->query('month'));
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
         $costPerMeal = $finance->perMealRate($month);
         $history = $this->monthlyHistory($student, $costPerMeal);
 
@@ -294,7 +294,7 @@ class MemberDashboardController extends Controller
                 ->whereDate('created_at', '<=', $end->toDateString())
                 ->sum('amount');
 
-            $rate = (new FinanceCalculator)->perMealRate($month);
+            $rate = (new FinanceCalculator())->perMealRate($month);
             $mealCost = round($meals * $rate, 2);
 
             $rows[] = [

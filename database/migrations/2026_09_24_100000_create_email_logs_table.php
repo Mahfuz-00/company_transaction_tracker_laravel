@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Schema;
  * institution_id scopes the log per workspace (SSA sees everything global; an
  * Institution Admin / Meal Manager sees only their own).
  */
+
 return new class extends Migration
 {
     public function up(): void

@@ -106,8 +106,8 @@ class LandingController extends Controller
                     'lead',
                     'New demo request',
                     "{$data['name']} ({$data['email']})"
-                        .($data['institution_name'] ? " from {$data['institution_name']}" : '')
-                        .($data['message'] ? " — {$data['message']}" : ''),
+                        . ($data['institution_name'] ? " from {$data['institution_name']}" : '')
+                        . ($data['message'] ? " — {$data['message']}" : ''),
                     // Deep-link straight into the enquiries queue so the SSA can act.
                     ['url' => route('ssa.enquiries.index', [], false)],
                 );

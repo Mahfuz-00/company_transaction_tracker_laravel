@@ -52,7 +52,7 @@ class StudentController extends Controller
             // Only the members this manager is responsible for.
             ->when($scopedIds !== null, fn ($q) => $q->whereIn('id', $scopedIds))
             ->when($search !== '', function ($query) use ($search) {
-                $term = '%'.$search.'%';
+                $term = '%' . $search . '%';
                 $query->where(function ($q) use ($term) {
                     $q->where('name', 'like', $term)
                         ->orWhere('roll', 'like', $term);
@@ -180,8 +180,10 @@ class StudentController extends Controller
          * somehow sends manager_id equal to the member's own user_id, we drop it
          * so the roster cannot show the member as their own manager.
          */
-        if (! empty($data['manager_id']) && ! empty($data['user_id'])
-            && (int) $data['manager_id'] === (int) $data['user_id']) {
+        if (
+            ! empty($data['manager_id']) && ! empty($data['user_id'])
+            && (int) $data['manager_id'] === (int) $data['user_id']
+        ) {
             $data['manager_id'] = null;
         }
 
@@ -263,7 +265,7 @@ class StudentController extends Controller
         $format = $request->query('format', 'excel');
 
         $exporter = new ReportExporter(
-            filename: 'members-'.$month.'-'.now()->format('Ymd'),
+            filename: 'members-' . $month . '-' . now()->format('Ymd'),
             title: 'Member Roster',
             columns: [
                 'name' => 'Name',
@@ -342,8 +344,10 @@ class StudentController extends Controller
         // Same guard as store(): a member can never be their own manager. Compare
         // against the incoming user_id (or the existing one when not resubmitted).
         $effectiveUserId = $data['user_id'] ?? $student->user_id;
-        if (! empty($data['manager_id']) && ! empty($effectiveUserId)
-            && (int) $data['manager_id'] === (int) $effectiveUserId) {
+        if (
+            ! empty($data['manager_id']) && ! empty($effectiveUserId)
+            && (int) $data['manager_id'] === (int) $effectiveUserId
+        ) {
             $data['manager_id'] = null;
         }
 

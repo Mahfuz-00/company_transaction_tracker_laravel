@@ -13,7 +13,10 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, HasRoles;
+    use HasApiTokens;
+    use HasFactory;
+    use Notifiable;
+    use HasRoles;
 
     /**
      * Set true by PasswordGuard (and the auth controllers) to signal that a
@@ -57,7 +60,7 @@ class User extends Authenticatable
 
                 report(new \RuntimeException(
                     'Blocked an unauthorised password write to the Software Super Admin account '
-                    .$user->email.'. Use App\\Support\\PasswordGuard::changePassword() instead.'
+                    . $user->email . '. Use App\\Support\\PasswordGuard::changePassword() instead.'
                 ));
             }
         });
@@ -115,7 +118,7 @@ class User extends Authenticatable
         // Version by mtime when the file exists, so a replacement busts the cache.
         try {
             if ($disk->exists($path)) {
-                $url .= '?v='.$disk->lastModified($path);
+                $url .= '?v=' . $disk->lastModified($path);
             }
         } catch (\Throwable $e) {
             // If the disk is unavailable, still return the plain URL.

@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Schema;
  * Announcements (broadcast to a whole institution) reuse the same table: one row
  * per recipient, so per-user read state works with no extra join.
  */
+
 return new class extends Migration
 {
     public function up(): void

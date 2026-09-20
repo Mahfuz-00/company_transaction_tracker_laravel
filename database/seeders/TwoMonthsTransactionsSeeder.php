@@ -32,7 +32,7 @@ class TwoMonthsTransactionsSeeder extends Seeder
             // create 1-2 transactions per day
             $count = rand(1, 2);
             for ($i = 0; $i < $count; $i++) {
-                $type = rand(0,1) ? 'in' : 'out';
+                $type = rand(0, 1) ? 'in' : 'out';
                 $amount = rand(100, 10000) / 100; // 1.00 - 100.00
                 $paymentMethods = ['Cash', 'Bank', 'Mobile Banking'];
                 $byWhomNames = ['Supplier', 'Client', 'Friend', 'System'];

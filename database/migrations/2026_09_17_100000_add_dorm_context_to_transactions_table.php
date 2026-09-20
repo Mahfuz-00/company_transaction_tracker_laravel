@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Schema;
  * All columns are nullable so existing rows remain valid and the original
  * generic transaction tracker keeps working.
  */
+
 return new class extends Migration
 {
     public function up(): void

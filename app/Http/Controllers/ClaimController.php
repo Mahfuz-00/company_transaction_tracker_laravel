@@ -203,11 +203,11 @@ class ClaimController extends Controller
                     'user_id' => $request->user()->id,
                     'student_id' => $student->id,
                     'type' => 'out',
-                    'item' => 'Member purchase: '.$claim->title,
+                    'item' => 'Member purchase: ' . $claim->title,
                     'amount' => $amount,
                     'category' => $claim->subject ? ucfirst($claim->subject) : 'Member Purchase',
                     'payee' => $student->name,
-                    'reason' => 'Approved member expense claim #'.$claim->id,
+                    'reason' => 'Approved member expense claim #' . $claim->id,
                     'source' => 'claim',
                 ]);
                 $transactionId = $tx->id;
@@ -220,7 +220,7 @@ class ClaimController extends Controller
                     'payment_method' => 'Reimbursement',
                     'recorded_by' => $request->user()->id,
                     'transaction_id' => $tx->id,
-                    'notes' => 'Reimbursement for approved claim #'.$claim->id.' - '.$claim->title,
+                    'notes' => 'Reimbursement for approved claim #' . $claim->id . ' - ' . $claim->title,
                 ]);
                 $depositId = $deposit->id;
             } elseif ($claim->subject === 'meal') {
@@ -254,11 +254,11 @@ class ClaimController extends Controller
                     'user_id' => $request->user()->id,
                     'student_id' => $student->id,
                     'type' => 'in',
-                    'item' => 'Claim adjustment for '.$student->name,
+                    'item' => 'Claim adjustment for ' . $student->name,
                     'amount' => $amount,
                     'category' => 'Claim Adjustment',
                     'by_whom' => $student->name,
-                    'reason' => 'Approved claim #'.$claim->id.' - '.$claim->title,
+                    'reason' => 'Approved claim #' . $claim->id . ' - ' . $claim->title,
                     'source' => 'claim',
                 ]);
                 $transactionId = $tx->id;
@@ -270,7 +270,7 @@ class ClaimController extends Controller
                     'payment_method' => $claim->payment_method ?: 'Claim adjustment',
                     'recorded_by' => $request->user()->id,
                     'transaction_id' => $tx->id,
-                    'notes' => 'Approved claim #'.$claim->id.' - '.$claim->title,
+                    'notes' => 'Approved claim #' . $claim->id . ' - ' . $claim->title,
                 ]);
                 $depositId = $deposit->id;
             }

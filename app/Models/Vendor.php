@@ -9,7 +9,8 @@ use Illuminate\Support\Str;
 
 class Vendor extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = [
         'institution_id',

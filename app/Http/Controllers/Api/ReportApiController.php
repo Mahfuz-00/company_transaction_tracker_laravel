@@ -19,7 +19,7 @@ class ReportApiController extends Controller
     public function meal(Request $request)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
 
         $snapshot = $finance->monthSnapshot($month);
         $members = $finance->memberBreakdown($month);
@@ -39,7 +39,7 @@ class ReportApiController extends Controller
     public function analytics(Request $request)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
 
         $snapshot = $finance->monthSnapshot($month);
 
@@ -62,7 +62,7 @@ class ReportApiController extends Controller
         $lookback = (int) $request->query('months', FinanceCalculator::FORECAST_LOOKBACK_MONTHS);
         $lookback = max(2, min(12, $lookback));
 
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
 
         return response()->json(['data' => $finance->forecast($lookback)]);
     }
@@ -74,7 +74,7 @@ class ReportApiController extends Controller
     public function perMealRate(Request $request)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
 
         $snapshot = $finance->monthSnapshot($month);
 

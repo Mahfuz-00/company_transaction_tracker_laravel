@@ -14,7 +14,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ActivityLog extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = [
         'user_id',

@@ -42,7 +42,7 @@ class ActivityLogController extends Controller
             // SSA: optional single-institution filter.
             ->when($institutionFilter !== '', fn ($q) => $q->where('institution_id', $institutionFilter))
             ->when($search !== '', function ($q) use ($search) {
-                $term = '%'.$search.'%';
+                $term = '%' . $search . '%';
                 $q->where(function ($sub) use ($term) {
                     $sub->where('description', 'like', $term)
                         ->orWhere('subject_label', 'like', $term)
@@ -51,7 +51,7 @@ class ActivityLogController extends Controller
                 });
             })
             ->when($event !== '', fn ($q) => $q->where('event', $event))
-            ->when($module !== '', fn ($q) => $q->where('subject_type', 'like', '%'.$module.'%'))
+            ->when($module !== '', fn ($q) => $q->where('subject_type', 'like', '%' . $module . '%'))
             ->when($actor !== '', fn ($q) => $q->where('user_id', $actor))
             ->orderByDesc('created_at')
             ->orderByDesc('id')
@@ -115,7 +115,7 @@ class ActivityLogController extends Controller
     {
         AuditLogger::log(
             'exported',
-            'exported '.$label,
+            'exported ' . $label,
             null,
             $meta,
             ['subject_label' => $label]

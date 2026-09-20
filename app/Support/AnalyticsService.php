@@ -24,8 +24,9 @@ use Illuminate\Support\Facades\DB;
 class AnalyticsService
 {
     public function __construct(
-        protected FinanceCalculator $finance = new FinanceCalculator,
-    ) {}
+        protected FinanceCalculator $finance = new FinanceCalculator(),
+    ) {
+    }
 
     /**
      * Assemble the complete Analytics page payload.

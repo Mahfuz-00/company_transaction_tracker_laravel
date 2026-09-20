@@ -91,7 +91,7 @@ return new class extends Migration
             ->whereNotNull('student_id')
             ->update([
                 'institution_id' => DB::raw(
-                    '(SELECT institution_id FROM students WHERE students.id = '.$table.'.student_id)'
+                    '(SELECT institution_id FROM students WHERE students.id = ' . $table . '.student_id)'
                 ),
             ]);
     }

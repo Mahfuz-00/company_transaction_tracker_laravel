@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Schema;
  * scoping already carries the shape to do it - adding institution_id to the
  * domain tables is the only step left for true multi-tenancy.
  */
+
 return new class extends Migration
 {
     public function up(): void

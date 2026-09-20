@@ -34,10 +34,10 @@ class Money
         }
 
         return match ($position) {
-            'before_space' => $symbol.' '.$number,
-            'after' => $number.$symbol,
-            'after_space' => $number.' '.$symbol,
-            default => $symbol.$number,
+            'before_space' => $symbol . ' ' . $number,
+            'after' => $number . $symbol,
+            'after_space' => $number . ' ' . $symbol,
+            default => $symbol . $number,
         };
     }
 }

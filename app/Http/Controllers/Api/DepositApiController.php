@@ -90,7 +90,7 @@ class DepositApiController extends Controller
                 'user_id' => $request->user()->id,
                 'student_id' => $student->id,
                 'type' => 'in',
-                'item' => 'Meal Deposit for '.$student->name,
+                'item' => 'Meal Deposit for ' . $student->name,
                 'amount' => $data['amount'],
                 'category' => 'Meal Deposit',
                 'payment_method' => $data['payment_method'] ?? null,

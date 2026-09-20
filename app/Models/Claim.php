@@ -18,7 +18,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Claim extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = [
         'institution_id',
@@ -155,8 +156,8 @@ class Claim extends Model
                 + (int) ($this->lunch ?? 0)
                 + (int) ($this->dinner ?? 0);
 
-            return $meals.' meal'.($meals === 1 ? '' : 's')
-                .($this->entry_date ? ' on '.$this->entry_date->format('j M Y') : '');
+            return $meals . ' meal' . ($meals === 1 ? '' : 's')
+                . ($this->entry_date ? ' on ' . $this->entry_date->format('j M Y') : '');
         }
 
         return $this->title;

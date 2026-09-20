@@ -31,7 +31,8 @@ class AppNotification extends Notification
         public string $title,
         public string $body,
         public array $meta = [],
-    ) {}
+    ) {
+    }
 
     /**
      * In-app only for now. Adding 'mail' here (guarded by an SMTP check) is the

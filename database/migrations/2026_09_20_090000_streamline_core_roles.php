@@ -16,6 +16,7 @@ use Spatie\Permission\Models\Role;
  * The redundant legacy roles ("Student", plain "Super Admin") are folded into
  * the core set and then removed, so role lists and dropdowns stop drifting.
  */
+
 return new class extends Migration
 {
     public function up(): void

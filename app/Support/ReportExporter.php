@@ -34,7 +34,8 @@ class ReportExporter
         protected iterable $rows,
         protected array $meta = [],
         protected ?\Closure $formatter = null,
-    ) {}
+    ) {
+    }
 
     /* ------------------------------------------------------------------ *
      * Excel (SpreadsheetML)
@@ -47,7 +48,7 @@ class ReportExporter
         $meta = $this->meta;
         $title = $this->title;
         $formatter = $this->formatter;
-        $filename = $this->filename.'.xls';
+        $filename = $this->filename . '.xls';
 
         return response()->streamDownload(function () use ($columns, $rows, $meta, $title, $formatter) {
             echo $this->buildSpreadsheetXml($title, $columns, $rows, $meta, $formatter);
@@ -61,36 +62,36 @@ class ReportExporter
     {
         $esc = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES | ENT_XML1, 'UTF-8');
 
-        $out = '<?xml version="1.0" encoding="UTF-8"?>'."\n";
-        $out .= '<?mso-application progid="Excel.Sheet"?>'."\n";
+        $out = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        $out .= '<?mso-application progid="Excel.Sheet"?>' . "\n";
         $out .= '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" '
-            .'xmlns:o="urn:schemas-microsoft-com:office:office" '
-            .'xmlns:x="urn:schemas-microsoft-com:office:excel" '
- .'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'."\n";
+            . 'xmlns:o="urn:schemas-microsoft-com:office:office" '
+            . 'xmlns:x="urn:schemas-microsoft-com:office:excel" '
+        . 'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' . "\n";
 
         // Styles: title, meta label, header, plain, money.
         $out .= '<Styles>';
         $out .= '<Style ss:ID="title"><Font ss:Bold="1" ss:Size="14"/></Style>';
         $out .= '<Style ss:ID="meta"><Font ss:Italic="1" ss:Color="#555"/></Style>';
         $out .= '<Style ss:ID="head"><Font ss:Bold="1" ss:Color="#FFFFFF"/>'
-            .'<Interior ss:Color="#4F46E5" ss:Pattern="Solid"/></Style>';
+            . '<Interior ss:Color="#4F46E5" ss:Pattern="Solid"/></Style>';
         $out .= '<Style ss:ID="cell"><Borders>'
-            .'<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DD"/>'
-            .'</Borders></Style>';
+            . '<Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#DD"/>'
+            . '</Borders></Style>';
         $out .= '</Styles>';
 
-        $out .= '<Worksheet ss:Name="Report"><Table>'."\n";
+        $out .= '<Worksheet ss:Name="Report"><Table>' . "\n";
 
         // Title row
-        $out .= '<Row><Cell ss:StyleID="title"><Data ss:Type="String">'.$esc($title).'</Data></Cell></Row>';
+        $out .= '<Row><Cell ss:StyleID="title"><Data ss:Type="String">' . $esc($title) . '</Data></Cell></Row>';
         $out .= '<Row></Row>';
 
         // Meta rows
         foreach ($meta as $label => $value) {
             $out .= '<Row>'
-                .'<Cell ss:StyleID="meta"><Data ss:Type="String">'.$esc($label).'</Data></Cell>'
-                .'<Cell ss:StyleID="meta"><Data ss:Type="String">'.$esc($value).'</Data></Cell>'
-                .'</Row>';
+                . '<Cell ss:StyleID="meta"><Data ss:Type="String">' . $esc($label) . '</Data></Cell>'
+                . '<Cell ss:StyleID="meta"><Data ss:Type="String">' . $esc($value) . '</Data></Cell>'
+                . '</Row>';
         }
         if ($meta) {
             $out .= '<Row></Row>';
@@ -99,9 +100,9 @@ class ReportExporter
         // Header
         $out .= '<Row>';
         foreach ($columns as $label) {
-            $out .= '<Cell ss:StyleID="head"><Data ss:Type="String">'.$esc($label).'</Data></Cell>';
+            $out .= '<Cell ss:StyleID="head"><Data ss:Type="String">' . $esc($label) . '</Data></Cell>';
         }
-        $out .= '</Row>'."\n";
+        $out .= '</Row>' . "\n";
 
         // Body
         foreach ($rows as $row) {
@@ -116,10 +117,10 @@ class ReportExporter
                 $isNumeric = ! $formatter && is_numeric($value);
 
                 $type = $isNumeric ? 'Number' : 'String';
-                $out .= '<Cell ss:StyleID="cell"><Data ss:Type="'.$type.'">'
-                    .$esc($value).'</Data></Cell>';
+                $out .= '<Cell ss:StyleID="cell"><Data ss:Type="' . $type . '">'
+                    . $esc($value) . '</Data></Cell>';
             }
-            $out .= '</Row>'."\n";
+            $out .= '</Row>' . "\n";
         }
 
         $out .= '</Table></Worksheet></Workbook>';

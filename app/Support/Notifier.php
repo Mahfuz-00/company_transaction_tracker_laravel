@@ -91,8 +91,8 @@ class Notifier
         static::send(
             static::memberOversight($student),
             'claim_submitted',
-            'New claim from '.($student?->name ?? 'a member'),
-            $claim->kindLabel().' · '.$claim->title,
+            'New claim from ' . ($student?->name ?? 'a member'),
+            $claim->kindLabel() . ' · ' . $claim->title,
             [
                 'url' => route('claims.review', [], false),
                 'claim_id' => $claim->id,
@@ -109,8 +109,8 @@ class Notifier
         $member = $student?->user;
 
         $title = $approved ? 'Your claim was approved' : 'Your claim was rejected';
-        $body = $claim->kindLabel().' · '.$claim->title
-            .($claim->review_notes ? ' — '.$claim->review_notes : '');
+        $body = $claim->kindLabel() . ' · ' . $claim->title
+            . ($claim->review_notes ? ' — ' . $claim->review_notes : '');
 
         // The member (if they have a login) plus their assigned manager for visibility.
         static::send(
@@ -137,7 +137,7 @@ class Notifier
             collect([$member])->merge(static::memberOversight($student)),
             'expense_approved',
             'Purchase reimbursed',
-            $claim->title.' — '.number_format($amount, 2).' credited to your balance.',
+            $claim->title . ' — ' . number_format($amount, 2) . ' credited to your balance.',
             [
                 'url' => route('member.dashboard', [], false),
                 'claim_id' => $claim->id,
@@ -156,7 +156,7 @@ class Notifier
             collect([$member]),
             'deposit_updated',
             'Deposit recorded',
-            number_format($amount, 2).' was added to your account'.($context ? " ({$context})" : '').'.',
+            number_format($amount, 2) . ' was added to your account' . ($context ? " ({$context})" : '') . '.',
             [
                 'url' => route('member.dashboard', [], false),
                 'amount' => $amount,

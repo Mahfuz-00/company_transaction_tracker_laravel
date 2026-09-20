@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Schema;
  * manager approves it. Every state change is timestamped and attributed so the
  * audit trail is complete.
  */
+
 return new class extends Migration
 {
     public function up(): void

@@ -155,7 +155,7 @@ class SubsidyController extends Controller
             $tx = Transaction::create([
                 'user_id' => auth()->id(),
                 'type' => 'in',
-                'item' => 'Institutional Subsidy ('.$label.')',
+                'item' => 'Institutional Subsidy (' . $label . ')',
                 'amount' => $data['amount'],
                 'category' => 'Subsidy',
                 'by_whom' => $label,
@@ -199,7 +199,7 @@ class SubsidyController extends Controller
                 'item' => 'Subsidy reversal',
                 'amount' => $subsidy->amount,
                 'category' => 'Subsidy',
-                'reason' => 'Reversal of subsidy #'.$subsidy->id,
+                'reason' => 'Reversal of subsidy #' . $subsidy->id,
                 'source' => 'subsidy',
             ]);
 

@@ -17,7 +17,7 @@ class DashboardApiController extends Controller
     public function index(Request $request)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
-        $finance = new FinanceCalculator;
+        $finance = new FinanceCalculator();
 
         $snapshot = $finance->monthSnapshot($month);
         $members = $finance->memberBreakdown($month);

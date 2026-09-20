@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Schema;
  * and "rahim store " two different suppliers. Vendors are now rows that
  * expenses point at, so spend can be grouped per supplier.
  */
+
 return new class extends Migration
 {
     public function up(): void

@@ -68,13 +68,13 @@ class RegisteredUserController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],
             'phone' => ['nullable', 'string', 'max:30'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             // The tenant-mapping key. Required, and must resolve to an institution.
             'invite_code' => ['required', 'string', 'max:24'],
             // Optional role, restricted to the safe allow-list.
-            'role' => ['nullable', 'string', 'in:'.implode(',', self::SELF_SIGNUP_ROLES)],
+            'role' => ['nullable', 'string', 'in:' . implode(',', self::SELF_SIGNUP_ROLES)],
         ]);
 
         // Resolve the institution from the code BEFORE creating anything, so a

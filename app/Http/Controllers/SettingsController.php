@@ -120,7 +120,7 @@ class SettingsController extends Controller
         ]);
         $institution->save();
 
-        AuditLogger::log('updated', 'updated currency settings for '.$institution->name, $institution, [
+        AuditLogger::log('updated', 'updated currency settings for ' . $institution->name, $institution, [
             'currency_code' => $code,
             'settings' => $settings,
         ], ['subject_label' => 'Currency', 'institution_id' => $institution->id]);

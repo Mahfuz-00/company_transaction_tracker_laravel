@@ -55,7 +55,7 @@ class AssertTenantSchema extends Command
                 }
             }
 
-            $this->info('✓ All tenant + RBAC tables present: '.implode(', ', self::REQUIRED_TABLES));
+            $this->info('✓ All tenant + RBAC tables present: ' . implode(', ', self::REQUIRED_TABLES));
 
             // 2. users.institution_id is the column every tenant scope keys on.
             $columns = Schema::connection($connection)->getColumnListing('users');
@@ -82,7 +82,7 @@ class AssertTenantSchema extends Command
     /** Print a red error and return the failure exit code in one line. */
     private function failWith(string $message): int
     {
-        $this->error('✗ '.$message);
+        $this->error('✗ ' . $message);
 
         return self::FAILURE;
     }

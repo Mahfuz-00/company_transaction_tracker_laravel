@@ -20,7 +20,6 @@ use Inertia\Inertia;
 
 class DepositController extends Controller
 {
-
     public function index(Request $request)
     {
         $search = trim((string) $request->query('search', ''));
@@ -39,7 +38,7 @@ class DepositController extends Controller
             ->when($studentId !== '', fn ($q) => $q->where('student_id', $studentId))
             ->when($kind !== '', fn ($q) => $q->where('kind', $kind))
             ->when($search !== '', function ($q) use ($search) {
-                $term = '%'.$search.'%';
+                $term = '%' . $search . '%';
                 $q->where(function ($sub) use ($term) {
                     $sub->where('notes', 'like', $term)
                         ->orWhere('payment_method', 'like', $term)
@@ -128,7 +127,7 @@ class DepositController extends Controller
         $format = $request->query('format', 'excel');
 
         $exporter = new ReportExporter(
-            filename: 'deposits-'.now()->format('Ymd'),
+            filename: 'deposits-' . now()->format('Ymd'),
             title: 'Deposit & Subsidy Ledger',
             columns: [
                 'date' => 'Date',
@@ -270,7 +269,7 @@ class DepositController extends Controller
                 Notifier::depositRecorded($student, (float) $data['amount'], 'adjusted', auth()->user());
             }
 
-            AuditLogger::log('updated', 'edited a deposit for '.($student?->name ?? 'a member'), $deposit, [
+            AuditLogger::log('updated', 'edited a deposit for ' . ($student?->name ?? 'a member'), $deposit, [
                 'before' => $before,
                 'after' => [
                     'amount' => (float) $data['amount'],
@@ -303,10 +302,10 @@ class DepositController extends Controller
                 'user_id' => $request->user()->id,
                 'student_id' => $student?->id,
                 'type' => 'out',
-                'item' => 'Deposit reversal - '.($student?->name ?? 'member'),
+                'item' => 'Deposit reversal - ' . ($student?->name ?? 'member'),
                 'amount' => $deposit->amount,
                 'category' => 'Deposit Reversal',
-                'reason' => 'Reversal of deposit #'.$deposit->id,
+                'reason' => 'Reversal of deposit #' . $deposit->id,
                 'source' => 'deposit',
             ]);
 
@@ -316,7 +315,7 @@ class DepositController extends Controller
                 'reversal_transaction_id' => $reversal->id,
             ]);
 
-            AuditLogger::log('reversed', 'reversed a deposit for '.($student?->name ?? 'a member'), $deposit, [
+            AuditLogger::log('reversed', 'reversed a deposit for ' . ($student?->name ?? 'a member'), $deposit, [
                 'amount' => (float) $deposit->amount,
                 'reversal_transaction_id' => $reversal->id,
             ], ['subject_label' => $student?->name, 'institution_id' => $student?->institution_id]);

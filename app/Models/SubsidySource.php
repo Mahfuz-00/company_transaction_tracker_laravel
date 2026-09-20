@@ -16,7 +16,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class SubsidySource extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = [
         'institution_id',
@@ -99,7 +100,7 @@ class SubsidySource extends Model
                 return;
             }
 
-            $column = $query->getModel()->getTable().'.institution_id';
+            $column = $query->getModel()->getTable() . '.institution_id';
 
             $query->where(function ($sub) use ($column, $tenantId) {
                 $sub->where($column, $tenantId)->orWhereNull($column);

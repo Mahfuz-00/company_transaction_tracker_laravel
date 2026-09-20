@@ -14,7 +14,8 @@ use Illuminate\Support\Str;
  */
 class MemberInvitation extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = [
         'institution_id',

@@ -123,7 +123,7 @@ class AuditLogger
             }
         }
 
-        return class_basename($subject).' #'.$subject->getKey();
+        return class_basename($subject) . ' #' . $subject->getKey();
     }
 
     /**

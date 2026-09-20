@@ -45,7 +45,7 @@ trait BelongsToInstitution
                 return;
             }
 
-            $query->where($query->getModel()->getTable().'.institution_id', $tenantId);
+            $query->where($query->getModel()->getTable() . '.institution_id', $tenantId);
         });
 
         // Stamp the active tenant onto new rows that did not set one explicitly.

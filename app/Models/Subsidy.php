@@ -13,7 +13,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Subsidy extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = [
         'institution_id',

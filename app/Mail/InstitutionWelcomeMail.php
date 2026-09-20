@@ -20,7 +20,8 @@ use Illuminate\Queue\SerializesModels;
  */
 class InstitutionWelcomeMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable;
+    use SerializesModels;
 
     public function __construct(
         public Institution $institution,
@@ -31,12 +32,13 @@ class InstitutionWelcomeMail extends Mailable
         public ?string $temporaryPassword = null,
         // A signed, single-use link the admin can use to set their OWN password.
         public ?string $setupUrl = null,
-    ) {}
+    ) {
+    }
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Welcome to '.config('app.name', 'the platform').' - your workspace is ready',
+            subject: 'Welcome to ' . config('app.name', 'the platform') . ' - your workspace is ready',
             tags: ['institution_welcome'],
         );
     }

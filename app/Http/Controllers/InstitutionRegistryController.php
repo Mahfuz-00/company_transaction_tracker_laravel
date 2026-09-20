@@ -42,7 +42,7 @@ class InstitutionRegistryController extends Controller
                     'subsidies as subsidies_count',
                 ])
                 ->when($search !== '', function ($q) use ($search) {
-                    $term = '%'.$search.'%';
+                    $term = '%' . $search . '%';
                     $q->where(fn ($sub) => $sub->where('name', 'like', $term)
                         ->orWhere('type', 'like', $term));
                 })
@@ -249,7 +249,7 @@ class InstitutionRegistryController extends Controller
         ], ['subject_label' => $institution->name, 'institution_id' => $institution->id]);
 
         $label = $mode === 'trial'
-            ? 'a '.Institution::TRIAL_DAYS.'-day free trial'
+            ? 'a ' . Institution::TRIAL_DAYS . '-day free trial'
             : 'a permanent subscription';
 
         return redirect()
@@ -335,7 +335,7 @@ class InstitutionRegistryController extends Controller
 
         return back()->with(
             'success',
-            "\"{$institution->name}\" is now ".($institution->is_active ? 'active' : 'inactive').'.'
+            "\"{$institution->name}\" is now " . ($institution->is_active ? 'active' : 'inactive') . '.'
         );
     }
 }

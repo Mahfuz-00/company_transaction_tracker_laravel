@@ -21,7 +21,7 @@ class DepartmentController extends Controller
                 'students as active_students_count' => fn ($q) => $q->where('status', 'active'),
             ])
             ->when($search !== '', function ($query) use ($search) {
-                $term = '%'.$search.'%';
+                $term = '%' . $search . '%';
                 $query->where(function ($q) use ($term) {
                     $q->where('name', 'like', $term)
                         ->orWhere('slug', 'like', $term)

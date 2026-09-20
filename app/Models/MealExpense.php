@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class MealExpense extends Model
 {
-    use BelongsToInstitution, HasFactory;
+    use BelongsToInstitution;
+    use HasFactory;
 
     protected $fillable = [
         'institution_id',

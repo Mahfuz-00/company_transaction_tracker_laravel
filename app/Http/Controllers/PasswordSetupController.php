@@ -196,7 +196,7 @@ class PasswordSetupController extends Controller
             return $user;
         });
 
-        AuditLogger::log('accepted', 'completed password setup for '.$invitation->email, $invitation, [
+        AuditLogger::log('accepted', 'completed password setup for ' . $invitation->email, $invitation, [
             'user_id' => $user->id,
             'state' => $existing ? 'complete' : 'incomplete',
             'name' => $user->name,

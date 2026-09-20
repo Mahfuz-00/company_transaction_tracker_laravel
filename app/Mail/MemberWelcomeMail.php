@@ -19,19 +19,21 @@ use Illuminate\Queue\SerializesModels;
  */
 class MemberWelcomeMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable;
+    use SerializesModels;
 
     public function __construct(
         public User $user,
         public ?Institution $institution = null,
-    ) {}
+    ) {
+    }
 
     public function envelope(): Envelope
     {
         $brand = $this->institution?->name ?: config('app.name', 'the platform');
 
         return new Envelope(
-            subject: 'Welcome aboard - your '.$brand.' account is active',
+            subject: 'Welcome aboard - your ' . $brand . ' account is active',
             tags: ['member_welcome'],
         );
     }
