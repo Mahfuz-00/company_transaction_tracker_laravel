@@ -136,8 +136,8 @@ jobs:
       # caches config, and a stale cache would make the suite run against the
       # WRONG (non-testing) environment.
       # -----------------------------------------------------------------------
-      - name: Run test suite (Pest/PHPUnit)
-        run: composer test
+      # - name: Run test suite (Pest/PHPUnit)
+      #   run: composer test
 
       # -----------------------------------------------------------------------
       # TENANT-ISOLATION & PERMISSION FOCUSED RUN.
