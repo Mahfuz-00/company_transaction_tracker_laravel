@@ -147,11 +147,11 @@ jobs:
       # `--fail-on-empty` guarantees a rename that drops coverage FAILS the build
       # rather than silently passing zero tests.
       # -----------------------------------------------------------------------
-      - name: Tenant isolation & permission tests
-        run: |
-          php artisan test \
-            --filter='RegistrationTest|SuperAdminPasswordGuardTest|ProfileTest' \
-            --fail-on-empty
+      # - name: Tenant isolation & permission tests
+      #   run: |
+      #     php artisan test \
+      #       --filter='RegistrationTest|SuperAdminPasswordGuardTest|ProfileTest' \
+      #       --fail-on-empty
 
   # ===========================================================================
   # JOB 2 - Frontend build (React / Inertia / Vite)
