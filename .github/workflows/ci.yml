@@ -262,6 +262,8 @@ jobs:
           REGISTRATION_DEFAULT_ROLE=Member
           VITE_APP_NAME="Laravel"
           EOF
+
+          cp .env.dusk .env
       # -----------------------------------------------------------------------
       # Seed the file-backed Dusk database.
       #
