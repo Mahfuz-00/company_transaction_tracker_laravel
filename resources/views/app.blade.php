@@ -52,9 +52,8 @@
         @viteReactRefresh
         @vite(['resources/js/app.jsx', "resources/js/Pages/{$page['component']}.jsx"])
         @inertiaHead
-    </head>
-    <body class="font-sans antialiased" data-theme-mode="{{ $mode }}">
-    <body class="font-sans antialiased">
-        @inertia
-    </body>
+</head>
+<body class="font-sans antialiased" data-theme-mode="{{ $mode }}">
+    @inertia
+</body>
 </html>

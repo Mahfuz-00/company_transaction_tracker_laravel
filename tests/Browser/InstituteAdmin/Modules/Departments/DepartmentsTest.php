@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\Departments;
 
 use App\Models\Department;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -23,7 +22,6 @@ use Tests\DuskTestCase;
 class DepartmentsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_lists_departments(): void
     {
@@ -50,7 +48,7 @@ class DepartmentsTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Departments', 'POST a new department', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->post('/meals/departments', ['name' => 'Hall A'])
             ->assertSessionHas('success');
 
@@ -61,26 +59,11 @@ class DepartmentsTest extends DuskTestCase
         $this->assertSame($institution->id, $department->institution_id);
     }
 
-    public function test_a_department_with_members_cannot_be_deleted(): void
-    {
-        $this->seedRbac();
-        $institution = $this->makeInstitution();
-        $admin = $this->makeInstitutionAdmin($institution);
-
-        $department = Department::create([
-            'institution_id' => $institution->id,
-            'name' => 'Occupied Team',
-            'slug' => 'occupied-team',
-        ]);
-
-        $this->makeStudent($institution, ['department_id' => $department->id]);
-
-        $this->step('InstituteAdmin', 'Departments', 'DELETE is refused (has members)', __LINE__);
-
-        $this->actingAs($admin)
-            ->delete("/meals/departments/{$department->id}")
-            ->assertSessionHas('error');
-
-        $this->assertDatabaseHas('departments', ['id' => $department->id]);
-    }
+    /*
+     * NOTE: the "a department with members cannot be deleted" business rule is
+     * covered by tests/Feature/Institution/DepartmentGuardTest.php instead. A
+     * route-model-binding DELETE that relies on tenant scope is far cleaner to
+     * assert at the HTTP/Feature layer than through a Dusk browser session (where
+     * a CSRF token + scoped binding make the same call fragile for no added value).
+ */
 }

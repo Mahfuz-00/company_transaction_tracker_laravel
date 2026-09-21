@@ -3,7 +3,6 @@
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\Broadcasts;
 
 use App\Models\StaffBroadcast;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -22,7 +21,6 @@ use Tests\DuskTestCase;
 class BroadcastsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_composes_a_platform_broadcast(): void
     {
@@ -37,7 +35,7 @@ class BroadcastsTest extends DuskTestCase
         $this->step('SSA', 'Broadcasts', 'POST a platform announcement', __LINE__);
 
         // Audiences come from PlatformBroadcastController::AUDIENCES.
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->post('/platform/broadcasts', [
                 'title' => 'Scheduled maintenance',
                 'body' => 'The platform will be briefly unavailable at 02:00 UTC.',

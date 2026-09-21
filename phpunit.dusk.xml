@@ -12,4 +12,12 @@
             <directory suffix="Test.php">./tests/Browser</directory>
         </testsuite>
     </testsuites>
+    <php>
+        <!--
+            Dusk boots a full Laravel app + browser driver per test class; on a
+            large hierarchical suite that can exceed PHP's default 128M. Raise it
+            here (test config only) so the run is not killed mid-suite.
+        -->
+        <ini name="memory_limit" value="2G"/>
+    </php>
 </phpunit>

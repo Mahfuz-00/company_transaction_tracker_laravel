@@ -4,7 +4,6 @@ namespace Tests\Browser\MealManager\Modules\Deposits;
 
 use App\Models\Deposit;
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -22,7 +21,6 @@ use Tests\DuskTestCase;
 class DepositsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_records_a_deposit_for_an_assigned_member(): void
     {
@@ -40,7 +38,7 @@ class DepositsTest extends DuskTestCase
 
         $this->step('MealManager', 'Deposits', 'POST a deposit for an assigned member', __LINE__);
 
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->post('/meals/deposits', [
                 'student_id' => $member->id,
                 'amount' => 1200,
@@ -70,7 +68,7 @@ class DepositsTest extends DuskTestCase
 
         $this->step('MealManager', 'Deposits', 'POST refused for an unassigned member', __LINE__);
 
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->post('/meals/deposits', [
                 'student_id' => $foreignMember->id,
                 'amount' => 999,

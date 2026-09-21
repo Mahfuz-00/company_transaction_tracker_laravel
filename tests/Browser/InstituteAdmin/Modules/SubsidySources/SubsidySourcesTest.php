@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\SubsidySources;
 
 use App\Models\SubsidySource;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -22,7 +21,6 @@ use Tests\DuskTestCase;
 class SubsidySourcesTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_adds_a_funding_source(): void
     {
@@ -32,7 +30,7 @@ class SubsidySourcesTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'SubsidySources', 'POST a funding source', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->post('/settings/subsidy-sources', [
                 'name' => 'Alumni Grant',
                 'percentage' => 25,
@@ -54,17 +52,17 @@ class SubsidySourcesTest extends DuskTestCase
         $institution = $this->makeInstitution();
         $admin = $this->makeInstitutionAdmin($institution);
 
-        $this->actingAs($admin)->post('/settings/subsidy-sources', ['name' => 'Used Source']);
+        $this->httpAs($admin)->post('/settings/subsidy-sources', ['name' => 'Used Source']);
         $source = SubsidySource::where('name', 'Used Source')->firstOrFail();
 
         // Record a subsidy that references the source key so history exists.
-        $this->actingAs($admin)->post('/meals/subsidies', [
+        $this->httpAs($admin)->post('/meals/subsidies', [
             'source' => $source->key, 'amount' => 500, 'apply_mode' => 'pool',
         ]);
 
         $this->step('InstituteAdmin', 'SubsidySources', 'DELETE refused (references exist)', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->delete("/settings/subsidy-sources/{$source->id}")
             ->assertSessionHas('error');
 

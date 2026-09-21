@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\Monitoring;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -21,7 +19,6 @@ use Tests\DuskTestCase;
 class MonitoringTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_sees_the_platform_control_tower(): void
     {
@@ -33,9 +30,12 @@ class MonitoringTest extends DuskTestCase
 
         $this->browse(function (Browser $browser) use ($ssa) {
             $browser->loginAs($ssa)
-                ->visit('/settings/monitoring')
-                ->waitForText('Software Super Admin', 20)
-                ->assertSee('North South University Dorm');
+                ->visit('/settings/monitoring');
+
+            // The page heading is styled `uppercase` -> wait case-insensitively.
+            $this->waitForTextCaseInsensitive($browser, 'Software Super Admin', 20);
+
+            $browser->assertSee('North South University Dorm');
         });
     }
 
@@ -52,7 +52,7 @@ class MonitoringTest extends DuskTestCase
 
         // MonitoringController::updateSubscription validates against
         // Institution::SUBSCRIPTION_STATUSES keys.
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->put("/settings/monitoring/{$institution->slug}/subscription", [
                 'subscription_status' => 'paid',
                 'subscription_amount' => 1500,
@@ -77,6 +77,6 @@ class MonitoringTest extends DuskTestCase
         $this->step('SSA', 'Monitoring', 'assert tenant admin is forbidden', __LINE__);
 
         // `permission:monitoring.view` is held by the global role ONLY.
-        $this->actingAs($admin)->get('/settings/monitoring')->assertForbidden();
+        $this->httpAs($admin)->get('/settings/monitoring')->assertForbidden();
     }
 }

@@ -4,7 +4,6 @@ namespace Tests\Browser\Member\Modules\Meals;
 
 use App\Models\MealEntry;
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -20,7 +19,6 @@ use Tests\DuskTestCase;
 class MealsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_member_sees_their_own_meal_entries(): void
     {

@@ -4,7 +4,6 @@ namespace Tests\Browser\Member\Dashboard;
 
 use App\Models\Deposit;
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -23,7 +22,6 @@ use Tests\DuskTestCase;
 class DashboardTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_member_dashboard_shows_only_their_own_data(): void
     {
@@ -69,7 +67,7 @@ class DashboardTest extends DuskTestCase
 
         // The User Manager requires an admin role; the SSA console requires
         // monitoring.view - a Member holds neither.
-        $this->actingAs($member)->get('/settings/users')->assertForbidden();
-        $this->actingAs($member)->get('/platform')->assertForbidden();
+        $this->httpAs($member)->get('/settings/users')->assertForbidden();
+        $this->httpAs($member)->get('/platform')->assertForbidden();
     }
 }

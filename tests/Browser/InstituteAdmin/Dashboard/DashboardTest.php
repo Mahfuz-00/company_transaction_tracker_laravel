@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Dashboard;
 
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -19,7 +18,6 @@ use Tests\DuskTestCase;
 class DashboardTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_dashboard_is_tenant_scoped(): void
     {

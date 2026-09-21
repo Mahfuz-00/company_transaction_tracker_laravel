@@ -343,6 +343,15 @@ export const NAV_SECTIONS = [
                         permission: 'institution.view',
                     },
                     {
+                        // The workspace's invite code - the key a member types on
+                        // the public sign-up form to join this institution.
+                        label: 'Invite Code',
+                        route: 'settings.invite-code.show',
+                        match: 'settings.invite-code.*',
+                        icon: 'users',
+                        permission: 'institution.view',
+                    },
+                    {
                         // Currency format for THIS institution. Institution Admins
                         // manage it (currency.manage); managers can view only.
                         label: 'Currency Manager',

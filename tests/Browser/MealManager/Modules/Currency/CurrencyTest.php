@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\MealManager\Modules\Currency;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -18,7 +16,6 @@ use Tests\DuskTestCase;
 class CurrencyTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_can_view_the_currency_settings(): void
     {
@@ -43,7 +40,7 @@ class CurrencyTest extends DuskTestCase
 
         $this->step('MealManager', 'Currency', 'POST is forbidden (no manage permission)', __LINE__);
 
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->post('/settings/currency', ['symbol' => '$'])
             ->assertForbidden();
     }

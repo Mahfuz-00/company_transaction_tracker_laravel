@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\InstituteAdmin\Modules\Theme;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -22,7 +20,6 @@ use Tests\DuskTestCase;
 class ThemeTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_saves_a_dark_theme(): void
     {
@@ -45,8 +42,12 @@ class ThemeTest extends DuskTestCase
 
             $browser->waitUntil("document.documentElement.getAttribute('data-theme-mode') === 'dark'", 10)
                 ->press('Save My Theme')
+                // Wait for the success flash so the redirect has fully settled
+                // before we touch the DOM again (querying mid-navigation can throw
+                // "no such element: body html").
                 ->waitForText('Theme saved. It will follow you to every device you sign in from.', 20)
-                ->assertAttribute('html', 'data-theme-mode', 'dark');
+                ->pause(500)
+                ->waitUntil("document.documentElement.getAttribute('data-theme-mode') === 'dark'", 10);
         });
 
         $this->step('InstituteAdmin', 'Theme', 'assert users.theme.mode persisted', __LINE__);

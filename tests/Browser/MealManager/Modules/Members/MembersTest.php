@@ -3,7 +3,6 @@
 namespace Tests\Browser\MealManager\Modules\Members;
 
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -24,7 +23,6 @@ use Tests\DuskTestCase;
 class MembersTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_sees_only_their_assigned_members(): void
     {

@@ -3,7 +3,6 @@
 namespace Tests\Browser\MealManager\Modules\Expenses;
 
 use App\Models\MealExpense;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -21,7 +20,6 @@ use Tests\DuskTestCase;
 class ExpensesTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_records_an_expense(): void
     {
@@ -31,7 +29,7 @@ class ExpensesTest extends DuskTestCase
 
         $this->step('MealManager', 'Expenses', 'POST an expense', __LINE__);
 
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->post('/meals/expenses', [
                 'amount' => 650,
                 'description' => 'Vegetables for the week',

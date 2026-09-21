@@ -4,7 +4,6 @@ namespace Tests\Browser\Member\Modules\Claims;
 
 use App\Models\Claim;
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -22,7 +21,6 @@ use Tests\DuskTestCase;
 class ClaimsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_member_submits_a_claim(): void
     {
@@ -33,7 +31,7 @@ class ClaimsTest extends DuskTestCase
         $this->step('Member', 'Claims', 'POST a dispute claim', __LINE__);
 
         // Claim::KINDS / SUBJECTS keys: dispute|expense, deposit|meal|...
-        $this->actingAs($member)
+        $this->httpAs($member)
             ->post('/claims', [
                 'kind' => 'dispute',
                 'subject' => 'deposit',

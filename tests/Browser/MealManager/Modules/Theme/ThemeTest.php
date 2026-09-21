@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\MealManager\Modules\Theme;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -17,7 +15,6 @@ use Tests\DuskTestCase;
 class ThemeTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_can_personalise_the_theme(): void
     {

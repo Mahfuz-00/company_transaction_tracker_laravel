@@ -4,7 +4,6 @@ namespace Tests\Browser\MealManager\Modules\ClaimReview;
 
 use App\Models\Claim;
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -21,7 +20,6 @@ use Tests\DuskTestCase;
 class ClaimReviewTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_approves_a_claim_from_an_assigned_member(): void
     {
@@ -46,7 +44,7 @@ class ClaimReviewTest extends DuskTestCase
 
         $this->step('MealManager', 'ClaimReview', 'PATCH approve an assigned claim', __LINE__);
 
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->patch("/claims/{$claim->id}/approve", ['approved_amount' => 400])
             ->assertSessionHas('success');
 
@@ -62,6 +60,8 @@ class ClaimReviewTest extends DuskTestCase
 
         $foreignMember = Student::create([
             'institution_id' => $institution->id,
+            // students.name is NOT NULL: the factory/test MUST supply it.
+            'name' => 'Foreign Member',
             'roll' => 'NSU-9402',
             'status' => 'active',
             'manager_id' => $otherManager->id,
@@ -76,7 +76,7 @@ class ClaimReviewTest extends DuskTestCase
 
         $this->step('MealManager', 'ClaimReview', 'approve refused for a foreign claim', __LINE__);
 
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->patch("/claims/{$claim->id}/approve")
             ->assertSessionHas('error');
 

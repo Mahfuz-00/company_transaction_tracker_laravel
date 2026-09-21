@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\Expenses;
 
 use App\Models\MealExpense;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -21,7 +20,6 @@ use Tests\DuskTestCase;
 class ExpensesTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_records_an_expense(): void
     {
@@ -31,7 +29,7 @@ class ExpensesTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Expenses', 'POST an expense', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->post('/meals/expenses', [
                 'amount' => 2400,
                 'description' => 'Rice and lentils',
@@ -54,7 +52,7 @@ class ExpensesTest extends DuskTestCase
         $institution = $this->makeInstitution();
         $admin = $this->makeInstitutionAdmin($institution);
 
-        $this->actingAs($admin)->post('/meals/expenses', [
+        $this->httpAs($admin)->post('/meals/expenses', [
             'amount' => 500, 'description' => 'Reversible item', 'category' => 'Misc',
         ]);
 
@@ -62,7 +60,7 @@ class ExpensesTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Expenses', 'PATCH reverse', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->patch("/meals/expenses/{$expense->id}/reverse")
             ->assertSessionHas('success');
 

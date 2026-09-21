@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\Subsidies;
 
 use App\Models\Subsidy;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -21,7 +20,6 @@ use Tests\DuskTestCase;
 class SubsidiesTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_records_a_subsidy(): void
     {
@@ -32,7 +30,7 @@ class SubsidiesTest extends DuskTestCase
         $this->step('InstituteAdmin', 'Subsidies', 'POST a subsidy', __LINE__);
 
         // apply_mode values come from Subsidy::APPLY_MODES.
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->post('/meals/subsidies', [
                 'source' => 'university_authority',
                 'amount' => 50000,
@@ -55,7 +53,7 @@ class SubsidiesTest extends DuskTestCase
         $institution = $this->makeInstitution();
         $admin = $this->makeInstitutionAdmin($institution);
 
-        $this->actingAs($admin)->post('/meals/subsidies', [
+        $this->httpAs($admin)->post('/meals/subsidies', [
             'source' => 'grant', 'amount' => 1000, 'apply_mode' => 'pool',
         ]);
 
@@ -63,7 +61,7 @@ class SubsidiesTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Subsidies', 'PATCH reverse', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->patch("/meals/subsidies/{$subsidy->id}/reverse")
             ->assertSessionHas('success');
 

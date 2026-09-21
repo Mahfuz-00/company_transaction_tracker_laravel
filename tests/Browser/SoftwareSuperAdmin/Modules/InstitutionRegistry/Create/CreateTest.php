@@ -4,7 +4,6 @@ namespace Tests\Browser\SoftwareSuperAdmin\Modules\InstitutionRegistry\Create;
 
 use App\Models\Institution;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -26,7 +25,6 @@ use Tests\DuskTestCase;
 class CreateTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_creates_an_institution_with_its_first_admin(): void
     {

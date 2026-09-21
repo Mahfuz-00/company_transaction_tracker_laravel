@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\Member\Modules\Analytics;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -18,7 +16,6 @@ use Tests\DuskTestCase;
 class AnalyticsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_member_opens_their_personal_analytics(): void
     {

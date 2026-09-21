@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\InstituteAdmin\Modules\Currency;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -21,7 +19,6 @@ use Tests\DuskTestCase;
 class CurrencyTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_configures_the_workspace_currency(): void
     {
@@ -66,7 +63,7 @@ class CurrencyTest extends DuskTestCase
         $this->step('InstituteAdmin', 'Currency', 'assert member is forbidden', __LINE__);
 
         // `currency.view` / `currency.manage` are not held by a Member.
-        $this->actingAs($member)->get('/settings/currency')->assertForbidden();
-        $this->actingAs($member)->post('/settings/currency', ['symbol' => '$'])->assertForbidden();
+        $this->httpAs($member)->get('/settings/currency')->assertForbidden();
+        $this->httpAs($member)->post('/settings/currency', ['symbol' => '$'])->assertForbidden();
     }
 }

@@ -2,7 +2,6 @@
 
 namespace Tests\Browser\SoftwareSuperAdmin\Login;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -23,7 +22,6 @@ use Tests\DuskTestCase;
 class LoginTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_signs_in_and_lands_on_the_global_platform_dashboard(): void
     {
@@ -41,15 +39,24 @@ class LoginTest extends DuskTestCase
 
             $browser->type('#email', $ssa->email)
                 ->type('#password', 'password')
-                ->press('Sign In to Dashboard');
+                // Let React commit the controlled inputs to its form state before
+                // submitting (requestSubmit reads useForm's `data`).
+                ->pause(500);
+
+            // Submit through the DOM so React's onSubmit (and therefore Inertia's
+            // client-side post) runs. A bare WebDriver click on this button does
+            // not fire the form's `submit` event in the headless setup, which
+            // leaves the page inert.
+            $browser->script("document.querySelector('form').requestSubmit();");
 
             $this->step('SSA', 'Login', 'assert redirect to /platform', __LINE__);
 
             $browser->waitForLocation('/platform', 20)
-                ->assertPathIs('/platform')
-                // MonitoringController renders Settings/Monitoring under the SSA
-                // chrome; the sidebar heading is the platform section.
-                ->assertSee('Software Super Admin');
+                ->assertPathIs('/platform');
+
+            // The SSA heading is rendered with CSS `uppercase`, so compare
+            // case-insensitively against the visible "SOFTWARE SUPER ADMIN".
+            $this->waitForTextCaseInsensitive($browser, 'Software Super Admin', 20);
         });
     }
 
@@ -62,13 +69,33 @@ class LoginTest extends DuskTestCase
 
         $this->browse(function (Browser $browser) {
             $browser->visit('/login')
-                ->waitFor('#email', 20)
-                ->type('#email', 'ssa@platform.test')
-                ->type('#password', 'definitely-wrong')
-                ->press('Sign In to Dashboard')
-                // LoginRequest throws auth.failed; Login.jsx renders it inline.
-                ->waitForText('These credentials do not match our records.', 20)
-                ->assertPathIs('/login');
+                ->waitForText('Welcome back', 20)
+                ->waitFor('#email', 20);
+
+            // Fill the React-controlled inputs through the native value setter so
+            // useForm's `data` is definitely populated before we submit. A plain
+            // Dusk type() can leave the controlled state empty here, which makes
+            // the request fail with "The email field is required." instead of the
+            // credential error we are asserting.
+            $browser->script("(() => {
+                const set = (sel, val) => {
+                    const el = document.querySelector(sel);
+                    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, val);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                };
+                set('#email', 'ssa@platform.test');
+                set('#password', 'definitely-wrong');
+            })();");
+
+            // Run React's onSubmit so the failure is delivered through Inertia as
+            // page props (errors.email), which the login form renders inline.
+            $browser->script("document.querySelector('form').requestSubmit();");
+
+            $browser->waitUntil(
+                "document.body.innerText.includes('These credentials do not match our records.')",
+                20
+            )->assertPathIs('/login');
         });
     }
 }

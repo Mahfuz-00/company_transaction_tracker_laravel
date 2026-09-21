@@ -3,7 +3,6 @@
 namespace Tests\Browser\MealManager\Dashboard;
 
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -21,7 +20,6 @@ use Tests\DuskTestCase;
 class DashboardTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_dashboard_renders_within_their_workspace(): void
     {

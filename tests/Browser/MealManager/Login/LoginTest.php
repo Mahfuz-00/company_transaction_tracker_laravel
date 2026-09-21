@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\MealManager\Login;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -20,7 +18,6 @@ use Tests\DuskTestCase;
 class LoginTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_signs_in_and_lands_on_the_workspace_dashboard(): void
     {

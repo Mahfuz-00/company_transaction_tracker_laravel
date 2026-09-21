@@ -3,7 +3,6 @@
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\UserManager;
 
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -23,7 +22,6 @@ use Tests\DuskTestCase;
 class UserManagerTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_sees_the_global_user_directory(): void
     {
@@ -58,7 +56,7 @@ class UserManagerTest extends DuskTestCase
 
         // UserController::store - SSA mode accepts an explicit institution_id and
         // a 'password' creation mode (which forces a change on first login).
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->post('/settings/users', [
                 'name' => 'Target User',
                 'email' => 'target-user@example.test',
@@ -89,7 +87,7 @@ class UserManagerTest extends DuskTestCase
 
         // syncInstitutionRoles() strips 'Software Super Admin' - defence in depth
         // against privilege escalation via a crafted roles[] payload.
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->post('/settings/users', [
                 'name' => 'Escalation Attempt',
                 'email' => 'escalate@example.test',

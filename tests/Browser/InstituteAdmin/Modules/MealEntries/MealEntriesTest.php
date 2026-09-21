@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\MealEntries;
 
 use App\Models\MealEntry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -23,7 +22,6 @@ use Tests\DuskTestCase;
 class MealEntriesTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_sees_the_daily_entry_grid(): void
     {
@@ -52,7 +50,7 @@ class MealEntriesTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'MealEntries', 'POST the day grid', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->post('/meals/entries', [
                 'date' => $date,
                 'entries' => [

@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\Members\List;
 
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -20,7 +19,6 @@ use Tests\DuskTestCase;
 class ListTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_sees_only_their_institutions_members(): void
     {

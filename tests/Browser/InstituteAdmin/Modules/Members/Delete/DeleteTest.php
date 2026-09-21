@@ -4,7 +4,6 @@ namespace Tests\Browser\InstituteAdmin\Modules\Members\Delete;
 
 use App\Models\MealEntry;
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -21,7 +20,6 @@ use Tests\DuskTestCase;
 class DeleteTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_deletes_a_member_without_history(): void
     {
@@ -38,7 +36,7 @@ class DeleteTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Members', 'DELETE a clean member', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->delete("/meals/students/{$member->id}")
             ->assertSessionHas('success');
 
@@ -72,7 +70,7 @@ class DeleteTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Members', 'DELETE is refused (history exists)', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->delete("/meals/students/{$member->id}")
             ->assertSessionHas('error');
 

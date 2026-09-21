@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\Deposits;
 
 use App\Models\Deposit;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -22,7 +21,6 @@ use Tests\DuskTestCase;
 class DepositsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_records_a_deposit(): void
     {
@@ -33,7 +31,7 @@ class DepositsTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Deposits', 'POST a deposit', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->post('/meals/deposits', [
                 'student_id' => $member->id,
                 'amount' => 1500,
@@ -58,7 +56,7 @@ class DepositsTest extends DuskTestCase
         $member = $this->makeStudent($institution, ['roll' => 'NSU-6002']);
 
         // Record via the real endpoint so the ledger link exists.
-        $this->actingAs($admin)->post('/meals/deposits', [
+        $this->httpAs($admin)->post('/meals/deposits', [
             'student_id' => $member->id, 'amount' => 900, 'payment_method' => 'Cash',
         ]);
 
@@ -66,7 +64,7 @@ class DepositsTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Deposits', 'PATCH reverse', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->patch("/meals/deposits/{$deposit->id}/reverse")
             ->assertSessionHas('success');
 

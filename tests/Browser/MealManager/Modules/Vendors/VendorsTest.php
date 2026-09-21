@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\MealManager\Modules\Vendors;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -20,7 +18,6 @@ use Tests\DuskTestCase;
 class VendorsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_adds_a_vendor(): void
     {
@@ -30,7 +27,7 @@ class VendorsTest extends DuskTestCase
 
         $this->step('MealManager', 'Vendors', 'POST a vendor', __LINE__);
 
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->post('/meals/vendors', [
                 'name' => 'Daily Milk Supplier',
                 'status' => 'active',
@@ -52,7 +49,7 @@ class VendorsTest extends DuskTestCase
         $institution = $this->makeInstitution();
         $manager = $this->makeMealManager($institution);
 
-        $this->actingAs($manager)->post('/meals/vendors', [
+        $this->httpAs($manager)->post('/meals/vendors', [
             'name' => 'Rice Wholesaler', 'status' => 'active', 'category' => 'groceries',
         ]);
 

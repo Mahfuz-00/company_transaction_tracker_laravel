@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\InstitutionRegistry\Switch;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -21,7 +19,6 @@ use Tests\DuskTestCase;
 class SwitchTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_switches_into_an_institution_workspace(): void
     {

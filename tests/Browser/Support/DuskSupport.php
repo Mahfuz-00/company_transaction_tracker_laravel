@@ -7,6 +7,8 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Laravel\Dusk\Browser;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -53,6 +55,62 @@ trait DuskSupport
     }
 
     /**
+     * Wait for text, IGNORING CASE, and matching across a React page that may
+     * apply CSS `uppercase`.
+     *
+     * WHY THIS EXISTS
+     * ---------------
+     * WebDriver's getText() returns the VISUALLY TRANSFORMED text, so an element
+     * styled with Tailwind's `uppercase` yields "SOFTWARE SUPER ADMIN" even though
+     * the DOM says "Software Super Admin". A literal waitForText('Software Super
+     * Admin') therefore times out. Waiting case-insensitively makes the assertion
+     * robust to CSS text-transform without weakening what is being checked.
+     */
+    protected function waitForTextCaseInsensitive(Browser $browser, string $text, int $seconds = 20): void
+    {
+        $browser->waitForText($text, $seconds, true);
+    }
+
+    /**
+     * An authenticated HTTP test client for server-side assertions.
+     *
+     * WHY THIS EXISTS
+     * ---------------
+     * Dusk tests drive a browser, but many also assert SERVER-side effects
+     * directly (a flash message, a 403, a DB write). A raw
+     * `$this->httpAs($user)->post(...)` runs through the full HTTP kernel and
+     * is rejected by CSRF (HTTP 419). Disabling ONLY VerifyCsrfToken (not auth,
+     * not role/permission) keeps every security assertion intact while letting
+     * the request reach the controller.
+     *
+     * Usage:  $this->httpAs($admin)->post('/meals/departments', [...])->assertSessionHas('success');
+     */
+    protected function httpAs($user)
+    {
+        /*
+         * Laravel 11/12 replaced VerifyCsrfToken with ValidateCsrfToken, and
+         * withoutMiddleware() matches by EXACT class name. Disabling both covers
+         * either version so a test-side POST never trips a 419.
+         */
+        $this->withoutMiddleware([
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+            \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+        ]);
+
+        /*
+         * Set a same-origin Referer so a controller's back() redirect resolves
+         * to a real app page (not an empty referer -> "/" -> /dashboard chain).
+         * Without it, a redirect CHAIN can drop the flashed session data before
+         * assertSessionHas() inspects the final response.
+         */
+        $this->withHeader('Referer', config('app.url') . '/dashboard');
+
+        // NOTE: must call actingAs(), NOT httpAs() - a self-call here would
+        // recurse infinitely and exhaust memory.
+        return $this->actingAs($user);
+    }
+
+    /**
      * Create an institution using ONLY the columns this app defines
      * (database/migrations: create_institutions_table + add_trial_lifecycle +
      * add_multitenancy_and_currency_settings).
@@ -62,7 +120,13 @@ trait DuskSupport
      */
     protected function makeInstitution(array $attributes = []): Institution
     {
-        return Institution::create(array_merge([
+        /*
+         * Give each institution a UNIQUE name (and therefore slug) unless the
+         * caller supplies one. institutions.slug is UNIQUE, and Str::slug(name)
+         * is generated on save, so two default-named fixtures in one test would
+         * collide with "UNIQUE constraint failed: institutions.slug".
+         */
+        $defaults = [
             'name' => 'North South University Dorm',
             'subtitle' => 'Shared meals, tracked',
             'type' => 'university_dorm',
@@ -70,7 +134,13 @@ trait DuskSupport
             'is_active' => true,
             'onboarding_mode' => 'subscription',
             'subscription_status' => 'paid',
-        ], $attributes));
+        ];
+
+        if (! array_key_exists('name', $attributes)) {
+            $defaults['name'] = 'Institution ' . Str::random(6);
+        }
+
+        return Institution::create(array_merge($defaults, $attributes));
     }
 
     /**
@@ -83,7 +153,7 @@ trait DuskSupport
             'institution_id' => $institution->id,
             'name' => 'Tenant User',
             'email' => 'tenant-user@example.test',
-            'password' => Hash::make('password'),
+            'password' => 'password', // Let Laravel's Model casts handle hashing automatically
             'status' => 'active',
             'must_change_password' => false,
             'setup_completed_at' => now(),

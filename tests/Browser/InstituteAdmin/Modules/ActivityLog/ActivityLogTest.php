@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\ActivityLog;
 
 use App\Support\AuditLogger;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -19,7 +18,6 @@ use Tests\DuskTestCase;
 class ActivityLogTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_sees_their_institutions_activity(): void
     {

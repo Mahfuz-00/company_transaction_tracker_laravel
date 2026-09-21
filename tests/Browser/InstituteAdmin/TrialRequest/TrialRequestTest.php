@@ -5,7 +5,6 @@ namespace Tests\Browser\InstituteAdmin\TrialRequest;
 use App\Models\Institution;
 use App\Models\LandingEnquiry;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -29,7 +28,6 @@ use Tests\DuskTestCase;
 class TrialRequestTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_guest_requests_a_demo_and_the_ssa_approves_it_into_a_trial(): void
     {
@@ -41,19 +39,40 @@ class TrialRequestTest extends DuskTestCase
         /*
          * The landing "Request a demo" form (CTASection) posts to
          * `landing.contact`. Its inputs are keyed only by placeholder, so we
-         * drive the submission through the browser by targeting the contact
-         * section's fields in DOM order: [0] name, [1] email, [2] institution
-         * name (the remaining control is the institution-type <select>).
+         * fill them through a native value setter + input event (the
+         * React-safe way), NOT via Dusk type():
+         *
+         *   - Browser::script() returns the raw JS result (an ARRAY here), so
+         *     chaining ->type() after it throws "Call to a member function type()
+         *     on array". script() must be its own standalone statement.
+         *   - Dusk's type() also mis-parses a CSS attribute selector containing
+         *     '[' (a querySelector string like input[type="text"]), which is the
+         *     second reason the old chained selectors failed.
+         *
+         * Placeholders rendered by CTASection.jsx: 'Your name', 'Work email',
+         * 'Institution name'. This mirrors the proven flow in WelcomeTest.
          */
         $this->browse(function (Browser $browser) {
             $browser->visit('/')
                 ->waitForText('Request a demo', 20)
-                ->assertSee('Stop reconciling by hand')
-                ->script("document.querySelector('section#contact').scrollIntoView();")
-                ->type('section#contact input[type="text"]:nth-of-type(1)', 'Karim Ahmed')
-                ->type('section#contact input[type="email"]', 'karim@acme-food.test')
-                ->type('section#contact input[type="text"]:nth-of-type(2)', 'Acme Foods Cafeteria')
-                ->press('Request demo')
+                ->assertSee('Stop reconciling by hand');
+
+            // Standalone: script() returns an array, breaking any method chain.
+            $browser->script("document.querySelector('section#contact').scrollIntoView();");
+
+            $browser->script("(() => {
+                const set = (ph, val) => {
+                    const el = [...document.querySelectorAll('input')].find(i => i.placeholder === ph);
+                    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, val);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                };
+                set('Your name', 'Karim Ahmed');
+                set('Work email', 'karim@acme-food.test');
+                set('Institution name', 'Acme Foods Cafeteria');
+            })();");
+
+            $browser->press('Request demo')
                 ->waitForText('Your request has been received', 20);
         });
 
@@ -65,7 +84,7 @@ class TrialRequestTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'TrialRequest', 'SSA approves -> provisions 7-day trial', __LINE__);
 
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->post("/platform/enquiries/{$enquiry->id}/approve", [
                 'name' => 'Acme Foods Cafeteria',
                 'type' => 'company',

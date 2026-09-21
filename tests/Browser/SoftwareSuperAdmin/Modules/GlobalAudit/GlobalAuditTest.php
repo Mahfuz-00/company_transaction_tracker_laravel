@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\GlobalAudit;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -20,7 +18,6 @@ use Tests\DuskTestCase;
 class GlobalAuditTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_reaches_the_global_audit_log(): void
     {
@@ -46,6 +43,6 @@ class GlobalAuditTest extends DuskTestCase
 
         $this->step('SSA', 'GlobalAudit', 'assert tenant admin is forbidden', __LINE__);
 
-        $this->actingAs($admin)->get('/platform/audit')->assertForbidden();
+        $this->httpAs($admin)->get('/platform/audit')->assertForbidden();
     }
 }

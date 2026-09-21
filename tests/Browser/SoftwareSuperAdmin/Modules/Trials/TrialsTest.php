@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\Trials;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -22,7 +20,6 @@ use Tests\DuskTestCase;
 class TrialsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_sees_trials_and_subscribers(): void
     {
@@ -59,7 +56,7 @@ class TrialsTest extends DuskTestCase
 
         $this->step('SSA', 'Trials', 'POST convert', __LINE__);
 
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->post("/settings/trials/{$institution->slug}/convert", [
                 'subscription_plan' => 'standard',
                 'subscription_amount' => 2500,
@@ -85,7 +82,7 @@ class TrialsTest extends DuskTestCase
 
         $this->step('SSA', 'Trials', 'POST extend by 5 days', __LINE__);
 
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->post("/settings/trials/{$institution->slug}/extend", ['days' => 5])
             ->assertSessionHas('success');
 

@@ -3,6 +3,10 @@
 .env
 .env.backup
 .env.production
+# Dusk environment files: the local .env.dusk.local holds a real APP_KEY and
+# must never be committed; CI generates .env.dusk on the runner.
+.env.dusk
+.env.dusk.*
 .phpactor.json
 .phpunit.result.cache
 /.fleet

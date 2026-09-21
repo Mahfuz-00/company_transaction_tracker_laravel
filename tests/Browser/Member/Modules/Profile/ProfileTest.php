@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\Member\Modules\Profile;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -18,7 +16,6 @@ use Tests\DuskTestCase;
 class ProfileTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_member_opens_the_profile_manager(): void
     {
@@ -54,7 +51,7 @@ class ProfileTest extends DuskTestCase
 
         // ProfileController::updatePassword routes through PasswordGuard and
         // requires the current password to match.
-        $this->actingAs($member)
+        $this->httpAs($member)
             ->put('/password/change', [
                 'current_password' => 'password',
                 'password' => 'BrandNewPass123',

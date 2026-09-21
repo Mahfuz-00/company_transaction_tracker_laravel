@@ -4,7 +4,6 @@ namespace Tests\Browser\SoftwareSuperAdmin\Modules\Plans;
 
 use App\Models\Institution;
 use App\Models\SubscriptionPlan;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -23,7 +22,6 @@ use Tests\DuskTestCase;
 class PlansTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_sees_the_plan_manager(): void
     {
@@ -60,7 +58,7 @@ class PlansTest extends DuskTestCase
 
         // SubscriptionPlanController::validated() requires name, monthly_price,
         // member_limit, manager_limit; key is derived from name when omitted.
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->post('/platform/plans', [
                 'name' => 'Enterprise',
                 'monthly_price' => 9000,
@@ -97,7 +95,7 @@ class PlansTest extends DuskTestCase
 
         $this->step('SSA', 'Plans', 'DELETE an in-use plan is refused', __LINE__);
 
-        $this->actingAs($ssa)
+        $this->httpAs($ssa)
             ->delete("/platform/plans/{$plan->id}")
             ->assertSessionHas('error');
 
@@ -112,6 +110,6 @@ class PlansTest extends DuskTestCase
 
         $this->step('SSA', 'Plans', 'assert tenant admin is forbidden', __LINE__);
 
-        $this->actingAs($admin)->get('/platform/plans')->assertForbidden();
+        $this->httpAs($admin)->get('/platform/plans')->assertForbidden();
     }
 }

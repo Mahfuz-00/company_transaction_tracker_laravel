@@ -3,7 +3,6 @@
 namespace Tests\Browser\SoftwareSuperAdmin\Dashboard;
 
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -24,7 +23,6 @@ use Tests\DuskTestCase;
 class DashboardTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_dashboard_renders_platform_wide_metrics(): void
     {
@@ -42,8 +40,14 @@ class DashboardTest extends DuskTestCase
             $this->step('SSA', 'Dashboard', 'login and visit /platform', __LINE__);
 
             $browser->loginAs($ssa)
-                ->visit('/platform')
-                ->waitForText('Software Super Admin', 20);
+                ->visit('/platform');
+
+            /*
+             * The SSA heading is rendered with Tailwind `uppercase`, so the
+             * VISIBLE text is "SOFTWARE SUPER ADMIN". waitForText() compares the
+             * rendered (transformed) text, so the check must be case-insensitive.
+             */
+            $this->waitForTextCaseInsensitive($browser, 'Software Super Admin', 20);
 
             $this->step('SSA', 'Dashboard', 'assert global cross-tenant data', __LINE__);
 

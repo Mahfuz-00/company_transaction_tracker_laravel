@@ -42,6 +42,7 @@ return [
             'journal_mode' => null,
             'synchronous' => null,
             'transaction_mode' => 'DEFERRED',
+            'busy_timeout' => 30000, // 30 seconds wait time for locked database
         ],
 
         'mysql' => [

@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\Member\Modules\ThemeCustomizer;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -19,7 +17,6 @@ use Tests\DuskTestCase;
 class ThemeCustomizerTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_member_toggles_dark_mode_and_it_persists(): void
     {
@@ -41,8 +38,10 @@ class ThemeCustomizerTest extends DuskTestCase
 
             $browser->waitUntil("document.documentElement.getAttribute('data-theme-mode') === 'dark'", 10)
                 ->press('Save My Theme')
+                // Wait for the flash so the redirect settles before touching the DOM.
                 ->waitForText('Theme saved. It will follow you to every device you sign in from.', 20)
-                ->assertAttribute('html', 'data-theme-mode', 'dark');
+                ->pause(500)
+                ->waitUntil("document.documentElement.getAttribute('data-theme-mode') === 'dark'", 10);
         });
 
         $this->step('Member', 'ThemeCustomizer', 'assert users.theme persisted', __LINE__);

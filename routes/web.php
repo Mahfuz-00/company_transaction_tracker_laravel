@@ -9,6 +9,7 @@ use App\Http\Controllers\PasswordSetupController;
 use App\Http\Controllers\EmailLogController;
 use App\Http\Controllers\InstitutionController;
 use App\Http\Controllers\InstitutionRegistryController;
+use App\Http\Controllers\InviteCodeController;
 use App\Http\Controllers\GlobalAuditController;
 use App\Http\Controllers\LandingEnquiryController;
 use App\Http\Controllers\MemberInvitationController;
@@ -264,6 +265,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::put('/settings/institution', [InstitutionController::class, 'update'])
         ->name('settings.institution.update')
+        ->middleware('permission:institution.manage');
+
+    /*
+     * Settings - the workshop's INVITE CODE.
+     *
+     * The code is the tenant-mapping key a member types on the public signup
+     * form (RegisteredUserController::store -> Institution::findByInviteCode).
+     * It was generated and consumed in the backend but an Institution Admin had
+     * no way to SEE or ROTATE it. This module closes that gap.
+     */
+    Route::get('/settings/invite-code', [InviteCodeController::class, 'show'])
+        ->name('settings.invite-code.show')
+        ->middleware('permission:institution.view');
+
+    // Rotate the code (revokes old signup links). Managing the workspace belongs
+    // to its Institution Admin (or an SSA switched into it) - institution.manage.
+    Route::post('/settings/invite-code/regenerate', [InviteCodeController::class, 'regenerate'])
+        ->name('settings.invite-code.regenerate')
         ->middleware('permission:institution.manage');
 
     // Settings - admin-managed subsidy funding sources with default shares.

@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\MealManager\Modules\Reports;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -17,7 +15,6 @@ use Tests\DuskTestCase;
 class ReportsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_opens_the_meal_report(): void
     {
@@ -43,7 +40,7 @@ class ReportsTest extends DuskTestCase
         $this->step('MealManager', 'Reports', 'GET the report export', __LINE__);
 
         // `exports.download` is held by the Meal Manager role too.
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->get('/meals/reports/export?format=excel')
             ->assertOk();
     }

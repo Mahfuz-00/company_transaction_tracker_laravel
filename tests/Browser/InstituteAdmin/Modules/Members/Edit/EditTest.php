@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\Members\Edit;
 
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -23,7 +22,6 @@ use Tests\DuskTestCase;
 class EditTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_edits_a_member_record(): void
     {
@@ -48,7 +46,7 @@ class EditTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Members', 'PUT the corrected name', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->put("/meals/students/{$member->id}", [
                 'name' => 'Corrected Name',
                 'roll' => 'NSU-4400',

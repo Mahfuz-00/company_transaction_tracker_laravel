@@ -5,7 +5,6 @@ namespace Tests\Browser\SoftwareSuperAdmin\Modules\LandingEnquiries\Approve;
 use App\Models\Institution;
 use App\Models\LandingEnquiry;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -24,7 +23,6 @@ use Tests\DuskTestCase;
 class ApproveTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_approves_an_enquiry_and_provisions_a_seven_day_trial(): void
     {
@@ -47,6 +45,25 @@ class ApproveTest extends DuskTestCase
                 ->waitForText('Acme Foods Cafeteria', 20)
                 ->press('Approve & Provision')
                 ->waitForText('Provision institution', 15);
+
+            $this->step('SSA', 'LandingEnquiries', 'choose institution type = company', __LINE__);
+
+            /*
+             * The ApproveModal's useForm DEFAULTS `type` to 'general_mess', so
+             * leaving it untouched provisions a 'general_mess' workspace - the
+             * enquiry's own institution_type ('corporate') is only used by the
+             * controller's guessType() when the request OMITS `type`, which the
+             * modal never does. To assert the real corporate -> company mapping
+             * the flow promises, drive the modal's Institution type <select> to
+             * 'company' the React-safe way (native value setter + change event),
+             * since the select carries no id/name to address via Dusk select().
+             */
+            $browser->script("(() => {
+                const sel = document.querySelector('select');
+                const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+                setter.call(sel, 'company');
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+            })();");
 
             $this->step('SSA', 'LandingEnquiries', 'confirm 7-day trial default + submit', __LINE__);
 

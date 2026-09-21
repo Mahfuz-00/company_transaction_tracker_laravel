@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\ClaimReview;
 
 use App\Models\Claim;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -20,7 +19,6 @@ use Tests\DuskTestCase;
 class ClaimReviewTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_sees_the_claim_review_queue(): void
     {
@@ -67,7 +65,7 @@ class ClaimReviewTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'ClaimReview', 'PATCH approve', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->patch("/claims/{$claim->id}/approve", ['approved_amount' => 750])
             ->assertSessionHas('success');
 
@@ -94,7 +92,7 @@ class ClaimReviewTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'ClaimReview', 'PATCH reject', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->patch("/claims/{$claim->id}/reject", ['review_notes' => 'Not substantiated.'])
             ->assertSessionHas('success');
 

@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\Vendors;
 
 use App\Models\Vendor;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -22,7 +21,6 @@ use Tests\DuskTestCase;
 class VendorsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_creates_a_vendor(): void
     {
@@ -32,7 +30,7 @@ class VendorsTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'Vendors', 'POST a vendor', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->post('/meals/vendors', [
                 'name' => 'Fresh Vegetable Supplier',
                 'status' => 'active',
@@ -55,20 +53,27 @@ class VendorsTest extends DuskTestCase
 
         // Create the vendor through the real endpoint, then record an expense
         // against it so purchase history exists.
-        $this->actingAs($admin)->post('/meals/vendors', [
+        $this->httpAs($admin)->post('/meals/vendors', [
             'name' => 'Locked Vendor', 'status' => 'active', 'category' => 'groceries',
         ]);
         $vendor = Vendor::where('name', 'Locked Vendor')->firstOrFail();
 
-        $this->actingAs($admin)->post('/meals/expenses', [
+        $this->httpAs($admin)->post('/meals/expenses', [
             'amount' => 800, 'description' => 'Vendor purchase', 'category' => 'Groceries',
             'vendor_id' => $vendor->id,
         ]);
 
         $this->step('InstituteAdmin', 'Vendors', 'DELETE refused (purchase history)', __LINE__);
 
-        $this->actingAs($admin)
-            ->delete("/meals/vendors/{$vendor->id}")
+        /*
+         * Vendor::getRouteKeyName() is 'slug', NOT 'id': the resource route
+         * binds /meals/vendors/{vendor} by slug. Deleting by numeric id misses
+         * the binding entirely (404, no flash) - which is why the session 'error'
+         * key was absent. Address the vendor by its slug so the real destroy()
+         * runs and returns its back()->with('error', ...) refusal.
+         */
+        $this->httpAs($admin)
+            ->delete("/meals/vendors/{$vendor->slug}")
             ->assertSessionHas('error');
 
         $this->assertDatabaseHas('vendors', ['id' => $vendor->id]);

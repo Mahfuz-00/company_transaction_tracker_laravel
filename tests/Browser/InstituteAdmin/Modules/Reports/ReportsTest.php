@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\InstituteAdmin\Modules\Reports;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -21,7 +19,6 @@ use Tests\DuskTestCase;
 class ReportsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_opens_the_meal_report(): void
     {
@@ -47,7 +44,7 @@ class ReportsTest extends DuskTestCase
         $this->step('InstituteAdmin', 'Reports', 'GET the members export', __LINE__);
 
         // exports.download permission lets the export stream a file response.
-        $response = $this->actingAs($admin)->get('/meals/students-export?format=excel');
+        $response = $this->httpAs($admin)->get('/meals/students-export?format=excel');
 
         $response->assertOk();
     }

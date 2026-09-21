@@ -1,27 +1,27 @@
 # =============================================================================
 # CI - Multi-Institution SaaS Platform
 #
-# MANUAL CONTROL: this workflow has NO push / pull_request trigger. It ONLY runs
-# when a human starts it from the GitHub UI (or the API/CLI) via `workflow_dispatch`.
-# Pushing to a branch therefore starts nothing on its own.
+# TRIGGERS:
+#   - `push` to `main` runs the full pipeline automatically.
+#   - `workflow_dispatch` runs it by hand from the GitHub UI (or the API/CLI),
+#     with the version inputs below as a form.
+#
+# JOBS: tests (Pest/PHPUnit) | dusk (headless-Chrome browser tests) |
+#       build-assets (Vite) | migrations (tenant-schema verification).
 # =============================================================================
 
 name: CI
-
 on:
   # Runs automatically whenever code is pushed to the 'main' branch
   push:
     branches:
       - main
   # ---------------------------------------------------------------------------
-  # MANUAL TRIGGER ONLY.
+  # MANUAL TRIGGER.
   #
-  # `workflow_dispatch` is the GitHub event for "run this by hand". Because this
-  # is the ONLY entry in `on:`, a `git push` or a PR opens NOTHING - the pipeline
-  # runs exactly when you ask it to, from the Actions tab.
-  #
-  # `inputs` below become a form in the UI, so a manual run can be parameterised
-  # (e.g. run only the tenant-isolation tests) without editing the file.
+  # `workflow_dispatch` is the GitHub event for "run this by hand". Its `inputs`
+  # below become a form in the Actions tab, so a manual run can be parameterised
+  # without editing the file.
   # ---------------------------------------------------------------------------
   workflow_dispatch:
     inputs:
@@ -136,9 +136,8 @@ jobs:
       # caches config, and a stale cache would make the suite run against the
       # WRONG (non-testing) environment.
       # -----------------------------------------------------------------------
-      # - name: Run test suite (Pest/PHPUnit)
-      #   run: composer test
-
+      - name: Run test suite (Pest/PHPUnit)
+        run: composer test
       # -----------------------------------------------------------------------
       # TENANT-ISOLATION & PERMISSION FOCUSED RUN.
       #
@@ -147,14 +146,188 @@ jobs:
       # `--fail-on-empty` guarantees a rename that drops coverage FAILS the build
       # rather than silently passing zero tests.
       # -----------------------------------------------------------------------
-      # - name: Tenant isolation & permission tests
-      #   run: |
-      #     php artisan test \
-      #       --filter='RegistrationTest|SuperAdminPasswordGuardTest|ProfileTest' \
-      #       --fail-on-empty
+      - name: Tenant isolation & permission tests
+        run: |
+          php artisan test \
+            --filter='RegistrationTest|SuperAdminPasswordGuardTest|ProfileTest' \
+            --fail-on-empty
 
   # ===========================================================================
-  # JOB 2 - Frontend build (React / Inertia / Vite)
+  # JOB 2 - Laravel Dusk browser tests (headless Chrome)
+  #
+  # RAN IN ITS OWN JOB ON PURPOSE. Dusk is not a normal PHPUnit run: it drives a
+  # REAL headless Chrome against a REAL `php artisan serve` process, so it needs
+  # the frontend assets built, a file-backed SQLite database shared by both the
+  # test process and the server process, and a browser driver. Bundling all of
+  # that into the `tests` job would slow the fast unit/feature run and muddy a
+  # failure. Keeping it separate means a broken browser test is unambiguous.
+  #
+  # It depends on `tests` so the cheap, fast suite fails first without burning a
+  # browser download + Chrome run.
+  # ===========================================================================
+  dusk:
+    name: Browser tests (Dusk)
+    runs-on: ubuntu-latest
+    needs: tests
+    env:
+      PHP_VERSION: ${{ github.event.inputs.php_version || '8.2' }}
+      NODE_VERSION: ${{ github.event.inputs.node_version || '20' }}
+      # The app server the browser talks to. Dusk reads this same URL via
+      # APP_URL in .env.dusk below, so the two must agree.
+      APP_URL: http://127.0.0.1:8000
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # -----------------------------------------------------------------------
+      # PHP + SQLite (Dusk's file-backed test DB lives on disk).
+      # -----------------------------------------------------------------------
+      - name: Setup PHP ${{ env.PHP_VERSION }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, dom, fileinfo, sqlite3, pdo_sqlite, bcmath, gd
+          coverage: none
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache/files
+            ~/.cache/composer/files
+          key: composer-${{ runner.os }}-php${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-php${{ env.PHP_VERSION }}-
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      # -----------------------------------------------------------------------
+      # Frontend assets the Inertia pages need.
+      #
+      # Dusk drives real pages, so the Vite manifest MUST exist. We build the
+      # production bundle (NOT the dev server): with no `public/hot` file, the
+      # @vite directive serves from the compiled manifest - exactly what a real
+      # deployment looks like.
+      # -----------------------------------------------------------------------
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Build production assets
+        run: npm run build
+      # -----------------------------------------------------------------------
+      # Headless Chrome + matching ChromeDriver.
+      #
+      # ubuntu-latest ships google-chrome; `dusk:chrome-driver --detect` installs
+      # the chromedriver build that MATCHES the installed Chrome version, so the
+      # pair never drifts (a mismatched driver is the usual CI Dusk failure).
+      # -----------------------------------------------------------------------
+      - name: Install the matching ChromeDriver
+        run: php artisan dusk:chrome-driver --detect
+      # -----------------------------------------------------------------------
+      # Dusk environment file.
+      #
+      # `php artisan dusk` backs up `.env` and copies `.env.dusk` over it, so the
+      # browser run gets its OWN environment. We write it here rather than
+      # committing secrets: a file-backed SQLite DB, a real (file) session driver
+      # the server process can read, and the app pointed at the served URL.
+      # -----------------------------------------------------------------------
+      - name: Write the Dusk environment file
+        run: |
+          # Generate a key and embed it DIRECTLY in .env.dusk: `artisan dusk`
+          # copies .env.dusk OVER .env, so a key written to .env would be
+          # discarded and the browser run would boot with an empty APP_KEY.
+          APP_KEY="base64:$(php -r 'echo base64_encode(random_bytes(32));')"
+          cat > .env.dusk <<EOF
+          APP_NAME=Laravel
+          APP_ENV=local
+          APP_KEY=${APP_KEY}
+          APP_DEBUG=true
+          APP_URL=http://127.0.0.1:8000
+          APP_LOCALE=en
+          APP_FALLBACK_LOCALE=en
+          BCRYPT_ROUNDS=4
+          LOG_CHANNEL=stack
+          LOG_LEVEL=debug
+          DB_CONNECTION=sqlite
+          DB_DATABASE=database/dusk.sqlite
+          SESSION_DRIVER=file
+          BROADCAST_CONNECTION=log
+          FILESYSTEM_DISK=local
+          QUEUE_CONNECTION=sync
+          CACHE_STORE=array
+          MAIL_MAILER=array
+          REGISTRATION_DEFAULT_ROLE=Member
+          VITE_APP_NAME="Laravel"
+          EOF
+      # -----------------------------------------------------------------------
+      # Seed the file-backed Dusk database.
+      #
+      # DuskDatabase migrates this file and commits every insert so the SEPARATE
+      # serve process can see the same rows. We touch the file here so the very
+      # first request has a database to open.
+      # -----------------------------------------------------------------------
+      - name: Create the Dusk SQLite database
+        run: |
+          mkdir -p database
+          touch database/dusk.sqlite
+      # -----------------------------------------------------------------------
+      # Start the app server the browser drives.
+      #
+      # Dusk does NOT start `php artisan serve` for us; the tests assume a server
+      # is already listening on APP_URL. Launch it in the background and BLOCK
+      # until it answers, so the first test never races a booting server.
+      # -----------------------------------------------------------------------
+      - name: Start the application server
+        run: |
+          php artisan serve --host=127.0.0.1 --port=8000 > /tmp/serve.log 2>&1 &
+          echo "SERVER_PID=$!" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/up > /dev/null; then
+              echo "Server is up."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start; last output:"
+          cat /tmp/serve.log
+          exit 1
+      # -----------------------------------------------------------------------
+      # RUN DUSK.
+      #
+      # `php artisan dusk` uses phpunit.dusk.xml (testsuite = ./tests/Browser).
+      # Any failing test or assertion exits non-zero, so the job fails loudly.
+      # -----------------------------------------------------------------------
+      - name: Run Dusk browser tests
+        run: php artisan dusk
+      # -----------------------------------------------------------------------
+      # TEARDOWN / DIAGNOSTICS.
+      #
+      # `if: always()` so the server log is captured even when Dusk fails - and
+      # the server is killed so a hung process never blocks the runner. Screenshots
+      # and console logs from failures are uploaded for debugging.
+      # -----------------------------------------------------------------------
+      - name: Stop the application server
+        if: always()
+        run: |
+          if [ -n "${SERVER_PID:-}" ]; then kill "$SERVER_PID" 2>/dev/null || true; fi
+      - name: Show the application server log
+        if: failure()
+        run: cat /tmp/serve.log || true
+      - name: Upload Dusk screenshots and console logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dusk-failure-artifacts
+          path: |
+            tests/Browser/screenshots
+            tests/Browser/console
+          if-no-files-found: ignore
+          retention-days: 7
+  # ===========================================================================
+  # JOB 3 - Frontend build (React / Inertia / Vite)
   # ===========================================================================
   build-assets:
     name: Build assets (Vite)
@@ -203,7 +376,7 @@ jobs:
         run: test -f public/build/manifest.json && echo "Vite manifest present."
 
   # ===========================================================================
-  # JOB 3 - Tenant-scoped migration verification on a REAL SQLite file
+  # JOB 4 - Tenant-scoped migration verification on a REAL SQLite file
   # ===========================================================================
   migrations: 
     name: Migration & tenant-schema verification (SQLite)

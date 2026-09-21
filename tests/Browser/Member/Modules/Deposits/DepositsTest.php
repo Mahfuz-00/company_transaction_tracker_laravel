@@ -4,7 +4,6 @@ namespace Tests\Browser\Member\Modules\Deposits;
 
 use App\Models\Deposit;
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -19,7 +18,6 @@ use Tests\DuskTestCase;
 class DepositsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_member_sees_their_own_deposit_history(): void
     {

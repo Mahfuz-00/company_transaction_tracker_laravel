@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\InstituteAdmin\Modules\UserManager;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -21,7 +19,6 @@ use Tests\DuskTestCase;
 class UserManagerTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_sees_only_their_institutions_users(): void
     {
@@ -61,7 +58,7 @@ class UserManagerTest extends DuskTestCase
 
         $this->step('InstituteAdmin', 'UserManager', 'PATCH deactivate a foreign user', __LINE__);
 
-        $this->actingAs($admin)
+        $this->httpAs($admin)
             ->patch("/settings/users/{$foreign->id}/deactivate")
             ->assertSessionHas('error', 'That user belongs to another institution.');
 

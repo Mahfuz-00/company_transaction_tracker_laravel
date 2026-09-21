@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\MealManager\Modules\Subsidies;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -18,7 +16,6 @@ use Tests\DuskTestCase;
 class SubsidiesTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_meal_manager_can_view_subsidies(): void
     {
@@ -44,7 +41,7 @@ class SubsidiesTest extends DuskTestCase
         $this->step('MealManager', 'Subsidies', 'POST is forbidden (no manage permission)', __LINE__);
 
         // subsidies.manage is an Institution-Admin/SSA permission.
-        $this->actingAs($manager)
+        $this->httpAs($manager)
             ->post('/meals/subsidies', [
                 'source' => 'authority', 'amount' => 1000, 'apply_mode' => 'pool',
             ])

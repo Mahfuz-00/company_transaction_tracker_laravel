@@ -3,7 +3,6 @@
 namespace Tests\Browser\InstituteAdmin\Modules\Members\Create;
 
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -22,7 +21,6 @@ use Tests\DuskTestCase;
 class CreateTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_adds_a_member_to_the_roster(): void
     {
@@ -33,11 +31,17 @@ class CreateTest extends DuskTestCase
         $this->step('InstituteAdmin', 'Members', 'open Add Member modal', __LINE__);
 
         $this->browse(function (Browser $browser) use ($admin) {
+            /*
+             * TERMINOLOGY: a university_dorm workspace renders `member` as
+             * "Student" (Institution::TYPES), so the toolbar button reads
+             * "Add Student" - not "Add Member". Waiting for the real label also
+             * avoids racing React hydration.
+             */
             $browser->loginAs($admin)
                 ->visit('/meals/students')
-                ->waitForText('Members', 20)
-                ->press('Add Member')
-                ->waitFor('#member-form', 15);
+                ->waitForText('Add Student', 30)
+                ->press('Add Student')
+                ->waitFor('#member-form', 20);
 
             $this->step('InstituteAdmin', 'Members', 'fill and submit the form', __LINE__);
 

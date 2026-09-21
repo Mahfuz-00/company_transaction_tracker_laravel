@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\Analytics;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -18,7 +16,6 @@ use Tests\DuskTestCase;
 class AnalyticsTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_sees_platform_saas_analytics(): void
     {
@@ -37,9 +34,11 @@ class AnalyticsTest extends DuskTestCase
         $this->browse(function (Browser $browser) use ($ssa) {
             $browser->loginAs($ssa)
                 ->visit('/platform/analytics')
-                ->assertPathIs('/platform/analytics')
-                // The page renders under the SSA chrome with the platform sidebar.
-                ->assertSee('Software Super Admin');
+                ->assertPathIs('/platform/analytics');
+
+            // The SSA chrome heading is styled `uppercase`, so wait for the
+            // text case-insensitively rather than a literal assertSee.
+            $this->waitForTextCaseInsensitive($browser, 'Software Super Admin', 20);
         });
     }
 }

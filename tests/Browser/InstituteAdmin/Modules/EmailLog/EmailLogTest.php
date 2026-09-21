@@ -1,8 +1,6 @@
 <?php
 
 namespace Tests\Browser\InstituteAdmin\Modules\EmailLog;
-
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -17,7 +15,6 @@ use Tests\DuskTestCase;
 class EmailLogTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_institute_admin_reaches_the_email_outbox(): void
     {

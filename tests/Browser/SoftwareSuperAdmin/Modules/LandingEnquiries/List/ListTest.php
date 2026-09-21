@@ -3,7 +3,6 @@
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\LandingEnquiries\List;
 
 use App\Models\LandingEnquiry;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -21,7 +20,6 @@ use Tests\DuskTestCase;
 class ListTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_sees_landing_enquiries_with_stats(): void
     {

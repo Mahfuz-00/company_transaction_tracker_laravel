@@ -1,4 +1,5 @@
 <?php
+
 namespace Tests;
 
 use Facebook\WebDriver\Chrome\ChromeOptions;
@@ -7,16 +8,18 @@ use Facebook\WebDriver\Remote\RemoteWebDriver;
 use Illuminate\Support\Collection;
 use Laravel\Dusk\TestCase as BaseTestCase;
 use PHPUnit\Framework\Attributes\BeforeClass;
+use Tests\Browser\Support\DuskDatabase;
 
 abstract class DuskTestCase extends BaseTestCase
 {
-    /**
-     * Prepare for Dusk test execution.
-     *
-     * Boots a local ChromeDriver on the port shared with driver() below. In a
-     * Sail/Docker environment the driver is provided by the container instead, so
-     * we skip starting a second one.
+    /*
+     * DuskDatabase commits the schema + fixtures so the SEPARATE `artisan serve`
+     * process the browser talks to can actually SEE the test data. Without it a
+     * real form login (rather than loginAs) can never resolve the account and the
+     * suite hangs on waitForLocation().
      */
+    use DuskDatabase;
+
     #[BeforeClass]
     public static function prepare(): void
     {
@@ -26,35 +29,73 @@ abstract class DuskTestCase extends BaseTestCase
     }
 
     /**
-     * Create the RemoteWebDriver instance.
-     *
-     * The argument set below is what makes the suite reliable in CI as well as on
-     * a developer desktop:
-     *
-     *   --window-size        A fixed 1920x1080 viewport (Dusk's default) so
-     *                       responsive Tailwind breakpoints resolve identically on
-     *                       every machine, which is what makes assertions on
-     *                       desktop-only markup (`lg:` / `sm:`) deterministic.
-     *   --headless=new       Headless Chrome (see hasHeadlessDisabled() to run
-     *                       visibly while debugging).
-     *   --no-sandbox etc.    Sandbox/dev-shm flags stop Chrome from crashing in
-     *                       containerised CI runners.
-     *   --disable-dev-shm-usage  Routes shared memory to /tmp; without it Chrome
-     *                       can hang on large pages under Docker.
-     *
-     * To run with a visible browser for debugging, set DUSK_HEADLESS_DISABLED=true
-     * in .env.dusk.local before invoking `php artisan dusk`.
+     * Build a committed, server-visible database before each test, then wipe the
+     * domain tables so tests stay independent without a rollback transaction
+     * (a rollback would hide the data from the server process again).
      */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->migrateDuskDatabase();
+
+        /*
+         * Several tests ALSO make Laravel HTTP calls directly (actingAs()->post())
+         * to assert server-side effects (a flash message, a 403, a DB write). Those
+         * calls run through the full HTTP kernel, so CSRF would reject them with a
+         * 419. Disabling ONLY the CSRF middleware keeps every other middleware
+         * (auth, role:, permission:) active, so the security assertions still hold.
+         */
+        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class);
+    }
+
+    protected function tearDown(): void
+    {
+        /*
+         * Drop the browser's cookies/session between tests.
+         *
+         * Dusk reuses ONE browser instance for the whole test class, so a test
+         * that logs a user in leaves that session cookie in place. The next test
+         * then hits the `guest` middleware (e.g. on /login) and is redirected away
+         * from the page it wanted to assert on - which looks like a text timeout.
+         * Clearing cookies restores a clean guest session per test.
+         */
+        /*
+         * Dusk's ProvidesBrowser declares `static $browsers = []` (a plain
+         * array) and only upgrades it to a Collection inside browse(). A test
+         * that never drives the browser (pure server-side httpAs() assertions)
+         * therefore still holds an ARRAY here, and calling ->isNotEmpty() on it
+         * threw "Call to a member function isNotEmpty() on array" - which
+         * aborted tearDown() BEFORE the tables were truncated, leaking rows into
+         * the next test (e.g. a duplicate users.email). Normalise to a collection
+         * and iterate defensively so both shapes work.
+         */
+        $browsers = collect(static::$browsers);
+
+        if ($browsers->isNotEmpty()) {
+            $browsers->each(function ($browser) {
+                try {
+                    $browser->driver->manage()->deleteAllCookies();
+                } catch (\Throwable $e) {
+                    // Browser may already be closed; nothing to clear.
+                }
+            });
+        }
+
+        // Leave a clean slate for the next test (committed, so the server agrees).
+        $this->truncateDuskTables();
+
+        parent::tearDown();
+    }
+
     protected function driver(): RemoteWebDriver
     {
         $options = (new ChromeOptions)->addArguments(collect([
             $this->shouldStartMaximized() ? '--start-maximized' : '--window-size=1920,1080',
             '--disable-search-engine-choice-screen',
             '--disable-smooth-scrolling',
-            // Stability flags: harmless locally, essential in headless CI.
             '--disable-dev-shm-usage',
-            // ── Noise reduction (Windows GCM / TensorFlow / updater messages) ──
-            '--log-level=3',                          // Only fatal errors
+            '--log-level=3',
             '--disable-background-networking',
             '--disable-background-timer-throttling',
             '--disable-backgrounding-occluded-windows',
@@ -80,7 +121,6 @@ abstract class DuskTestCase extends BaseTestCase
             return $items->merge([
                 '--disable-gpu',
                 '--headless=new',
-                // No sandbox: Chrome refuses to start as root (Docker/CI) without it.
                 '--no-sandbox',
             ]);
         })->all());

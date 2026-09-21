@@ -3,7 +3,6 @@
 namespace Tests\Browser\SoftwareSuperAdmin\Modules\InstitutionRegistry\List;
 
 use App\Models\Student;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
@@ -22,7 +21,6 @@ use Tests\DuskTestCase;
 class ListTest extends DuskTestCase
 {
     use DuskSupport;
-    use RefreshDatabase;
 
     public function test_ssa_sees_every_institution_on_the_platform(): void
     {
@@ -57,11 +55,21 @@ class ListTest extends DuskTestCase
         $this->makeInstitution(['name' => 'South College Mess']);
 
         $this->browse(function (Browser $browser) use ($ssa) {
-            $this->step('SSA', 'InstitutionRegistry', 'search "South"', __LINE__);
+            $this->step('SSA', 'InstitutionRegistry', 'search "College"', __LINE__);
 
-            // The search form submits ?search= to the same route.
+            /*
+             * The search form submits ?search= to the same route, and the
+             * controller filters with a substring LIKE on the name:
+             *
+             *   where('name', 'like', "%{$search}%")
+             *
+             * A term like "South" is therefore NOT discriminating here - it is a
+             * substring of BOTH fixtures ("North South University Dorm" and
+             * "South College Mess"). Searching "College" matches only one row, so
+             * the filter's effect is actually provable.
+             */
             $browser->loginAs($ssa)
-                ->visit('/settings/institutions?search=South')
+                ->visit('/settings/institutions?search=College')
                 ->waitForText('Institution Registry', 20)
                 ->assertSee('South College Mess')
                 ->assertDontSee('North South University Dorm');
