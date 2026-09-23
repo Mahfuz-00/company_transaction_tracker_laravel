@@ -1,6 +1,26 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link } from '@inertiajs/react';
 
+/**
+ * Roles list page — a read-only overview of every role in the workspace.
+ *
+ * Inertia page component. Laravel hands it everything it needs as PROPS, so the
+ * page itself holds no state and makes no requests: it renders the table and
+ * links out to the create/edit screens.
+ *
+ * PROPS
+ *   - `auth`  : the shared auth prop (here only `auth.user`), passed to the
+ *               layout so the chrome can show who is signed in.
+ *   - `roles` : roles from the server. Each item carries `id`, `name`, a nested
+ *               `permissions` array (each with a `name`) and a `users_count`.
+ *
+ * Inertia / React concepts on show:
+ *   - `<Head title="Roles" />` sets the document <title> for this page.
+ *   - `route('roles.create' | 'roles.edit', id)` is Ziggy URL building.
+ *   - `.map()` over `roles` renders one <tr> per row; React needs the `key` prop
+ *     so it can identify rows across re-renders (the mobile equivalent of a
+ *     stable list-diff id).
+ */
 export default function Index({ auth, roles }) {
     return (
         <AuthenticatedLayout user={auth.user} header={<h2 className="font-semibold text-xl text-gray-800 leading-tight">Roles</h2>}>
@@ -23,6 +43,8 @@ export default function Index({ auth, roles }) {
                             </tr>
                         </thead>
                         <tbody>
+                            {/* One <tr> per role; the `key` prop keeps React's list
+                                diff stable across re-renders. */}
                             {roles.map((r) => (
                                 <tr key={r.id} className="border-t">
                                     <td className="p-2 font-medium">{r.name}</td>

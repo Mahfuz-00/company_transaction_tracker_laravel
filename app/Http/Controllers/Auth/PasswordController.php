@@ -8,6 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
+/**
+ * Changes the password of the currently signed-in user from within settings
+ * (requires the current password to be supplied).
+ */
 class PasswordController extends Controller
 {
     /**

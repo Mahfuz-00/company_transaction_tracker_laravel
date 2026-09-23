@@ -52,6 +52,35 @@ function Flash({ success, error }) {
     );
 }
 
+/**
+ * Meal module - Expenses list.
+ *
+ * PURPOSE
+ * Expenses are what the kitchen spends on groceries and supplies. Like
+ * deposits, each expense is mirrored to the ledger as a cash-out, so the pool
+ * balance stays consistent. The page shows a month-scoped total, a "spend by
+ * vendor" summary (for recurring shopping), a filterable table, and a
+ * record/edit modal.
+ *
+ * PROPS (from the Laravel controller)
+ *  - expenses: Laravel paginator { data, links, from, to, total }; each row
+ *    carries a nested `transaction` (amount/reason), `vendor`, `recorder`.
+ *  - categories: allowed category strings for the filter + form.
+ *  - vendors: suppliers for the vendor <select>; one may be flagged
+ *    is_institution_hub (the institution buying from itself).
+ *  - filteredTotal: sum for the active filter (or the month when unfiltered).
+ *  - byVendor: [{ name, total, count }] this month's spend per supplier.
+ *  - months / month: the month selector's options and the selected value.
+ *  - filters: { search, category, vendor, month } echo of the query.
+ *
+ * FLOW
+ *  - Record / Edit: shared useForm; submit() post()s or put()s based on
+ *    `editing`. Amount is read from the linked transaction on edit.
+ *  - Reverse: router.patch(...reverse) keeps the row for audit and posts a
+ *    matching cash-in so the money returns to the books.
+ *  - Filtering: applyFilters() merges the new value into the query and does a
+ *    partial router.get() visit.
+ */
 export default function Index({ expenses, categories, vendors, filteredTotal, byVendor, months, month, filters }) {
     const { can } = useCan();
     const { flash } = usePage().props;

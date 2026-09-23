@@ -1,7 +1,14 @@
 import React from 'react';
 import { INSTITUTION_TYPES } from './landingContent';
 
-/** A quiet band of the institution types the platform serves. */
+/**
+ * InstitutionTypes — a quiet marketing band listing the kinds of organisation the
+ * platform serves (offices, halls, messes, …).
+ *
+ * Content-driven: it maps over `INSTITUTION_TYPES` from ./landingContent and draws
+ * one icon card per entry, so the copy lives in data rather than in JSX. Takes no
+ * props. The grid is responsive — one column on phones, up to four from `lg:` up.
+ */
 export default function InstitutionTypes() {
     return (
         <section className="border-y border-slate-100 bg-slate-50/50 py-14">

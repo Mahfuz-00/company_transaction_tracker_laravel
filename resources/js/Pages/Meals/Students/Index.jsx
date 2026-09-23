@@ -140,6 +140,36 @@ function RateBreakdown({ rate, money }) {
  * Page
  * ------------------------------------------------------------------ */
 
+/**
+ * Meal module - Members (a.k.a. "Students") roster.
+ *
+ * PURPOSE
+ * The list of everyone sharing the mess. It is the hub the other meal screens
+ * link back to: it shows each member's monthly meals, meal cost, deposits and
+ * balance, exposes a per-meal-rate calculator strip, and offers create / edit,
+ * invite, and remove actions.
+ *
+ * PROPS (from the Laravel controller)
+ *  - students: Laravel paginator { data, links, from, to, total }; each row has
+ *    month_meals, meal_cost, total_deposits, balance, status, user_id, manager.
+ *  - departments: groups for the filter + member form.
+ *  - managers: staff a member can be assigned to.
+ *  - costPerMeal: the active meal rate (0/null means balances are not computed).
+ *  - rateBreakdown: the inputs/outputs behind the rate strip (total expense,
+ *    total meals, per-meal rate, subsidy coverage, ...).
+ *  - months / month: month selector options and the selected value; every
+ *    figure on the page is scoped to it.
+ *  - filters: { search, department, status } echo of the query.
+ *
+ * FLOW
+ *  - Create / Edit: delegated to the self-contained <MemberFormModal>; the page
+ *    only tracks whether it is open and which member is being edited.
+ *  - Invite: a second <Modal> collects an email, then router.post()s to
+ *    meals.students.invite, which emails a signed link (no password is set
+ *    here). Errors surface through the modal's onError callback.
+ *  - Remove / export / filtering: confirm() then router.delete(); export is a
+ *    plain anchor; filters re-request via router.get.
+ */
 export default function Index({ students, departments, managers, costPerMeal, rateBreakdown, months, month, filters }) {
     const { can } = useCan();
     const { t } = useTerminology();

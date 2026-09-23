@@ -1,3 +1,11 @@
+/**
+ * ApplicationLogo — the app's default logo mark.
+ *
+ * A self-contained SVG (an open ledger/book on a gradient tile) used wherever a
+ * generic brand mark is needed, e.g. the sidebar and the landing footer. It has no
+ * content of its own: every prop is forwarded onto the root `<svg>`, so callers
+ * control size, `className`, etc.
+ */
 export default function ApplicationLogo(props) {
     return (
         <svg

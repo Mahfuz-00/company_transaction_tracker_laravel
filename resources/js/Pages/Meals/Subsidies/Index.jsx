@@ -45,6 +45,36 @@ function StatCard({ label, value, tone = 'text-slate-900', hint }) {
     );
 }
 
+/**
+ * Meal module - Institutional Subsidies.
+ *
+ * PURPOSE
+ * Subsidies are funds injected by an authority (university, company grant),
+ * tracked separately from member deposits. Each subsidy is also posted to the
+ * ledger as a cash-out, and may be applied to the shared pool, split per
+ * member, or held as reserve credit. The page shows month-scoped totals, a
+ * per-source breakdown, a filterable table, and a record modal.
+ *
+ * PROPS (from the Laravel controller)
+ *  - subsidies: Laravel paginator { data, links, from, to, total }; each row has
+ *    source_label, amount, percentage, apply_mode_label, status, department,
+ *    student, recorder, period_month.
+ *  - sources: [{ value, label, percentage }] funding sources configured in
+ *    Settings - the form follows whatever the admin defined.
+ *  - applyModes: [{ value, label }] how a subsidy is applied.
+ *  - departments / students: scope pickers for the form.
+ *  - totals: { all, pool, per_member, credit_behind } for the selected month.
+ *  - sourceTotals: [{ label, total, percentage }] this month's real share per
+ *    source against its target share.
+ *  - months / month: month selector options and selected value.
+ *  - filters: { source, status, month } echo of the query.
+ *
+ * FLOW
+ *  - Record: the modal form is a useForm posting to meals.subsidies.store;
+ *    onSourceChange() pre-fills the source's default percentage.
+ *  - Reverse: confirm() then router.patch(...reverse) posts a matching
+ *    cash-out and removes any per-member allocations it created.
+ */
 export default function Index({ subsidies, sources, applyModes, departments, students, totals, sourceTotals, months, month, filters }) {
     const { can } = useCan();
     // Terminology-aware nouns, so labels follow the institution type.

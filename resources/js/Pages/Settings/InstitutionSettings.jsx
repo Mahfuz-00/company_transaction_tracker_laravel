@@ -19,13 +19,13 @@ function TerminologyPreview({ terms, effect }) {
     ];
 
     return (
-        <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50/50 p-5 shadow-xs">
+        <div className="rounded-2xl border border-[var(--border-color)] bg-[var(--surface)] p-5 shadow-xs transition-colors duration-300">
             <div className="mb-4 flex items-center justify-between">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
                     Live Preview
                 </h4>
                 {effect && (
-                    <span className="rounded-full border border-indigo-100 bg-indigo-50/80 px-2.5 py-0.5 text-[10px] font-semibold text-indigo-600">
+                    <span className="rounded-full border border-[var(--accent-soft)] bg-[var(--accent-soft)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
                         {effect}
                     </span>
                 )}
@@ -51,6 +51,32 @@ function TerminologyPreview({ terms, effect }) {
  * Page
  * ------------------------------------------------------------------ */
 
+/**
+ * Institution Settings — the Settings → Institution screen.
+ *
+ * Inertia page component. It edits the workspace's identity, type, branding and
+ * terminology overrides in one form, with a live terminology preview alongside.
+ *
+ * PROPS
+ *   - `institution` : the current institution record (name, type, contacts,
+ *                     logo/banner URLs, saved terminology, ...).
+ *   - `types`       : selectable institution types; each carries a `label`, a
+ *                     `description` and its preset `terms` — the presets that
+ *                     drive the vocabulary used across the app.
+ *   - `termKeys`    : the terminology fields users may override (each
+ *                     `{ key, label }`).
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` seeds every field from the `institution` prop; the file inputs
+ *     start null and are filled on change.
+ *   - `useMemo` derives the "effective" terminology (preset overlaid with explicit
+ *     overrides), recomputed only when its inputs change.
+ *   - the submit uses `post()` with `_method: 'put'` (method spoofing) so the
+ *     logo/banner files travel as multipart — see the inline WHY note.
+ *   - local blob previews (`URL.createObjectURL`) show chosen images pre-upload.
+ *   - a pending-type-change confirmation guards against silently discarding the
+ *     user's terminology overrides.
+ */
 export default function InstitutionSettings({ institution, types = [], termKeys = [] }) {
     const { can } = useCan();
     const canManage = can('institution.manage');

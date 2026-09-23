@@ -3,18 +3,32 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\StoreMemberRequest;
+use App\Http\Requests\Api\UpdateMemberRequest;
 use App\Models\Department;
 use App\Models\Institution;
 use App\Models\Student;
 use App\Support\FinanceCalculator;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 /**
  * Member roster API. Meals and balances are month-scoped, matching the web UI.
+ *
+ * WHY THE LIST USES A PRECOMPUTED BREAKDOWN
+ * -----------------------------------------
+ * Each row needs the member's month meals, meal cost, deposits, subsidy share
+ * and balance. Computing those per row would be a classic N+1; instead
+ * FinanceCalculator returns the whole month's breakdown in a few aggregate
+ * queries and the list joins it in memory by id. That is why this controller
+ * maps rows inline rather than through a plain model Resource - the payload is
+ * a join of the model with precomputed figures, not a model serialization.
+ *
+ * Internally a "member" is a `students` row (the codebase's historical name);
+ * the API calls them members to match the product vocabulary.
  */
 class MemberApiController extends Controller
 {
+    /** Paginated roster with each member's current-month figures. */
     public function index(Request $request)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
@@ -22,6 +36,7 @@ class MemberApiController extends Controller
         $status = (string) $request->query('status', '');
 
         $finance = new FinanceCalculator();
+        // Keyed by student id so the per-row lookup below is O(1).
         $breakdown = $finance->memberBreakdown($month)->keyBy('id');
         $rate = $finance->perMealRate($month);
 
@@ -45,6 +60,7 @@ class MemberApiController extends Controller
                 'roll' => $member->roll,
                 'department' => $member->department?->name,
                 'status' => $member->status,
+                // Whether this member has their own login yet (has been invited).
                 'has_account' => (bool) $member->user_id,
                 'month_meals' => (int) ($row['meals'] ?? 0),
                 'breakfast' => (int) ($row['breakfast'] ?? 0),
@@ -74,6 +90,13 @@ class MemberApiController extends Controller
         ]);
     }
 
+    /**
+     * One member with recent activity.
+     *
+     * The {member} is resolved by route-model binding through the tenant-scoped
+     * model, so an id from another institution simply fails to bind and returns
+     * 404 - never another workspace's data.
+     */
     public function show(Request $request, Student $member)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
@@ -121,17 +144,14 @@ class MemberApiController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    /** Create a member. The department/manager must be in the caller's institution. */
+    public function store(StoreMemberRequest $request)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'roll' => ['nullable', 'string', 'max:100'],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            'manager_id' => ['nullable', 'exists:users,id'],
-            'join_date' => ['nullable', 'date'],
-            'status' => ['required', Rule::in(['active', 'inactive'])],
-        ]);
+        // Tenant-scoped references validated up-front (StoreMemberRequest).
+        $data = $request->validated();
 
+        // Explicitly stamp the tenant so the row can never be orphaned even if
+        // the global-scope auto-stamp is bypassed.
         $data['institution_id'] = Institution::current()?->id;
 
         $member = Student::create($data);
@@ -139,22 +159,21 @@ class MemberApiController extends Controller
         return response()->json(['data' => ['id' => $member->id, 'name' => $member->name]], 201);
     }
 
-    public function update(Request $request, Student $member)
+    /** Update a member (route-model bound, therefore already tenant-scoped). */
+    public function update(UpdateMemberRequest $request, Student $member)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'roll' => ['nullable', 'string', 'max:100'],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            'manager_id' => ['nullable', 'exists:users,id'],
-            'join_date' => ['nullable', 'date'],
-            'status' => ['required', Rule::in(['active', 'inactive'])],
-        ]);
-
-        $member->update($data);
+        $member->update($request->validated());
 
         return response()->json(['data' => ['id' => $member->id, 'name' => $member->name]]);
     }
 
+    /**
+     * Delete a member.
+     *
+     * A member with any meal or deposit history is refused (409): deleting them
+     * would silently rewrite historical pool totals, so the history must be
+     * preserved instead.
+     */
     public function destroy(Student $member)
     {
         if ($member->deposits()->exists() || $member->entries()->exists()) {

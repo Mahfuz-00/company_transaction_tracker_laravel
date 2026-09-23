@@ -299,7 +299,15 @@ jobs:
       # -----------------------------------------------------------------------
       # RUN DUSK.
       #
-      # `php artisan dusk` uses phpunit.dusk.xml (testsuite = ./tests/Browser).
+      # `php artisan dusk` uses phpunit.dusk.xml, whose suite is:
+      #     <directory suffix="Test.php">./tests/Browser</directory>
+      # That scan is RECURSIVE, so the current hierarchy
+      #     tests/Browser/{Role}/{Module}/{Feature|Unit}/{Name}Test.php
+      # (e.g. tests/Browser/InstituteAdmin/MealEntries/Feature/MealEntriesTest.php)
+      # is discovered automatically. No path or suite name is passed here, so
+      # restructuring WITHIN tests/Browser needs no change to this workflow - only
+      # relocating/renaming the tests/Browser root itself would.
+      #
       # Any failing test or assertion exits non-zero, so the job fails loudly.
       # -----------------------------------------------------------------------
       - name: Run Dusk browser tests
@@ -323,9 +331,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dusk-failure-artifacts
+          # Dusk pins these three to base_path('tests/Browser/...') itself, so
+          # they stay put no matter where the test files sit in the hierarchy.
           path: |
             tests/Browser/screenshots
             tests/Browser/console
+            tests/Browser/source
           if-no-files-found: ignore
           retention-days: 7
   # ===========================================================================

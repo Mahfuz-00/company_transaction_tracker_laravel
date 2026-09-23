@@ -10,6 +10,10 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Starts a password reset: shows the "forgot password" form and emails the reset
+ * link to the supplied address.
+ */
 class PasswordResetLinkController extends Controller
 {
     /**

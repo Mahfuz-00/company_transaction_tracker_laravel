@@ -82,6 +82,32 @@ const slugify = (value) =>
  * Page
  * ------------------------------------------------------------------ */
 
+/**
+ * Meal module - Department (a.k.a. "Group") list.
+ *
+ * PURPOSE
+ * Lists the institution's departments, the buckets members ("students") are
+ * grouped into so meal costs can be attributed by group. One screen drives all
+ * four CRUD verbs: create and edit share a single <Modal> whose form is fed by
+ * an Inertia `useForm`, delete goes straight through `router`, and search is a
+ * server round-trip.
+ *
+ * PROPS (supplied by the Laravel controller through Inertia)
+ *  - departments: a LARAVEL PAGINATOR payload. Unlike a plain array it carries
+ *    { data: [...rows], links: [...page buttons], from, to, total }. `data` is
+ *    the current page of rows; `links` is what the pagination footer renders.
+ *  - filters: { search } - the active query string echoed back by the server so
+ *    the input stays populated after a reload.
+ *
+ * FLOW
+ *  - Search: router.get(route('meals.departments.index'), { search }, ...) does
+ *    a partial Inertia visit (preserveState keeps local React state, replace
+ *    avoids stacking a history entry per search).
+ *  - Create / Edit: the SAME modal; `editing` decides whether submit() calls
+ *    post() (route ...store) or put() (route ...update). Ziggy's route() builds
+ *    the URLs; useForm exposes data/setData/errors/processing/reset.
+ *  - Delete: guarded by the shared confirm() dialog, then router.delete().
+ */
 export default function Index({ departments, filters }) {
     const { can } = useCan();
     const { t } = useTerminology();

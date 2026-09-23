@@ -7,6 +7,7 @@ use App\Http\Controllers\MemberDashboardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PasswordSetupController;
 use App\Http\Controllers\EmailLogController;
+use App\Http\Controllers\InstitutionBroadcastController;
 use App\Http\Controllers\InstitutionController;
 use App\Http\Controllers\InstitutionRegistryController;
 use App\Http\Controllers\InviteCodeController;
@@ -118,6 +119,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.readAll');
     Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
+
+    // WORKSPACE BROADCASTS (Institution Admin). STRICTLY institution-scoped:
+    // the controller pins the target institution from the signed-in user (never
+    // from request input) and delivers only to that institution's users. Gated
+    // by `notifications.announce`, which the Institution Admin holds and the
+    // Meal Manager / Member do not.
+    Route::get('/settings/broadcasts', [InstitutionBroadcastController::class, 'index'])
+        ->name('broadcasts.index')
+        ->middleware('permission:notifications.announce');
+    Route::post('/settings/broadcasts', [InstitutionBroadcastController::class, 'store'])
+        ->name('broadcasts.store')
+        ->middleware('permission:notifications.announce');
 
     // MEMBER-ONLY: a member's own claim submissions + status. Managers review
     // claims through the separate /claims/review queue below.

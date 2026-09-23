@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use App\Models\Deposit;
 use App\Models\Institution;
 use App\Models\Subsidy;
@@ -15,8 +16,20 @@ use Illuminate\Validation\Rules\Password;
 /**
  * Mobile authentication + the client's identity/context endpoint.
  *
- * Tokens are Sanctum personal access tokens. The client stores the plain-text
- * token and sends it as `Authorization: Bearer <token>`.
+ * HOW AUTH WORKS HERE (for a developer new to token auth)
+ * ------------------------------------------------------
+ * The mobile app does NOT use cookies or sessions. It exchanges credentials for
+ * a Laravel Sanctum *personal access token* once, stores the plain-text token
+ * on the device, and then sends it on every subsequent request as:
+ *
+ *     Authorization: Bearer <token>
+ *
+ * The token is validated by the `auth:sanctum` middleware; inside a controller
+ * `$request->user()` is then the token's owner. `logout` revokes the CALLING
+ * token only, so signing out on one phone does not sign the user out everywhere.
+ *
+ * Every successful auth response returns the user through the shared
+ * UserResource, so the shape is identical across login/register/me/profile.
  */
 class AuthController extends Controller
 {
@@ -32,6 +45,8 @@ class AuthController extends Controller
         $user = User::where('email', $data['email'])->first();
 
         if (! $user || ! Hash::check($data['password'], $user->password)) {
+            // Deliberately the same message for "no such user" and "wrong
+            // password" so the endpoint cannot be used to enumerate emails.
             return response()->json([
                 'message' => 'The provided credentials are incorrect.',
             ], 422);
@@ -74,6 +89,8 @@ class AuthController extends Controller
             'status' => 'active',
         ]);
 
+        // A self-registered account is ALWAYS a Member - never trust a client
+        // for the role (there is no `role` field accepted here at all).
         $user->assignRole('Member');
 
         $token = $user->createToken($data['device_name'] ?? 'mobile')->plainTextToken;
@@ -129,6 +146,7 @@ class AuthController extends Controller
             $data['avatar_path'] = $request->file('avatar')->store('avatars', 'public');
         }
 
+        // `avatar` is the uploaded file (handled above), not a column.
         unset($data['avatar']);
         $user->update($data);
 
@@ -169,22 +187,16 @@ class AuthController extends Controller
 
     /* ------------------------------------------------------------------ */
 
-    /** Consistent user representation across every auth endpoint. */
+    /**
+     * Consistent user representation across every auth endpoint.
+     *
+     * Delegates to the shared UserResource so the user wire-format is defined
+     * in exactly ONE place - a change there updates login, register, me and
+     * profile together, and the mobile contract cannot drift between them.
+     * `resolve()` returns the plain array so it can be nested under `data`.
+     */
     protected function userPayload(User $user): array
     {
-        return [
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'phone' => $user->phone,
-            'designation' => $user->designation,
-            'avatar_url' => $user->avatarUrl(),
-            'status' => $user->status,
-            'institution_id' => $user->institution_id,
-            'roles' => $user->getRoleNames()->toArray(),
-            'permissions' => $user->getAllPermissions()->pluck('name')->toArray(),
-            'is_super_admin' => $user->isSuperAdmin(),
-            'last_login_at' => $user->last_login_at?->toIso8601String(),
-        ];
+        return (new UserResource($user))->resolve();
     }
 }

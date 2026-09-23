@@ -171,7 +171,14 @@ class RolesAndPermissionsSeeder extends Seeder
             $definitions['claims'],
             // Managers can view notifications but not broadcast announcements.
             // They also get the (institution-scoped) email outbox.
-            ['users.view', 'institution.view', 'subsidies.view', 'audit.view', 'appearance.view', 'notifications.view', 'emails.view']
+            //
+            // 'currency.view' is VIEW-ONLY and was previously omitted here, which
+            // made /settings/currency 403 for a Meal Manager even though both the
+            // sidebar and the MealManager\Currency Dusk test document that they
+            // can READ the workspace format. 'currency.manage' stays
+            // Institution-Admin-only, and SettingsController::store re-checks
+            // isInstitutionAdmin(), so a manager still cannot change it.
+            ['users.view', 'institution.view', 'subsidies.view', 'audit.view', 'appearance.view', 'notifications.view', 'emails.view', 'currency.view']
         );
         $manager->syncPermissions($managerPerms);
 

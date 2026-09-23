@@ -1,6 +1,19 @@
 import React from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 
+/**
+ * SettingsLayout — the shared chrome for every Settings page.
+ *
+ * A thin wrapper over AuthenticatedLayout that: supplies a default page header
+ * (the "Settings" title, overridable per page) and centres the content in a
+ * consistent max-width container. Pages supply only their inner content as
+ * `children`; the sidebar/nav around it comes from AuthenticatedLayout. This is
+ * the nested-layout pattern — one layout wrapping another layout.
+ *
+ * Props:
+ *   - children        The page's own content.
+ *   - title?: string  Header text. Defaults to 'Settings'.
+ */
 export default function SettingsLayout({ children, title = 'Settings' }) {
     return (
         <AuthenticatedLayout header={<h2 className="font-semibold text-xl text-slate-800 leading-tight">{title}</h2>}>

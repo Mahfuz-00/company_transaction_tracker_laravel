@@ -7,6 +7,10 @@ use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Http\RedirectResponse;
 
+/**
+ * Marks the signed-in user's email as verified when they follow the link from
+ * the verification email.
+ */
 class VerifyEmailController extends Controller
 {
     /**

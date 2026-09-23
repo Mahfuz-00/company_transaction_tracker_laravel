@@ -6,37 +6,26 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import GlobalLoadingIndicator from '@/Components/GlobalLoadingIndicator';
 import { FeedbackProvider } from '@/Components/Feedback/FeedbackProvider';
-import { applyThemeTokens, readLocalTheme } from '@/Components/ThemeProvider';
+import { applyThemeTokens, resolveInitialTheme } from '@/Components/ThemeProvider';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
 /**
- * Decide which theme to paint with, in precedence order, and apply it.
+ * Decide which theme to paint with and apply it, BEFORE React mounts (so there
+ * is no flash of the default accent on first paint).
  *
- *   1. The signed-in user's DATABASE theme (auth.user.theme) - follows them from
- *      any device.
- *   2. The browser localStorage theme - the PC-local copy (applies pre-login).
- *   3. The institution theme - workspace default.
- *
- * This mirrors ThemeProvider.resolveTheme; running it BEFORE React mounts means
- * there is no flash of the default accent on first paint.
+ * The precedence itself lives in ONE place - resolveInitialTheme() in
+ * ThemeProvider - so this pre-mount paint and the provider's React render can
+ * never drift apart. Here we only decide whether to also write the PC-local
+ * copy: we persist when the ACCOUNT supplied a theme (so the browser copy
+ * tracks the signed-in user); a localStorage/institution fallback is applied
+ * but not re-persisted.
  */
 function resolveAndApply(props) {
     const userTheme = props?.auth?.user?.theme;
-    const institutionTheme = props?.institution?.theme;
+    const persist = !!(userTheme && Object.keys(userTheme).length > 0);
 
-    if (userTheme && Object.keys(userTheme).length > 0) {
-        applyThemeTokens(userTheme, { persist: true });
-        return;
-    }
-
-    const local = readLocalTheme();
-    if (local) {
-        applyThemeTokens(local, { persist: false });
-        return;
-    }
-
-    applyThemeTokens(institutionTheme, { persist: false });
+    applyThemeTokens(resolveInitialTheme(props), { persist });
 }
 
 createInertiaApp({

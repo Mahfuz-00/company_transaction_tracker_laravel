@@ -52,6 +52,35 @@ function Flash({ success, error }) {
     );
 }
 
+/**
+ * Meal module - Deposits list.
+ *
+ * PURPOSE
+ * Deposits are the money each member pays into the shared meal pool. Every
+ * deposit is ALSO written to the transaction ledger as a cash-in, so this
+ * screen and the ledger must always agree. The page shows three totals
+ * (filtered, personal, subsidy), a filterable table, and a record/edit modal.
+ *
+ * PROPS (from the Laravel controller)
+ *  - deposits: Laravel paginator { data, links, from, to, total }; `data` is the
+ *    current page of deposit rows, each with a nested `student` object.
+ *  - students: the roster used to populate the member <select>.
+ *  - kinds: [{ value, label }] deposit types (personal / subsidy / credit).
+ *  - filteredTotal: sum for the active filter (all-time when none).
+ *  - personalTotal: sum of member-paid deposits only.
+ *  - subsidyAllocated / subsidyGrants: institutional subsidy money, shown
+ *    separately because it is NOT paid in by members.
+ *  - filters: { search, student, kind, from, to } echo of the current query.
+ *
+ * FLOW
+ *  - Record / Edit: one useForm instance. submit() calls post() (...store) or
+ *    put() (...update) depending on `editing`. The member cannot be reassigned
+ *    on edit, only amount/method/notes/kind.
+ *  - Reverse: router.patch(...reverse) keeps the row for audit but posts a
+ *    matching cash-out, so the member's balance drops without losing history.
+ *  - Filters & export: applyFilters() re-fetches via router.get with the merged
+ *    query; exportUrl() builds a plain link the browser downloads directly.
+ */
 export default function Index({ deposits, students, kinds, filteredTotal, personalTotal, subsidyAllocated, subsidyGrants, filters }) {
     const { can } = useCan();
     const { t, tTitle } = useTerminology();

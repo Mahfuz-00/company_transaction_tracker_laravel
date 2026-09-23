@@ -9,6 +9,25 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
+/**
+ * Institution (workspace) settings - identity, type, terminology and branding.
+ *
+ * WHAT THIS MANAGES
+ * -----------------
+ * The single row describing the workspace the request is acting inside: its
+ * display name and subtitle, business `type` (university, company, mess, ...),
+ * the editable TERMINOLOGY overrides ("member" vs "student", "department" vs
+ * "group"), and the logo/banner images. Every module renders its labels and
+ * branding from this data, which is what lets one codebase present itself as a
+ * university, a hostel mess or a corporate canteen.
+ *
+ * TENANCY NOTE
+ * ------------
+ * The target is always `Institution::current()` - the institution resolved for
+ * the active request - NOT a route parameter the caller could point elsewhere.
+ * An admin can therefore only ever read and write their OWN workspace, and there
+ * is no id in the URL that could be tampered with to reach another tenant.
+ */
 class InstitutionController extends Controller
 {
     /**
@@ -30,6 +49,14 @@ class InstitutionController extends Controller
         'institution' => 'Institution noun (e.g. Hall, Company, Mess)',
     ];
 
+    /**
+     * Render the institution settings form.
+     *
+     * The Eloquent model is reshaped into a plain array before being handed to
+     * the Inertia page, so only the fields the UI actually needs cross the
+     * server -> client JSON boundary (and computed helpers such as
+     * `terminologyMap()` / `logoUrl()` are evaluated server-side).
+     */
     public function edit()
     {
         $institution = Institution::current();
@@ -68,6 +95,15 @@ class InstitutionController extends Controller
         ]);
     }
 
+    /**
+     * Persist institution settings (creating the row on first run).
+     *
+     * Flow: validate once up front, massage the validated array (terminology
+     * overrides, uploaded images), then mass-assign it with `fill()` and save.
+     * `$request->validate()` throws a ValidationException on failure which Laravel
+     * converts into a redirect-with-errors for a normal Inertia form post, so no
+     * manual error handling is needed here.
+     */
     public function update(Request $request)
     {
         $institution = Institution::current();
@@ -132,6 +168,9 @@ class InstitutionController extends Controller
             $data['banner_path'] = $request->file('banner')->store('institution/banners', 'public');
         }
 
+        // The file inputs and the remove_* flags are request-only helpers, not
+        // columns on the institution: strip them so fill() cannot trip over a key
+        // it cannot map. `logo_path` / `banner_path` (the stored paths) stay.
         unset($data['logo'], $data['banner'], $data['remove_logo'], $data['remove_banner']);
 
         $institution->fill($data);

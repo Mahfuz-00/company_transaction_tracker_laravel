@@ -1,6 +1,7 @@
 import React from 'react';
 import { Head } from '@inertiajs/react';
 
+import ThemeProvider from '@/Components/ThemeProvider';
 import { LandingAnimationStyles } from '@/Components/Landing/LandingPrimitives';
 import LandingHeader from '@/Components/Landing/LandingHeader';
 import HeroSection from '@/Components/Landing/HeroSection';
@@ -22,10 +23,15 @@ import LandingFooter from '@/Components/Landing/LandingFooter';
  * section's `wa-rise` / `wa-fade` / `wa-float` entrance animations fire
  * correctly after the split (a single keyframe source is what keeps them in
  * sync - scattering them per section caused the animation-trigger breakage).
+ *
+ * Wrapped in ThemeProvider so the public page receives the LIVE theme context
+ * (not only the global CSS variables) - the same reason GuestLayout is wrapped.
+ * A visitor who saved a theme on this browser therefore sees the landing page
+ * painted to match, instantly.
  */
 export default function Welcome({ plans = [], institutionCount = 0 }) {
     return (
-        <>
+        <ThemeProvider>
             <Head title="Multi-institution meal & expense management" />
             <LandingAnimationStyles />
 
@@ -43,6 +49,6 @@ export default function Welcome({ plans = [], institutionCount = 0 }) {
 
                 <LandingFooter />
             </div>
-        </>
+        </ThemeProvider>
     );
 }

@@ -8,6 +8,10 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Shows the "verify your email" page — or, if the address is already verified,
+ * redirects straight to the dashboard.
+ */
 class EmailVerificationPromptController extends Controller
 {
     /**

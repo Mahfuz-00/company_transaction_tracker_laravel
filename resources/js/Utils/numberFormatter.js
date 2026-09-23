@@ -1,3 +1,31 @@
+/**
+ * numberFormatter.js - the single source of truth for turning a raw number into
+ * a display string (separators, decimals, abbreviation, currency symbol).
+ *
+ * WHY IT EXISTS
+ * Each institution configures its own number style (decimal/thousands
+ * separators, precision, and how large figures collapse to "1.23 Mil" or
+ * "1.2 Crore"). Rather than scatter that logic, every money/quantity label in
+ * the app funnels through the default export below, driven by the global
+ * settings object.
+ *
+ * PUBLIC API
+ *  - formatNumber(value, settings, currencies) (default export):
+ *      value      - the raw number (or numeric string).
+ *      settings   - the institution's formatting config, notably:
+ *                     decimal_separator, thousands_separator,
+ *                     precision / decimal_precision / compact,
+ *                     currency_code, symbol_position,
+ *                     abbreviated, abbreviations, force_abbreviated,
+ *                     numbering_system ('short' | 'indian' | 'east_asian' | 'long'),
+ *                     abbreviation_threshold.
+ *      currencies - [{ code, symbol }] used to resolve the currency symbol.
+ *
+ * The helpers below (numberWithSeparators, abbreviateShortScale,
+ * abbreviateIndian, abbreviateEastAsian, placeSymbol) are module-private; only
+ * formatNumber is exported.
+ */
+
 function numberWithSeparators(value, decimalSep='.', thousandSep=',', precision=2) {
     const n = Number(value) || 0;
     const fixed = n.toFixed(precision);

@@ -174,6 +174,40 @@ class Notifier
         return static::push($recipients, $title, $body, $actor);
     }
 
+    /**
+     * Institution-scoped broadcast: send to a SELECTED AUDIENCE within ONE
+     * institution only.
+     *
+     * The tenant-level counterpart to broadcast(). The difference that matters:
+     * recipients are resolved with `where('institution_id', …)` FIRST, so the
+     * notice can never reach another workspace. The platform resolver
+     * (`platformAudience()`) deliberately has no such filter and must NOT be used
+     * here.
+     *
+     * @return int the number of recipients actually notified
+     */
+    public static function institutionBroadcast(string $audience, Institution $institution, string $title, string $body, ?User $actor = null): int
+    {
+        $roleMap = [
+            'institution_admins' => ['Institution Admin'],
+            'admins' => ['Institution Admin', 'Meal Manager'],
+            'members' => ['Member'],
+        ];
+
+        $query = User::query()
+            // THE ISOLATION: only users belonging to this institution.
+            ->where('institution_id', $institution->id)
+            ->where('status', 'active');
+
+        if (isset($roleMap[$audience])) {
+            $query->whereHas('roles', fn ($q) => $q->whereIn('name', $roleMap[$audience]));
+        }
+        // An unknown audience key resolves to "everyone in the institution".
+
+        // push() excludes the actor and writes one notification per recipient.
+        return static::push($query->get(), $title, $body, $actor);
+    }
+
     /* ------------------------------------------------------------------ *
      * Platform-wide broadcasts (Software Super Admin)
      * ------------------------------------------------------------------ */

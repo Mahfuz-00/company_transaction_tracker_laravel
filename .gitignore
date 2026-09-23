@@ -23,6 +23,12 @@
 /storage/*.key
 /storage/pail
 /vendor
+# Command Code: share the deliberate stack agents, but NOT machine-local config
+# or the auto-learned taste preferences.
+/.commandcode/settings.json
+/.commandcode/taste/
+# Command Code LSP/scratch artefacts.
+/storage/framework/lsp-*.php
 Homestead.json
 Homestead.yaml
 Thumbs.db

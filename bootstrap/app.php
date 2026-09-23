@@ -13,7 +13,16 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // ← THIS was missing
+        // ---- API middleware (mobile client) ---------------------------------
+        // Attach the named 'api' rate limiter (defined in AppServiceProvider) to
+        // EVERY /api route. The framework's default api middleware group carries
+        // NO throttle, so without this the JSON API is unthrottled. The stricter
+        // per-email 'api-login' limiter is applied to the auth routes in
+        // routes/api.php on top of this baseline.
+        $middleware->api(append: [
+            'throttle:api',
+        ]);
+
         $middleware->web(append: [
             // Resolves + enforces the active tenant from the session BEFORE the
             // Inertia props are shared, so Institution::current() is correct for

@@ -1,3 +1,16 @@
+/**
+ * StatCard — a compact KPI tile: a label, a headline value and an optional delta.
+ *
+ * The `accent` prop selects a colour + icon preset (green ↑, red ↓, indigo
+ * neutral), so a dashboard row of these can mix "up", "down" and "neutral"
+ * statistics. Exported both named and as the default.
+ *
+ * Props:
+ *   - title: string    Small caption above the value.
+ *   - value: node      The headline figure (number or pre-formatted string).
+ *   - delta?: node     Optional sub-line, e.g. "+12% this week".
+ *   - accent?: 'green' | 'red' | 'indigo'  Colour/icon preset; defaults 'indigo'.
+ */
 export function StatCard({ title, value, delta, accent = 'indigo' }) {
     // Style configurations based on accent prop
     const styles = {

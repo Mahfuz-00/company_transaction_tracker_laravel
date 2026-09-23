@@ -34,6 +34,18 @@ export const FONT_STACKS = {
 /** Layout-density token -> a base font-size for the whole document. */
 export const DENSITY_SCALE = { compact: '14px', comfortable: '15px', spacious: '16px' };
 
+/**
+ * Density -> the fluid range the root font-size is clamped between (see the
+ * `html` rule in app.css). Tailwind's text-* utilities are rem-based, so scaling
+ * the ROOT size scales the whole app's type proportionally - these bounds keep
+ * it readable from a phone up to a large TV without a rule per screen.
+ */
+export const DENSITY_RANGE = {
+    compact: { min: '13px', max: '15px' },
+    comfortable: { min: '14px', max: '16px' },
+    spacious: { min: '15px', max: '18px' },
+};
+
 /** localStorage key. Keyed to the BROWSER, so it persists for whoever uses it. */
 const STORAGE_KEY = 'tt.theme';
 
@@ -143,6 +155,13 @@ export function applyThemeTokens(theme, { persist = false } = {}) {
     root.style.setProperty('--density', density);
     root.style.setProperty('--font-scale', DENSITY_SCALE[density] || DENSITY_SCALE.comfortable);
 
+    // The fluid bounds the root font-size is clamped between (see the `html`
+    // rule in app.css). This is what makes typography scale with the viewport
+    // instead of being frozen at one size on every screen.
+    const range = DENSITY_RANGE[density] || DENSITY_RANGE.comfortable;
+    root.style.setProperty('--font-scale-min', range.min);
+    root.style.setProperty('--font-scale-max', range.max);
+
     // Font family + load the Google font if the stack needs one.
     const font = FONT_STACKS[t.font] || FONT_STACKS.inter;
     root.style.setProperty('--font-family', font.stack);
@@ -232,6 +251,15 @@ function resolveTheme(userTheme, institutionTheme) {
         return { ...DEFAULT_THEME, ...institutionTheme };
     }
     return DEFAULT_THEME;
+}
+
+/**
+ * THE single precedence resolver, exported so the pre-mount paint in app.jsx and
+ * this provider share ONE definition of which theme wins - they can never drift.
+ * Takes a full Inertia `props` object and returns the resolved token set.
+ */
+export function resolveInitialTheme(props = {}) {
+    return resolveTheme(props?.auth?.user?.theme, props?.institution?.theme);
 }
 
 /**

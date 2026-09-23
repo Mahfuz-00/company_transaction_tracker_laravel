@@ -2,6 +2,27 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
+/**
+ * Create / edit screen for a single role (one component, two modes).
+ *
+ * Inertia page component. At submit time it decides whether to POST (create) or
+ * PUT (update) based on the presence of the `role` prop — the same form drives
+ * both flows.
+ *
+ * PROPS
+ *   - `auth`        : shared auth prop, forwarded to the layout.
+ *   - `role`        : the role being edited, or null/undefined when creating.
+ *   - `permissions` : permissions grouped by module ({ module: [{ name }] }),
+ *                     rendered as checkbox groups.
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` is seeded from `role` when editing, so initial state mirrors the
+ *     server.
+ *   - `put(route('roles.update', role.id))` vs `post(route('roles.store'))` — the
+ *     two Inertia verbs used for update vs create.
+ *   - permission toggling replaces the `permissions` array with a NEW array each
+ *     time (immutably), which is what lets React detect the change.
+ */
 export default function Form({ auth, role, permissions }) {
     const existing = role ? {
         name: role.name,

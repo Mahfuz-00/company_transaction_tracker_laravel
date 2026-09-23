@@ -26,6 +26,31 @@ function SummaryCard({ label, value, tone = 'text-slate-900', hint }) {
  * Page
  * ------------------------------------------------------------------ */
 
+/**
+ * Meal module - Meal Report (per-member balances for one month).
+ *
+ * PURPOSE
+ * The month-close report: for every member it shows meals eaten (B/L/D), meal
+ * cost, deposits made, and the resulting balance, plus institution-wide summary
+ * cards. It answers "who owes what, and can the pool cover it?".
+ *
+ * PROPS (from the Laravel controller)
+ *  - summary: institution totals for the month - total_meals, total_deposits,
+ *    total_subsidies, total_expenses, total_meal_cost, cost_per_meal,
+ *    pool_balance, students_with_dues, total_dues and the per-meal split.
+ *  - students: a PLAIN array (not paginated) - the whole roster, because the
+ *    report filters and totals client-side.
+ *  - months: [{ value, label }] options for the month selector.
+ *  - filters: { month } echo of the selected reporting month.
+ *
+ * FLOW
+ *  - Month change: applyMonth() updates local state AND re-requests the page
+ *    via router.get (the server recomputes every figure).
+ *  - Name/roll search and "only dues": done in a useMemo over the array - no
+ *    server round-trip, since the whole roster is already loaded.
+ *  - Export: runExport() sets a plain window.location.href so the browser
+ *    downloads the file, while a LoadingOverlay covers the build time.
+ */
 export default function Index({ summary, students, months, filters }) {
     const money = useMoney();
     const { t } = useTerminology();

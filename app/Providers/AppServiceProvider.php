@@ -16,9 +16,13 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Support\RecordActivity;
 use App\Support\TenantManager;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -39,6 +43,28 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        /*
+         * API RATE LIMITERS (mobile client).
+         *
+         * The framework's default `api` middleware group carries NO throttle, so
+         * /api/auth/login was an unthrottled brute-force target (the web login,
+         * by contrast, is limited to 6/min). Two named limiters close that gap;
+         * they are attached in bootstrap/app.php (group-wide) and routes/api.php
+         * (auth routes).
+         *
+         *   api        - a baseline for every API request: 60/min, keyed per
+         *                authenticated user (falling back to IP for the public
+         *                endpoints), so one abusive client cannot exhaust the API.
+         *   api-login  - a strict 5/min keyed per email + IP, so credential
+         *                guessing is slowed WITHOUT letting one attacker lock out
+         *                a different email from the same address.
+         */
+        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(60)
+            ->by($request->user()?->id ?: $request->ip()));
+
+        RateLimiter::for('api-login', fn (Request $request) => Limit::perMinute(5)
+            ->by(Str::lower((string) $request->input('email')) . '|' . $request->ip()));
+
         Vite::prefetch(concurrency: 3);
 
         // Every model carrying business meaning is audited. `Student` is the

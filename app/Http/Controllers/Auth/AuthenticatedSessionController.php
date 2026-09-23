@@ -12,6 +12,11 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Sign-in and sign-out — the "session" step of the auth flow. `store()` verifies
+ * the credentials via LoginRequest and rotates the session id; `destroy()` ends
+ * the session and logs the user out.
+ */
 class AuthenticatedSessionController extends Controller
 {
     /**

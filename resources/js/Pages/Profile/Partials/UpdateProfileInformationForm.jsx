@@ -7,6 +7,29 @@ import { Transition } from '@headlessui/react';
 import { Link, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
+/**
+ * Partial: the "Profile Information" card on the Profile page.
+ *
+ * A self-contained form component (not a page) rendered inside Profile/Edit. It
+ * edits the current user's name, email and profile picture.
+ *
+ * PROPS
+ *   - `mustVerifyEmail` : when true, email verification is required; combined
+ *     with the account's `email_verified_at` it decides whether the "unverified"
+ *     reminder (with a resend link) appears.
+ *   - `status`          : server flash; `'verification-link-sent'` confirms a
+ *     fresh verification email was dispatched.
+ *   - `className`       : optional classes for the root <section>.
+ *
+ * Inertia / React concepts on show:
+ *   - `usePage().props.auth.user` reads SHARED props (the signed-in user) from any
+ *     component without prop-drilling.
+ *   - `useForm` is seeded FROM that user, so the initial state mirrors the server.
+ *   - the submit uses `post()` with `_method: 'patch'` (method spoofing) — see the
+ *     inline note for why a real PATCH cannot carry the avatar file.
+ *   - a local blob preview (`URL.createObjectURL`) shows the chosen image before
+ *     the upload finishes.
+ */
 export default function UpdateProfileInformation({
     mustVerifyEmail,
     status,

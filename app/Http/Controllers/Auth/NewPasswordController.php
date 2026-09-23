@@ -14,6 +14,10 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Completes a password reset: shows the reset form and, on submit, verifies the
+ * emailed token before writing the new password.
+ */
 class NewPasswordController extends Controller
 {
     /**

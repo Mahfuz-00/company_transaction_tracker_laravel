@@ -32,6 +32,34 @@ function Flash({ success, error }) {
     );
 }
 
+/**
+ * Meal module - Vendors & Suppliers.
+ *
+ * PURPOSE
+ * Who the institution buys from - including the institution itself flagged as
+ * the primary "hub" supplier. The page lists vendors with their purchased and
+ * outstanding totals, and exposes a create/edit modal plus a purchase-history
+ * modal. Expenses link back to these vendors for recurring-spend tracking.
+ *
+ * PROPS (from the Laravel controller)
+ *  - vendors: Laravel paginator { data, links, from, to, total }; each row has
+ *    category_label, recurrence, contact_person, phone, total_purchased,
+ *    outstanding_balance, status and is_institution_hub.
+ *  - categories: strings for the category filter + form.
+ *  - recurrences: options for the recurrence select.
+ *  - filters: { search, category, status } echo of the query.
+ *  - totals: { vendors, active, recurring, purchased } headline counts/sums.
+ *
+ * FLOW
+ *  - Create / Edit: delegated to <VendorFormModal>, which owns its own state;
+ *    this page only tracks open + the record being edited.
+ *  - History: <PurchaseHistoryModal> fetches its own data - the page just
+ *    passes the chosen vendor (historyVendor) and lets it close itself.
+ *  - Delete / export / filtering: confirm() then router.delete(); export is a
+ *    plain anchor; filters re-request via router.get.
+ *  - Responsive: a desktop <table> and a mobile card <ul> render the same rows,
+ *    toggled with Tailwind's hidden/md:block and md:hidden.
+ */
 export default function Index({ vendors, categories = [], recurrences = [], filters, totals = {} }) {
     const { can } = useCan();
     const { flash } = usePage().props;
