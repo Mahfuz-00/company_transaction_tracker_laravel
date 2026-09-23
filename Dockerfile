@@ -1,6 +1,6 @@
 FROM php:8.2-fpm
 
-# Install system dependencies and Node.js
+# Install system dependencies, Nginx, and Node.js
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
+# Install PHP extensions required by Laravel
 RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
 
 # Get Composer
@@ -28,13 +28,38 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction \
     && npm install \
     && npm run build
 
-# Set proper permissions for Laravel storage/cache
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+# Set proper permissions for Laravel storage and cache
+RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Point Nginx root directly to Laravel's public directory
-RUN sed -i 's#/var/www/html#/var/www/html/public#g' /etc/nginx/sites-available/default
+# Write an explicit Nginx configuration for Laravel
+RUN echo 'server {\n\
+    listen 80;\n\
+    listen [::]:80;\n\
+    root /var/www/html/public;\n\
+    index index.php index.html index.htm;\n\
+    server_name _;\n\
+    \n\
+    location / {\n\
+        try_files $uri $uri/ /index.php?$query_string;\n\
+    }\n\
+    \n\
+    location ~ \\.php$ {\n\
+        include fastcgi_params;\n\
+        fastcgi_pass 127.0.0.1:9000;\n\
+        fastcgi_index index.php;\n\
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n\
+    }\n\
+    \n\
+    location ~ /\\.ht {\n\
+        deny all;\n\
+    }\n\
+}' > /etc/nginx/sites-available/default
+
+# Ensure PHP-FPM listens on TCP port 9000 so Nginx can talk to it easily
+RUN sed -i 's#listen = /run/php/php8.2-fpm.sock#listen = 127.0.0.1:9000#g' /usr/local/etc/php-fpm.d/www.conf
 
 EXPOSE 80
 
-CMD service nginx start && php-fpm
+# Start PHP-FPM in background and Nginx in foreground
+CMD php-fpm -D && nginx -g "daemon off;"
