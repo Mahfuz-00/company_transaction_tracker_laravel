@@ -1,12 +1,13 @@
 FROM php:8.2-fpm
 
-# Install system dependencies, Nginx, and Node.js
+# Install system dependencies, Nginx, SQLite dev libraries, and Node.js
 RUN apt-get update && apt-get install -y \
     git \
     curl \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
+    libsqlite3-dev \
     zip \
     unzip \
     nginx \
