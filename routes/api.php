@@ -31,8 +31,11 @@ use Illuminate\Support\Facades\Route;
 */
 
 // ---- Public ---------------------------------------------------------------
-Route::post('/auth/register', [AuthController::class, 'register']);
-Route::post('/auth/login', [AuthController::class, 'login']);
+// The auth endpoints carry an EXTRA, stricter throttle on top of the baseline
+// 'api' group limiter: 5 requests/min keyed per email + IP, so credential
+// guessing is slowed without one attacker locking out other accounts.
+Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:api-login');
+Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:api-login');
 
 // Server + contract metadata. Useful for the mobile client to discover
 // capabilities and confirm the currency/terminology it should render.
