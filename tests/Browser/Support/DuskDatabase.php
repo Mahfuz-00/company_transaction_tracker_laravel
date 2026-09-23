@@ -70,16 +70,31 @@ trait DuskDatabase
             // Non-SQLite drivers ignore these; safe to skip.
         }
 
+        // Refuse to touch anything that is not the dedicated Dusk file BEFORE any
+        // destructive work happens (see assertDuskDatabaseIsDisposable()).
+        $this->assertDuskDatabaseIsDisposable();
+
         /*
-         * Migrate ONCE per process. The schema is committed to the shared file,
-         * so the server process sees it. Between tests, truncateDuskTables()
-         * clears rows instead of re-migrating.
+         * Bring the shared Dusk schema up to date ONCE per process.
+         *
+         * - Base schema absent  -> build it from scratch.
+         * - Base schema present -> apply ONLY the missing migrations, ADDITIVELY,
+         *   so a newly added table (e.g. institution_broadcasts) exists for the
+         *   tests without ever dropping the database.
+         *
+         * The previous version SKIPPED this entirely whenever `users` and
+         * `institutions` existed, so a table added after the Dusk DB was first
+         * built was never created - the "no such table: institution_broadcasts"
+         * failure. Checking only two tables is not a sufficient "is it migrated?"
+         * test.
          */
         if (! $this->duskSchemaExists()) {
             $this->artisan('migrate:fresh', ['--force' => true]);
-
-            app(Kernel::class)->setArtisan(null);
+        } else {
+            $this->artisan('migrate', ['--force' => true]);
         }
+
+        app(Kernel::class)->setArtisan(null);
 
         // Reconcile a schema/app mismatch that would otherwise make the
         // institution-provisioning flows impossible to exercise end-to-end.
@@ -174,6 +189,28 @@ trait DuskDatabase
     }
 
     /**
+     * SAFETY GUARD - never reset anything that is not the dedicated Dusk file.
+     *
+     * The suite WIPES the tables it touches (`truncateDuskTables`) and may
+     * rebuild the schema. That is only ever acceptable against the throwaway
+     * `database/dusk.sqlite`. If the configured SQLite path is anything else - a
+     * real app database, a path typo, a mis-set `DB_DATABASE` - this throws
+     * BEFORE any migration or truncation runs, so live data can never be
+     * destroyed by a test run.
+     */
+    protected function assertDuskDatabaseIsDisposable(): void
+    {
+        $database = str_replace('\\', '/', (string) config('database.connections.sqlite.database'));
+
+        if (! str_ends_with($database, 'dusk.sqlite')) {
+            throw new \RuntimeException(
+                'Refusing to run Dusk against a non-Dusk database: ' . $database
+                . '. The Dusk suite may only migrate/truncate database/dusk.sqlite.'
+            );
+        }
+    }
+
+    /**
      * Clear the tables the suite touches so tests start independent. We delete
      * rows directly (committed) rather than rolling back, because a rollback
      * would hide the data from the server.
@@ -201,6 +238,7 @@ trait DuskDatabase
             'activity_logs',
             'email_logs',
             'staff_broadcasts',
+            'institution_broadcasts',
             'subscription_plans',
             'notifications',
             'users',
