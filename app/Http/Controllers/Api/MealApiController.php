@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\StoreMealDayRequest;
+use App\Http\Resources\MealEntryResource;
 use App\Models\MealEntry;
 use App\Models\Student;
 use App\Support\FinanceCalculator;
@@ -12,6 +14,11 @@ use Illuminate\Support\Facades\DB;
 /**
  * Meal entries API. Exposes the same day-grid the web UI uses, so a mobile
  * client can fill in a whole day in one request.
+ *
+ * The day-grid is the interesting part: rather than PUT one row per member, the
+ * client sends the entire day in a single payload and the server upserts it.
+ * Empty rows (all three meals zero) are DELETED instead of stored, which keeps
+ * the table small and makes "no entry" and "zero meals" the same state.
  */
 class MealApiController extends Controller
 {
@@ -29,18 +36,7 @@ class MealApiController extends Controller
             ->orderByDesc('date')
             ->paginate(min((int) $request->query('per_page', 50), 200));
 
-        $entries->through(fn (MealEntry $e) => [
-            'id' => $e->id,
-            'member' => $e->student?->name,
-            'member_id' => $e->student_id,
-            'roll' => $e->student?->roll,
-            'date' => $e->date?->toDateString(),
-            'breakfast' => $e->breakfast,
-            'lunch' => $e->lunch,
-            'dinner' => $e->dinner,
-            'total' => (int) $e->breakfast + (int) $e->lunch + (int) $e->dinner,
-        ]);
-
+        // Month totals across BOTH meal columns, not just the current page.
         $totals = MealEntry::query()
             ->when($start, fn ($q) => $q->whereDate('date', '>=', $start->toDateString()))
             ->when($end, fn ($q) => $q->whereDate('date', '<=', $end->toDateString()))
@@ -51,7 +47,7 @@ class MealApiController extends Controller
             ->first();
 
         return response()->json([
-            'data' => $entries->items(),
+            'data' => MealEntryResource::collection($entries->items())->resolve(),
             'meta' => [
                 'month' => $month,
                 'totals' => [
@@ -77,6 +73,8 @@ class MealApiController extends Controller
     {
         $date = $request->query('date', now()->toDateString());
 
+        // One query for the day's existing rows, keyed by member for O(1) lookup
+        // as we build the grid (avoids N queries for N members).
         $existing = MealEntry::query()
             ->whereDate('date', $date)
             ->get()
@@ -104,16 +102,16 @@ class MealApiController extends Controller
     }
 
     /** Save a whole day's grid in one request. */
-    public function storeDay(Request $request)
+    public function storeDay(StoreMealDayRequest $request)
     {
-        $data = $request->validate([
-            'date' => ['required', 'date'],
-            'entries' => ['required', 'array'],
-            'entries.*.student_id' => ['required', 'exists:students,id'],
-            'entries.*.breakfast' => ['nullable', 'integer', 'min:0', 'max:10'],
-            'entries.*.lunch' => ['nullable', 'integer', 'min:0', 'max:10'],
-            'entries.*.dinner' => ['nullable', 'integer', 'min:0', 'max:10'],
-        ]);
+        /*
+         * SECURITY: the rules in StoreMealDayRequest scope
+         * `entries.*.student_id` to the caller's institution, so a crafted
+         * request naming another workspace's member is rejected (422) before the
+         * loop below runs. Previously this used a table-wide `exists` rule and a
+         * foreign student id could be written into the caller's institution.
+         */
+        $data = $request->validated();
 
         $saved = 0;
 
@@ -123,7 +121,8 @@ class MealApiController extends Controller
                 $lunch = (int) ($row['lunch'] ?? 0);
                 $dinner = (int) ($row['dinner'] ?? 0);
 
-                // Zero rows are removed rather than stored - keeps the table clean.
+                // Zero rows are removed rather than stored - keeps the table clean
+                // and makes "all zero" identical to "no entry".
                 if ($breakfast === 0 && $lunch === 0 && $dinner === 0) {
                     MealEntry::where('student_id', $row['student_id'])
                         ->whereDate('date', $data['date'])
@@ -163,6 +162,7 @@ class MealApiController extends Controller
         ]);
     }
 
+    /** Breakfast/lunch/dinner sums for one date, computed in SQL. */
     protected function dayTotals(string $date): array
     {
         $row = MealEntry::query()

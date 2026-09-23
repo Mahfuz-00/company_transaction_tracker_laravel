@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\StoreSubsidyRequest;
+use App\Http\Resources\SubsidyResource;
 use App\Models\Institution;
 use App\Models\Subsidy;
 use App\Models\SubsidySource;
@@ -10,14 +12,19 @@ use App\Models\Transaction;
 use App\Support\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 /**
  * Institutional subsidy API. Subsidies are month-scoped and tracked separately
  * from member deposits.
+ *
+ * Subsidy money is NEVER mixed into a member's own deposited funds: it is a
+ * separate pool that only tops up a shortfall (see Subsidy::creditAvailableFor).
+ * Like deposits, each subsidy writes a matching ledger transaction so the pool
+ * balance stays correct.
  */
 class SubsidyApiController extends Controller
 {
+    /** Paginated subsidies for a month, with per-source totals. */
     public function index(Request $request)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
@@ -30,25 +37,11 @@ class SubsidyApiController extends Controller
             ->orderByDesc('created_at')
             ->paginate(min((int) $request->query('per_page', 25), 100));
 
-        $subsidies->through(fn (Subsidy $s) => [
-            'id' => $s->id,
-            'source' => $s->source,
-            'source_name' => $s->source_name,
-            'amount' => (float) $s->amount,
-            'percentage' => $s->percentage !== null ? (float) $s->percentage : null,
-            'apply_mode' => $s->apply_mode,
-            'period_month' => $s->period_month,
-            'status' => $s->status,
-            'scope' => $s->department?->name ?? $s->student?->name ?? 'Whole institution',
-            'recorded_by' => $s->recorder?->name,
-            'notes' => $s->notes,
-            'date' => $s->created_at->toIso8601String(),
-        ]);
-
+        // Only ACTIVE subsidies count toward the month total.
         $total = (float) Subsidy::query()->active()->forMonth($month)->sum('amount');
 
         return response()->json([
-            'data' => $subsidies->items(),
+            'data' => SubsidyResource::collection($subsidies->items())->resolve(),
             'meta' => [
                 'month' => $month,
                 'total' => $total,
@@ -63,23 +56,17 @@ class SubsidyApiController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    /** Record a subsidy (and its matching ledger row). */
+    public function store(StoreSubsidyRequest $request)
     {
-        $data = $request->validate([
-            'source' => ['required', 'string', 'max:60'],
-            'source_label' => ['nullable', 'string', 'max:120'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'apply_mode' => ['required', Rule::in(array_keys(Subsidy::APPLY_MODES))],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            'student_id' => ['nullable', 'exists:students,id'],
-            'period_month' => ['nullable', 'regex:/^\d{4}-\d{2}$/'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-        ]);
+        // Tenant-scoped department/student references validated up-front.
+        $data = $request->validated();
 
         $institution = Institution::current();
         $data['period_month'] = $data['period_month'] ?? now()->format('Y-m');
 
+        // Resolve a human label: an explicit one wins, else the managed source's
+        // name, else a title-cased version of the raw key.
         $managed = SubsidySource::where('key', $data['source'])->first();
         $label = $data['source_label'] ?? $managed?->name
             ?? ucfirst(str_replace('_', ' ', $data['source']));
@@ -117,6 +104,8 @@ class SubsidyApiController extends Controller
         SubsidySource::ensureDefaults($institution?->id);
 
         $sources = SubsidySource::query()
+            // Institution-specific sources PLUS the shared (null-institution)
+            // defaults, so every workspace sees the platform baseline.
             ->where(fn ($q) => $q->whereNull('institution_id')
                 ->orWhere('institution_id', $institution?->id))
             ->where('is_active', true)
@@ -133,7 +122,10 @@ class SubsidyApiController extends Controller
         return response()->json(['data' => $sources]);
     }
 
-    /** Per-source breakdown for a month, including each source's real share. */
+    /**
+     * Per-source breakdown for a month, including each source's REAL share
+     * (its total as a percentage of all subsidy money that month).
+     */
     protected function sourceTotals(string $month): array
     {
         $bySource = Subsidy::query()
@@ -150,6 +142,7 @@ class SubsidyApiController extends Controller
             'key' => $key,
             'total' => (float) $row->total,
             'entries' => (int) $row->entries,
+            // Guard against division by zero on a month with no subsidies.
             'actual_percentage' => $total > 0 ? round(($row->total / $total) * 100, 2) : 0.0,
         ])->values()->all();
     }

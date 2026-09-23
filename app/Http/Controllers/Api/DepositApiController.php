@@ -3,19 +3,33 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\StoreDepositRequest;
+use App\Http\Resources\DepositResource;
 use App\Models\Deposit;
 use App\Models\Student;
 use App\Models\Transaction;
 use App\Support\FinanceCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 /**
  * Deposits = Cash In. Each deposit also writes a matching ledger transaction.
+ *
+ * WHY TWO TABLES
+ * --------------
+ * A deposit is recorded in the module table (`deposits`) AND mirrored into the
+ * shared ledger (`transactions`). The module table carries deposit-specific
+ * fields (kind, payment method, reversal columns); the ledger row is what the
+ * pool balance and the reports sum. They are written together inside one
+ * DB::transaction so the two can never disagree.
+ *
+ * Tenant isolation is automatic: every query below runs through the
+ * `BelongsToInstitution` global scope, so a token for one institution can never
+ * read or write another's rows.
  */
 class DepositApiController extends Controller
 {
+    /** Paginated deposit ledger for a month, with per-kind totals. */
     public function index(Request $request)
     {
         $month = FinanceCalculator::resolveMonth($request->query('month'));
@@ -29,22 +43,12 @@ class DepositApiController extends Controller
             ->when($end, fn ($q) => $q->whereDate('created_at', '<=', $end->toDateString()))
             ->orderByDesc('created_at');
 
+        // Cap the page size so a client cannot request an unbounded dump.
         $perPage = min((int) $request->query('per_page', 25), 100);
         $deposits = $query->paginate($perPage)->withQueryString();
 
-        $deposits->through(fn (Deposit $d) => [
-            'id' => $d->id,
-            'member' => $d->student?->name,
-            'member_id' => $d->student_id,
-            'roll' => $d->student?->roll,
-            'amount' => (float) $d->amount,
-            'kind' => $d->kind,
-            'payment_method' => $d->payment_method,
-            'recorded_by' => $d->recorder?->name,
-            'notes' => $d->notes,
-            'date' => $d->created_at->toIso8601String(),
-        ]);
-
+        // Month totals are computed over the WHOLE month, not just this page -
+        // otherwise the header figures would change as the user scrolls.
         $totals = Deposit::query()
             ->when($start, fn ($q) => $q->whereDate('created_at', '>=', $start->toDateString()))
             ->when($end, fn ($q) => $q->whereDate('created_at', '<=', $end->toDateString()))
@@ -54,7 +58,8 @@ class DepositApiController extends Controller
             ->first();
 
         return response()->json([
-            'data' => $deposits->items(),
+            // The row shape lives in DepositResource (one definition, no drift).
+            'data' => DepositResource::collection($deposits->items())->resolve(),
             'meta' => [
                 'month' => $month,
                 'totals' => [
@@ -63,6 +68,7 @@ class DepositApiController extends Controller
                     'subsidy' => (float) $totals->subsidy,
                 ],
                 'kinds' => Deposit::KINDS,
+                // The member picker for the "record deposit" form.
                 'members' => Student::active()->orderBy('name')->get(['id', 'name', 'roll']),
                 'pagination' => [
                     'current_page' => $deposits->currentPage(),
@@ -73,31 +79,47 @@ class DepositApiController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    /** Record a deposit (and its matching ledger row). */
+    public function store(StoreDepositRequest $request)
     {
-        $data = $request->validate([
-            'student_id' => ['required', 'exists:students,id'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'payment_method' => ['nullable', 'string', 'max:60'],
-            'kind' => ['nullable', Rule::in(array_keys(Deposit::KINDS))],
-            'notes' => ['nullable', 'string', 'max:1000'],
-        ]);
+        /*
+         * Validation + tenant scoping happen in StoreDepositRequest BEFORE this
+         * method runs: a `student_id` belonging to another institution fails the
+         * scoped `exists` rule and returns 422, so the write below can never be
+         * pointed at a foreign member.
+         */
+        $data = $request->validated();
 
         $deposit = DB::transaction(function () use ($data, $request) {
+            // Re-fetch through the tenant-scoped model: a defensive second check
+            // that also returns a clean 404 if the row vanished mid-request.
             $student = Student::findOrFail($data['student_id']);
 
-            $tx = Transaction::create([
+            /*
+             * `transactions.payment_method` is NOT NULL with a DB default of
+             * 'Cash'. Passing an explicit null (as the original code did) breaks
+             * that constraint and 500s the whole request whenever a client omits
+             * the field - even though the validation marks it optional. We
+             * therefore only include the key when a value was actually sent, so
+             * the column default applies otherwise.
+             */
+            $txPayload = [
                 'user_id' => $request->user()->id,
                 'student_id' => $student->id,
                 'type' => 'in',
                 'item' => 'Meal Deposit for ' . $student->name,
                 'amount' => $data['amount'],
                 'category' => 'Meal Deposit',
-                'payment_method' => $data['payment_method'] ?? null,
                 'by_whom' => $student->name,
                 'reason' => $data['notes'] ?? null,
                 'source' => 'deposit',
-            ]);
+            ];
+
+            if (! empty($data['payment_method'])) {
+                $txPayload['payment_method'] = $data['payment_method'];
+            }
+
+            $tx = Transaction::create($txPayload);
 
             return Deposit::create([
                 'student_id' => $student->id,
@@ -119,6 +141,10 @@ class DepositApiController extends Controller
     /**
      * Export the deposit ledger as JSON. The mobile client renders it; a
      * server-side file download is also available via the web export route.
+     *
+     * NOTE: this is intentionally NOT a paginated/Resource response - it is a
+     * flat, month-scoped projection for offline rendering, so its row shape
+     * differs from the index (no id, date-only) on purpose.
      */
     public function export(Request $request)
     {
