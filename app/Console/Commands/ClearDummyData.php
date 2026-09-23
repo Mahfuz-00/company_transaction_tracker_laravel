@@ -102,8 +102,23 @@ class ClearDummyData extends Command
                 ->pluck('model_has_roles.model_id')
                 ->all();
 
-            $deleted = DB::table('users')->whereNotIn('id', $baseAdminIds)->delete();
-            $this->line("  cleared <comment>users</comment> ({$deleted} removed; Super Admins + Institution Admins kept)");
+            /*
+             * ALWAYS keep the permanent platform owner, even if its role row is
+             * momentarily missing (e.g. mid-migration). The SSA account
+             * (admin@mahfuz.com) is append-only and must NEVER be deleted by a
+             * data reset - only `--users` is even capable of touching accounts,
+             * and even then this account is pinned.
+             */
+            $protectedIds = array_values(array_unique(array_merge(
+                $baseAdminIds,
+                DB::table('users')
+                    ->where('email', \Database\Seeders\SoftwareSuperAdminSeeder::EMAIL)
+                    ->pluck('id')
+                    ->all(),
+            )));
+
+            $deleted = DB::table('users')->whereNotIn('id', $protectedIds)->delete();
+            $this->line("  cleared <comment>users</comment> ({$deleted} removed; Super Admins + Institution Admins + the platform owner kept)");
         }
 
         Schema::enableForeignKeyConstraints();

@@ -32,6 +32,10 @@ class DatabaseSeeder extends Seeder
             CurrenciesTableSeeder::class,
             // Seeds the default institution + its hub vendor baseline only.
             InstitutionSeeder::class,
+            // Runs LAST and is idempotent: guarantees the permanent platform
+            // owner (admin@mahfuz.com) always exists, without ever overwriting
+            // an existing password or clearing transactional data.
+            SoftwareSuperAdminSeeder::class,
         ]);
     }
 }
