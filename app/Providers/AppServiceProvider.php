@@ -92,5 +92,11 @@ class AppServiceProvider extends ServiceProvider
 
             return null;
         });
+
+
+
+        if ($this->app->environment('production')) {
+            \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
     }
 }

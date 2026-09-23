@@ -35,6 +35,9 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\EnsurePasswordIsChanged::class,
         ]);
 
+        // Trust proxies for Render HTTPS termination
+        $middleware->trustProxies(at: '*');
+
         // Spatie Permission aliases
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
