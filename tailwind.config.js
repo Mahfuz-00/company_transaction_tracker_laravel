@@ -15,6 +15,12 @@ export default {
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
             },
+            // A large-screen / TV breakpoint beyond Tailwind's stock 2xl (1536px),
+            // so the app shell and dense grids can use the extra width on 1920px+
+            // displays instead of staying capped in the middle of the screen.
+            screens: {
+                '3xl': '1920px',
+            },
         },
     },
 

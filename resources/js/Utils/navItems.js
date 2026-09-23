@@ -379,6 +379,19 @@ export const NAV_SECTIONS = [
                         icon: 'mail',
                         permission: 'emails.view',
                     },
+                    {
+                        // Workspace-scoped broadcasts: announcements to THIS
+                        // institution only (never the platform). Institution Admins
+                        // hold `notifications.announce`; a Meal Manager does not, so
+                        // the exclusive role gate keeps it off their sidebar.
+                        label: 'Broadcasts',
+                        route: 'broadcasts.index',
+                        match: 'broadcasts.*',
+                        icon: 'mail',
+                        permission: 'notifications.announce',
+                        roles: ['Institution Admin'],
+                        rolesOnly: true,
+                    },
                 ],
             },
         ],
@@ -421,14 +434,10 @@ export const NAV_SECTIONS = [
                         icon: 'mail',
                         permission: 'emails.view',
                     },
-                    {
-                        // SSA-only: pricing tiers + plan management.
-                        label: 'Pricing & Plans',
-                        route: 'ssa.plans.index',
-                        match: 'ssa.plans.*',
-                        icon: 'bank',
-                        permission: 'plans.view',
-                    },
+                    // NOTE: "Pricing & Plans" is intentionally NOT repeated here.
+                    // Plan management is reached once, from the Platform Overview
+                    // section (route `ssa.plans.index`); duplicating it under
+                    // Platform Settings was redundant.
                 ],
             },
         ],

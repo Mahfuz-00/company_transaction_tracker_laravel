@@ -11,6 +11,34 @@ import ThemePreviewFrame from '@/Components/ThemePreviewFrame';
 import ThemedText from '@/Components/UI/ThemedText';
 import useThemedText from '@/Utils/useThemedText';
 
+/**
+ * Currency Manager — the Settings → Currency screen ("Currency Settings").
+ *
+ * Inertia page component that edits the app-wide currency format (symbol,
+ * placement, separators, precision and compact-number scale) with a live preview
+ * alongside the form.
+ *
+ * PROPS
+ *   - `auth`             : shared auth prop, forwarded to SettingsLayout.
+ *   - `currencies`       : catalogue of selectable currencies ({ id, code, name,
+ *                          symbol }) used to populate the dropdown and to resolve
+ *                          a symbol from the chosen code.
+ *   - `currencySettings` : the currently saved formatting options; falls back to
+ *                          the shared `currency` prop / institution default.
+ *   - `canManage`        : true only for a Software Super Admin — gates the form
+ *                          (view-only for everyone else).
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` is the form's isolated state, seeded from the server props.
+ *   - `usePage().props` reads shared props (flash messages, institution, ...) from
+ *     any depth, without prop-drilling.
+ *   - `useMemo` derives ONE canonical settings object from the form + currency
+ *     list, so the preview, the localStorage cache and the submitted payload can
+ *     never drift apart.
+ *   - `post(route('settings.currency.store'))` saves via Inertia; on success it
+ *     also writes the shared client cache so every mounted module repaints with
+ *     the new format before the next response arrives.
+ */
 export default function Settings({ auth, currencies, currencySettings, canManage }) {
     const { props } = usePage();
     // Theme-aware text classes, so the live preview adapts to dark mode + accent.
@@ -316,13 +344,13 @@ export default function Settings({ auth, currencies, currencySettings, canManage
                     </Card>
 
                     {/* Sticky Live Preview */}
-                    <Card className="lg:col-span-5 p-6 sm:p-7 border border-slate-200/80 shadow-xs rounded-2xl bg-gradient-to-b from-white to-slate-50/50 sticky top-6 space-y-6">
+                    <Card className="lg:col-span-5 p-6 sm:p-7 border border-[var(--border-color)] shadow-xs rounded-2xl bg-[var(--surface)] sticky top-6 space-y-6 transition-colors duration-300">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                             <div>
                                 <ThemedText as="h3" variant="heading" className="text-base">Live Formatting Preview</ThemedText>
                                 <ThemedText as="p" variant="muted" className="mt-0.5 text-xs">Test how numbers appear in real-time</ThemedText>
                             </div>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-600 border border-indigo-100">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent-soft)]">
                                 Real-time
                             </span>
                         </div>

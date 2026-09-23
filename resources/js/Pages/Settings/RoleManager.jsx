@@ -5,6 +5,29 @@ import useCan from '@/Utils/can';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { formatPermissionLabel, formatRoleName } from '@/Utils/roleFormatters';
 
+/**
+ * Role Manager — the Settings → Roles screen (list plus an inline edit modal).
+ *
+ * Inertia page component. Unlike Roles/Index, this screen is interactive: it
+ * keeps a LOCAL copy of the roles list, opens an edit modal and can delete rows,
+ * so it layers React state on top of the server prop.
+ *
+ * PROPS
+ *   - `auth`  : shared auth prop (forwarded to SettingsLayout).
+ *   - `roles` : the server role list, destructured as `initialRoles` to make
+ *               clear it only SEEDS local state.
+ *
+ * Inertia / React concepts on show:
+ *   - `useState` holds the working roles list, the modal open flag, the role being
+ *     edited, and the lazily-fetched permission catalogue.
+ *   - `useEffect` re-syncs local state whenever `initialRoles` changes (i.e. on a
+ *     fresh server response) — a common Inertia pattern: the server prop is the
+ *     truth, local state is the working copy.
+ *   - `router.get/delete` are programmatic Inertia visits (vs the declarative
+ *     <Link>); `useForm().put` submits the edit modal.
+ *   - `useCan()` gates the manage actions; `useFeedback().confirm` shows the
+ *     shared confirmation dialog before a destructive delete.
+ */
 export default function RoleManager({ auth, roles: initialRoles }) {
     const { can } = useCan();
     const { confirm } = useFeedback();
@@ -19,18 +42,23 @@ export default function RoleManager({ auth, roles: initialRoles }) {
         permissions: [],
     });
 
+    // Keep the working copy in step with the server: whenever Laravel sends a new
+    // `initialRoles` prop (after a create/delete), adopt it.
     useEffect(() => {
         setRoles(initialRoles || []);
     }, [initialRoles]);
 
     const openEdit = async (role) => {
         setEditingRole(role);
+        // Seed the form from the row being edited.
         setData('name', role.name || '');
         setData(
             'permissions',
             (role.permissions || []).map((p) => p.name)
         );
 
+        // The permission catalogue is fetched lazily (only when editing), so show
+        // a spinner while it loads.
         setLoadingPermissions(true);
         try {
             const res = await fetch(
@@ -50,6 +78,8 @@ export default function RoleManager({ auth, roles: initialRoles }) {
     };
 
     const togglePermission = (perm) => {
+        // Rebuild the array immutably (a fresh Set each time) so React sees a NEW
+        // reference and re-renders.
         const set = new Set(data.permissions || []);
         if (set.has(perm)) set.delete(perm);
         else set.add(perm);
@@ -61,6 +91,8 @@ export default function RoleManager({ auth, roles: initialRoles }) {
         if (!editingRole) return;
 
         put(route('settings.roles.update', editingRole.id), {
+            // A full refresh is fine here: the server returns the updated list and
+            // the useEffect above adopts it.
             preserveState: false,
             onSuccess: () => {
                 setModalOpen(false);
@@ -70,10 +102,12 @@ export default function RoleManager({ auth, roles: initialRoles }) {
     };
 
     const createRole = () => {
+        // Programmatic visit to the create screen (a button handler has no <Link>).
         router.get(route('settings.roles.create'));
     };
 
     const deleteRole = async (roleId) => {
+        // `confirm` returns a promise resolved with the user's choice.
         const ok = await confirm({
             title: 'Delete this role?',
             message: 'Users holding this role will lose its permissions immediately. This cannot be undone.',
@@ -144,7 +178,11 @@ export default function RoleManager({ auth, roles: initialRoles }) {
                                             </div>
                                         </td>
                                         <td className="py-4 px-6 text-gray-600 font-medium">
-                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+                                            {/* Accent-tinted so the badge follows BOTH the
+                                                dark/light mode and the workspace accent palette
+                                                (a hardcoded bg-gray-100 stayed light in dark mode
+                                                while its text was remapped to near-white). */}
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--accent-soft)] text-[var(--accent)]">
                                                 {r.users_count || 0} {r.users_count === 1 ? 'user' : 'users'}
                                             </span>
                                         </td>

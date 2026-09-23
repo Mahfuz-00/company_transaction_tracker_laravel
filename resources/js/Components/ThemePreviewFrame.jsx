@@ -1,6 +1,7 @@
 import React from 'react';
-import { useTheme, ACCENT_HEX, ACCENT_SOFT, RADIUS_PX, DENSITY_SCALE, FONT_STACKS } from '@/Components/ThemeProvider';
+import { ACCENT_HEX, ACCENT_SOFT, RADIUS_PX, DENSITY_SCALE, FONT_STACKS } from '@/Components/ThemeProvider';
 import ThemedText from '@/Components/UI/ThemedText';
+import useLiveTheme from '@/Utils/useLiveTheme';
 
 /**
  * A live, theme-reactive preview frame.
@@ -9,11 +10,15 @@ import ThemedText from '@/Components/UI/ThemedText';
  * ---------------
  * The Currency Manager and Institution Settings each render a small "preview"
  * panel. Those panels used to draw their own colours, so they only repainted on
- * a full reload and could drift from the active theme. This component instead
- * reads the ACTIVE theme from the shared ThemeProvider context, so any change in
- * the Theme Customizer (accent, light/dark, radius, font, density) repaints the
- * preview instantly - no refresh - because the context value changes and this
- * component re-renders.
+ * a full reload and could drift from the active theme.
+ *
+ * This component reads the theme through `useLiveTheme()`, which follows the
+ * `theme:change` event that `applyThemeTokens()` dispatches. That matters because
+ * this frame computes its miniature palette IN JAVASCRIPT (`ACCENT_HEX(accent)`),
+ * not from CSS variables - so a plain context read would not update until a save
+ * round-trip. Tracking the event makes it repaint in REAL TIME while the user
+ * switches accent or dark/light mode, before the change is saved. The context
+ * theme remains the fallback, so a save also flows through.
  *
  * It is a faithful miniature of a real card: surface, border, primary/secondary
  * text, an accent button and an accent-tinted panel.
@@ -25,7 +30,7 @@ export default function ThemePreviewFrame({
     children,
     className = '',
 }) {
-    const { theme } = useTheme();
+    const theme = useLiveTheme();
 
     const isDark = (theme?.mode || 'light') === 'dark';
     const hex = ACCENT_HEX(theme?.accent);

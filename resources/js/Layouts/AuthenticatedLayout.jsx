@@ -1,5 +1,6 @@
 import Sidebar from '@/Components/Sidebar';
 import ThemeProvider from '@/Components/ThemeProvider';
+import ThemeToggle from '@/Components/ThemeToggle';
 import NotificationBell from '@/Components/NotificationBell';
 import { Link, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
@@ -10,8 +11,13 @@ import { useEffect, useState } from 'react';
  * Phone / tablet : the sidebar becomes an off-canvas drawer with a backdrop,
  *                  opened from a sticky top bar.
  * Desktop (lg+)  : the sidebar is docked and always visible.
- * Ultra-wide     : content is centred with a max width so tables stay readable
- *                  instead of stretching edge to edge.
+ * Ultra-wide / TV: the content column widens at 2xl and 3xl so a 1920px+ display
+ *                  is actually used, while still being capped so tables do not
+ *                  stretch to unreadable line lengths.
+ *
+ * The shell is wrapped in ThemeProvider, so flipping the theme (or the global
+ * ThemeToggle beside the bell) recolours the shell and every page inside it in
+ * one paint.
  */
 export default function AuthenticatedLayout({ header, children }) {
     const { auth, institution, tenant } = usePage().props;
@@ -79,7 +85,9 @@ export default function AuthenticatedLayout({ header, children }) {
                         </span>
                     </div>
 
-                    <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+                    {/* Fluid content column: capped for readability, widening on
+                        large monitors and TV-sized displays (2xl / 3xl). */}
+                    <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 2xl:max-w-[1760px] 3xl:max-w-[1920px]">
                         {/* Switched-view banner: only shown when a Software Super
                             Admin is inside another institution's workspace, so
                             they can always see WHICH tenant they are in and get
@@ -105,9 +113,9 @@ export default function AuthenticatedLayout({ header, children }) {
                             </div>
                         )}
 
-                        {/* Header row: page title on the left, the notification
-                            bell pinned right so it is reachable from every page
-                            and every screen size. */}
+                        {/* Header row: page title on the left; the theme switch and
+                            notification bell pinned right, so both are reachable
+                            from every page and every screen size. */}
                         <div className="mb-4 flex items-start justify-between gap-4">
                             <div className="min-w-0 flex-1">
                                 {header && (
@@ -116,7 +124,8 @@ export default function AuthenticatedLayout({ header, children }) {
                                     </header>
                                 )}
                             </div>
-                            <div className="flex-shrink-0">
+                            <div className="flex flex-shrink-0 items-center gap-2">
+                                <ThemeToggle />
                                 <NotificationBell />
                             </div>
                         </div>
