@@ -9,8 +9,41 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
+/**
+ * Meal-department ("group") management.
+ *
+ * WHAT THIS IS
+ * ------------
+ * A department groups members (e.g. "Computer Science") for reporting and bulk
+ * operations such as rate assignment. Institutions rename this concept through
+ * the terminology setting ("department", "group", "class", ...), but the code and
+ * the table stay exactly the same.
+ *
+ * MULTI-TENANCY
+ * -------------
+ * `Department` uses `BelongsToInstitution`: reads are filtered to the active
+ * institution by the global scope, and new rows inherit its id. Note that the
+ * UNIQUE validation rules below must add `where('institution_id', ...)` BY HAND -
+ * `Rule::unique()` issues a direct table query that bypasses Eloquent's global
+ * scope, so a bare unique rule would wrongly stop two institutions from each
+ * having a "Kitchen".
+ *
+ * ROUTE-MODEL BINDING & SLUGS
+ * ---------------------------
+ * `Department::getRouteKeyName()` returns `slug`, so a parameter of
+ * `Department $department` resolves from the URL slug (not an id). Because
+ * binding runs through the tenant scope, a slug from another institution 404s.
+ */
 class DepartmentController extends Controller
 {
+    /**
+     * Paginated, searchable list of departments.
+     *
+     * `withCount` adds two counters in ONE query: the total members and, via a
+     * constrained alias, just the active ones - so the list renders both numbers
+     * without loading every student row. `withQueryString()` keeps the current
+     * filters attached to the pagination links.
+     */
     public function index(Request $request)
     {
         $search = trim((string) $request->query('search', ''));
@@ -47,6 +80,14 @@ class DepartmentController extends Controller
         return redirect()->route('meals.departments.index');
     }
 
+    /**
+     * Create a department.
+     *
+     * The name/slug uniqueness rules are scoped to the current institution (see
+     * the class note on why a bare `Rule::unique` is wrong here). `institution_id`
+     * is stamped from `Institution::current()` SERVER-SIDE, never taken from the
+     * request.
+     */
     public function store(Request $request)
     {
         $institution = Institution::current();
@@ -78,6 +119,15 @@ class DepartmentController extends Controller
         return redirect()->route('meals.departments.index');
     }
 
+    /**
+     * Update a department.
+     *
+     * `$department` is resolved by ROUTE-MODEL BINDING through the tenant scope,
+     * so a cross-institution row can never reach this method. The unique rules are
+     * scoped to the department's OWN institution and ignore the row itself, so
+     * renaming a department (or saving it unchanged) does not trip its own
+     * uniqueness check.
+     */
     public function update(Request $request, Department $department)
     {
         // Route-model binding already ran through the tenant scope, so a
@@ -98,6 +148,14 @@ class DepartmentController extends Controller
             ->with('success', "Department \"{$department->name}\" updated.");
     }
 
+    /**
+     * Delete a department - unless members are still assigned to it.
+     *
+     * Members are the source of truth for balances, so deleting a department out
+     * from under them would orphan meal history. The guard refuses the delete and
+     * tells the user how many members must be reassigned first, rather than
+     * silently cascading.
+     */
     public function destroy(Department $department)
     {
         // Students are the source of truth for balances; deleting a department

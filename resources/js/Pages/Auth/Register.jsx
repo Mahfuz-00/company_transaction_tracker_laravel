@@ -23,6 +23,30 @@ function getPasswordStrength(password) {
     return { score, label: 'Strong', tone: 'bg-emerald-500 text-emerald-600' };
 }
 
+/**
+ * Self-service registration screen.
+ *
+ * Inertia page component whose whole job is to create a NEW account inside an
+ * existing workspace, so it is built around the institution INVITE CODE — the
+ * tenant-mapping key that ties the new user to the right institution.
+ *
+ * PROPS
+ *   - `inviteCode`      : pre-filled code, present when the user arrived via an
+ *                         invite link (so the field is already populated).
+ *   - `institutionName` : the resolved name of the matched institution, or null
+ *                         when the code is unknown — drives the "Matched" hint
+ *                         versus the "ask your admin" helper text.
+ *   - `roles`           : roles allowed for a new signup; the first is used as the
+ *                         default `role` value on the payload.
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` holds every field, seeded from the page props.
+ *   - `post(route('register'))` submits via Inertia; `onFinish` blanks the two
+ *     password fields after the round-trip.
+ *   - `errors.<field>` are server-side validation messages rendered inline.
+ *   - The strength meter and the mismatch check are LOCAL (client-side) feedback
+ *     only — the authoritative rules still run on the server.
+ */
 export default function Register({ inviteCode = '', institutionName = null, roles = [] }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',

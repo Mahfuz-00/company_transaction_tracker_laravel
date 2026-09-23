@@ -4,14 +4,37 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, useForm } from '@inertiajs/react';
 
+/**
+ * "Forgot password" screen — step 1 of the reset flow.
+ *
+ * Inertia page component. The user enters their email and POSTs it to
+ * `password.email`, which asks Laravel to mail a signed reset link. That link
+ * points at the ResetPassword page (step 2).
+ *
+ * PROPS
+ *   - `status` : a one-off flash string from the server. Laravel sets it once a
+ *     reset link has been sent ("We have emailed your password reset link!").
+ *     It is the only feedback that the request worked, because a known and an
+ *     unknown email are answered identically (to avoid leaking which addresses
+ *     exist).
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` owns the single `email` field plus its error and processing
+ *     flags.
+ *   - `post(route('password.email'))` is an Inertia visit, not a page reload.
+ *   - `errors.email` renders the server-side validation message for that field.
+ */
 export default function ForgotPassword({ status }) {
     const { data, setData, post, processing, errors } = useForm({
         email: '',
     });
 
     const submit = (e) => {
+        // Inertia handles the request; suppress the browser's default submit.
         e.preventDefault();
 
+        // No onSuccess handling here: the endpoint just mails the link and the
+        // server flashes `status` back (handled above).
         post(route('password.email'));
     };
 
@@ -25,6 +48,7 @@ export default function ForgotPassword({ status }) {
                 allow you to choose a new one.
             </div>
 
+            {/* Server flash: the reset link was queued (or already sent). */}
             {status && (
                 <div className="mb-4 text-sm font-medium text-green-600">
                     {status}

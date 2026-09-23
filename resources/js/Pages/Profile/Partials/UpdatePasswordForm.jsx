@@ -6,6 +6,24 @@ import { Transition } from '@headlessui/react';
 import { useForm } from '@inertiajs/react';
 import { useRef } from 'react';
 
+/**
+ * Partial: the "Update Password" card on the Profile page.
+ *
+ * A self-contained form component (not a page) rendered inside Profile/Edit. It
+ * changes the CURRENT user's password and nothing else.
+ *
+ * PROPS
+ *   - `className` : optional classes appended to the root <section>.
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` submits with `put()` because the update is an idempotent PUT.
+ *   - the `errors` object is inspected INSIDE `onError`, so the handler can react
+ *     per-field (reset + focus), not just render a message.
+ *   - `recentlySuccessful` is an Inertia-provided flag that flips true briefly
+ *     after a successful visit — it drives the "Saved." note, so no local "saved"
+ *     state is needed.
+ *   - `useRef` lets the handler move focus to the offending input on error.
+ */
 export default function UpdatePasswordForm({ className = '' }) {
     const passwordInput = useRef();
     const currentPasswordInput = useRef();
@@ -28,14 +46,20 @@ export default function UpdatePasswordForm({ className = '' }) {
         e.preventDefault();
 
         put(route('password.update'), {
+            // Leave the scroll position untouched during the visit.
             preserveScroll: true,
             onSuccess: () => reset(),
             onError: (errors) => {
+                // Per-field recovery: on a NEW-password failure, blank the two
+                // password boxes and focus the new-password input.
                 if (errors.password) {
                     reset('password', 'password_confirmation');
                     passwordInput.current.focus();
                 }
 
+                // On a CURRENT-password failure, blank and focus that one instead.
+                // Reacting to the exact field is what makes the error feel
+                // targeted rather than generic.
                 if (errors.current_password) {
                     reset('current_password');
                     currentPasswordInput.current.focus();

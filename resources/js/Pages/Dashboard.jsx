@@ -72,6 +72,43 @@ function MetricCard({ label, value, hint, tone = 'slate', icon }) {
  * Page
  * ------------------------------------------------------------------ */
 
+/**
+ * Dashboard - the at-a-glance home for the meal & expense module.
+ *
+ * PURPOSE
+ * The landing screen after login: it rolls the whole operation into metric
+ * cards, a dual-axis daily trend chart, an expense breakdown (doughnut or
+ * list), a top-members table, and a recent-ledger table. It also surfaces two
+ * data-health notices (a ledger/meal reconciliation drift banner and a
+ * missing-meal-rate warning) so problems are visible before they compound.
+ *
+ * PROPS (from the Laravel controller)
+ *  - metrics: { month_label, pool_balance, total_deposits, total_expenses,
+ *    month_meals, week_meals, today_meals, month_expenses, month_deposits,
+ *    month_meal_cost, cost_per_meal, active_students, total_students,
+ *    students_with_dues, total_dues }.
+ *  - dailyTrend: [{ label, meals, expenses, deposits }] for the trend chart.
+ *  - expenseBreakdown: [{ category, total }] for the breakdown chart/list.
+ *  - topStudents: [{ id, name, roll, department, meals, deposited, balance }].
+ *  - recentTransactions: latest ledger rows [{ id, date, item, category,
+ *    counterparty, amount, type }].
+ *  - hasMealRate: false when no cost-per-meal is set (drives the amber banner).
+ *  - reconciliation: { has_drift, module_deposits, ledger_deposits,
+ *    unlinked_deposits } explaining any discrepancy between the meal module and
+ *    the ledger.
+ *
+ * CHART MAP (Chart.js via react-chartjs-2)
+ *  - Daily Meal & Money Trend (Bar, mixed): meals as bars on the LEFT y-axis
+ *    ('y'), money in/out as lines on the RIGHT y-axis ('y1') - a dual-axis
+ *    chart, which is why each dataset sets yAxisID.
+ *  - Expense Breakdown (Doughnut): the month's spend per category; toggled
+ *    between doughnut and a percentage list by local state.
+ *
+ * FLOW
+ *  - Read-only dashboard: no mutations. Everything is derived from props, so
+ *    useMoney()/useTerminology() adapt the figures and nouns to the workspace.
+ *  - The student drill-down links use Ziggy route('meals.students.index'/'show').
+ */
 export default function Dashboard({
     metrics = {},
     dailyTrend = [],

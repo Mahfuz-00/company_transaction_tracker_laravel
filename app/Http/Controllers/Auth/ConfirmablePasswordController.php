@@ -10,6 +10,11 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Password confirmation — the "it's really you" gate shown before sensitive
+ * actions. A successful check stamps `auth.password_confirmed_at` so the gate
+ * stays open for a while.
+ */
 class ConfirmablePasswordController extends Controller
 {
     /**

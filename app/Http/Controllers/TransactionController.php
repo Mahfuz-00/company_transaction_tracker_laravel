@@ -8,8 +8,45 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
+/**
+ * The transaction ledger - money in and money out.
+ *
+ * WHAT THIS IS
+ * ------------
+ * `transactions` is the ledger: one row per movement of money, `type` = 'in'
+ * (a deposit / member contribution) or 'out' (an expense / payment). Almost
+ * everything else in the app - balances, dashboards, vendor spend - is DERIVED
+ * from these rows. So this controller is the read side, plus a thin legacy
+ * bridge that forwards old URLs to the modern create flows.
+ *
+ * MONEY MATH
+ * ----------
+ * A row stores a POSITIVE `amount`; its SIGN is decided by `type`. Every balance
+ * is therefore `sum(type = 'in') - sum(type = 'out')`. The model casts `amount`
+ * to `decimal:2`, so the value arrives as a numeric STRING - fine for PHP's
+ * arithmetic operators, but never assume it is an int/float when comparing.
+ *
+ * TENANCY
+ * -------
+ * `Transaction` uses `BelongsToInstitution`, so every query here is implicitly
+ * filtered to the active institution by the global scope. The
+ * `where('user_id', ...)` clauses narrow further, to the logged-in user's own
+ * rows - both conditions apply together.
+ */
 class TransactionController extends Controller
 {
+    /**
+     * The dashboard: balances, a filtered/paginated ledger list, and this month's
+     * totals.
+     *
+     * These are computed server-side rather than in the view because they need
+     * SQL AGGREGATES over the whole table, not just the rows on the current page:
+     *  - the OVERALL balance (all-time, deliberately NOT affected by the
+     *    filters), so the headline figure does not jump around while the user
+     *    experiments with filtering;
+     *  - the filtered, paginated list, annotated with a RUNNING balance;
+     *  - the current calendar month's in/out totals.
+     */
     public function index(Request $request)
     {
         $userId = $request->user()->id;
@@ -69,8 +106,13 @@ class TransactionController extends Controller
         $balance = 0;
 
         $collection = $paginator->getCollection();
-        // collection comes newest-first (created_at desc); compute running balance oldest-first
+        // The page is newest-first (created_at desc), but a running balance must
+        // accumulate OLDEST-first - so reverse() before mapping, then reverse
+        // again afterwards to restore the newest-first order the user expects.
         $transformed = $collection->reverse()->map(function ($t) use (&$balance) {
+            // Rows store a positive amount; the SIGN comes from the type, so
+            // money-out subtracts. This is what turns the raw ledger into a
+            // running balance.
             $effectiveAmount = $t->type === 'in' ? $t->amount : -$t->amount;
             $balance += $effectiveAmount;
 

@@ -18,6 +18,16 @@ use Inertia\Inertia;
  */
 class SettingsController extends Controller
 {
+    /**
+     * Show the Currency Manager.
+     *
+     * Currency is a WORKSPACE setting: the page always reads the current
+     * institution's configuration (`Institution::current()`), never a per-user
+     * preference. `canManage` is computed and passed to the view so the form
+     * renders read-only for users who may view but not edit; the POST is
+     * independently re-checked in store() - the client flag is a UI hint, never
+     * the security boundary.
+     */
     public function index(Request $request)
     {
         $user = $request->user();
@@ -51,6 +61,15 @@ class SettingsController extends Controller
         ]);
     }
 
+    /**
+     * Persist the institution's currency format.
+     *
+     * The write is authorised twice: the form only posts for a manager/SSA, and
+     * that is re-checked here because an HTTP POST can be forged regardless of
+     * what the previous page rendered. The payload is then validated,
+     * sanity-checked (the two separators must differ or parsing breaks), folded
+     * into the institution's `currency_settings` JSON column, and audited.
+     */
     public function store(Request $request)
     {
         $user = $request->user();

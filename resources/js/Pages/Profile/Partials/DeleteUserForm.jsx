@@ -7,6 +7,25 @@ import TextInput from '@/Components/TextInput';
 import { useForm } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 
+/**
+ * Danger-zone card: permanently delete the signed-in user's account.
+ *
+ * Not a page — a PARTIAL: a self-contained form component rendered inside
+ * Profile/Edit. It owns its own confirmation modal, its own form state and its
+ * own request, so the parent page stays a thin layout.
+ *
+ * PROPS
+ *   - `className` : optional extra classes appended to the root <section>, so the
+ *     parent controls spacing/width.
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` exposes `delete` here (aliased to `destroy`) because the request
+ *     is a DELETE, not a POST.
+ *   - `useRef` points at the password input so an error can focus it directly —
+ *     the React equivalent of requesting focus on a native view.
+ *   - `preserveScroll` keeps the page where it is during the Inertia visit.
+ *   - `clearErrors()` wipes the server error bag when the modal is dismissed.
+ */
 export default function DeleteUserForm({ className = '' }) {
     const [confirmingUserDeletion, setConfirmingUserDeletion] = useState(false);
     const passwordInput = useRef();
@@ -14,6 +33,8 @@ export default function DeleteUserForm({ className = '' }) {
     const {
         data,
         setData,
+        // `delete` is aliased to `destroy` so call sites read as a verb and do not
+        // shadow the JS `delete` keyword.
         delete: destroy,
         processing,
         reset,
@@ -31,9 +52,13 @@ export default function DeleteUserForm({ className = '' }) {
         e.preventDefault();
 
         destroy(route('profile.destroy'), {
+            // Keep the viewport steady while the request is in flight.
             preserveScroll: true,
             onSuccess: () => closeModal(),
+            // Validation failed (wrong password): move focus straight to the field
+            // so the user can correct it without hunting for it.
             onError: () => passwordInput.current.focus(),
+            // Always clear the field afterwards.
             onFinish: () => reset(),
         });
     };
@@ -41,6 +66,8 @@ export default function DeleteUserForm({ className = '' }) {
     const closeModal = () => {
         setConfirmingUserDeletion(false);
 
+        // Drop both the field value and any server errors so reopening the modal
+        // starts from a clean slate.
         clearErrors();
         reset();
     };

@@ -57,6 +57,34 @@ function Avatar({ name }) {
  * Page
  * ------------------------------------------------------------------ */
 
+/**
+ * User Manager — the Settings → Users screen.
+ *
+ * Inertia page component for listing, filtering, creating, editing, activating /
+ * deactivating and deleting user accounts. It runs in one of two scopes: a single
+ * workspace, or a GLOBAL directory for the Software Super Admin.
+ *
+ * PROPS
+ *   - `users`            : paginated user list (Laravel paginator shape: `.data`
+ *                          rows plus `.links` page controls).
+ *   - `roles` (as
+ *     `availableRoles`)  : the roles that can be assigned in the modal.
+ *   - `filters`          : current search / role / status / institution filters,
+ *                          used to seed the controls and re-issue queries.
+ *   - `scopeInstitution` : the workspace being managed, or null.
+ *   - `globalScope`      : TRUE for the SSA — turns on the institution column, the
+ *                          institution filter and a target-workspace picker.
+ *   - `institutions`     : workspaces selectable in the SSA institution filter.
+ *
+ * Inertia / React concepts on show:
+ *   - `router.get/patch/delete` are PROGRAMMATIC Inertia visits (used from event
+ *     handlers) as opposed to declarative <Link>s.
+ *   - `preserveState` / `preserveScroll` / `replace` tune how a visit behaves, so
+ *     filtering neither resets the scroll position nor wipes component state.
+ *   - `useState` mirrors the search box; `useCan()` gates create/edit/delete;
+ *     `useFeedback().confirm` collects confirmation before destructive actions.
+ *   - the create/edit form is delegated to the self-contained UserFormModal.
+ */
 export default function UserManager({
     users,
     roles: availableRoles,

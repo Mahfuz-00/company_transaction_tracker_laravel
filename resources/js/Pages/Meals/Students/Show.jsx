@@ -28,6 +28,28 @@ function StatCard({ label, value, tone = 'text-slate-900', hint }) {
     );
 }
 
+/**
+ * Meal module - Member detail page.
+ *
+ * PURPOSE
+ * The read-only profile for ONE member: identity header, life-time totals
+ * (meals, deposits, balance, rate) and the most recent deposits and meal
+ * entries side by side. It is reached by clicking a name in the roster.
+ *
+ * PROPS (from the Laravel controller - a single record, not a paginator)
+ *  - student: the member, with nested `deposits`, `entries`, `department`, and
+ *    optionally `user` (the linked login account).
+ *  - costPerMeal: the active meal rate, or 0/null when none is set.
+ *  - balance: life-time balance (negative means the member owes money).
+ *  - totalMeals: life-time breakfast + lunch + dinner count.
+ *  - totalDeposits: life-time deposits.
+ *
+ * FLOW
+ *  - Pure presentation - no forms or mutations. "Back to list" is an Inertia
+ *    <Link>, so returning to the roster stays a client-side visit.
+ *  - All labels run through useTerminology() so the page reads correctly for a
+ *    company ("Employee") or college, not just "Student".
+ */
 export default function Show({ student, costPerMeal, balance, totalMeals, totalDeposits }) {
     // Terminology-aware labels so this detail page reads "Employee"/"Boarder"
     // in a company/college workspace rather than always "Student".

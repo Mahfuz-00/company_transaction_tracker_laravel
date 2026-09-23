@@ -1,3 +1,20 @@
+/**
+ * roleFormatters.js - human-readable labels for permission and role names.
+ *
+ * WHY IT EXISTS
+ * The backend speaks in dotted permission keys ("transactions.view") and raw
+ * role names, but the UI needs friendly strings - and it needs them in one
+ * place so an unlisted permission still degrades gracefully. This module is
+ * pure (no React, no side effects), so it is safe to call from anywhere.
+ *
+ * PUBLIC API
+ *  - formatPermissionLabel(permissionName): maps a known permission key to its
+ *    label via the lookup table, falling back to a title-cased version of the
+ *    key ("foo.bar" -> "Foo bar") when no entry exists.
+ *  - formatRoleName(roleName): title-cases each word of a role name
+ *    ("senior admin" -> "Senior Admin"); returns '' for a falsy name.
+ */
+
 export function formatPermissionLabel(permissionName) {
     const labels = {
         'transactions.view': 'View Transactions',

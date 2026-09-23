@@ -10,6 +10,31 @@ const MEAL_COLUMNS = [
     { field: 'dinner', label: 'Dinner', tone: 'text-violet-600' },
 ];
 
+/**
+ * Meal module - Meal Entries list.
+ *
+ * PURPOSE
+ * One row per member per day, counting breakfast / lunch / dinner. These counts
+ * feed the per-meal-cost maths everywhere else, so this is the source of truth
+ * for "how many meals were eaten". A strip of cards totals the filtered day,
+ * then a date/student-filterable table lists the entries.
+ *
+ * PROPS (from the Laravel controller)
+ *  - entries: Laravel paginator { data, links, from, to, total }; each row has
+ *    breakfast/lunch/dinner plus a nested `student` and `recorder`.
+ *  - students: the roster for the member filter <select>.
+ *  - filters: { date, student } echo of the active query - `date` also drives
+ *    the "Record Meals" deep link.
+ *  - dayTotals: { breakfast, lunch, dinner, total } for the filtered date; only
+ *    present when the server computes it, so the cards are conditionally shown.
+ *
+ * FLOW
+ *  - Filtering: applyFilters() issues a partial Inertia visit (preserveState /
+ *    preserveScroll / replace) that keeps the page from jumping.
+ *  - Record / Edit: there is no inline form here - both actions link to
+ *    meals.entries.create with a `date`, where the controller upserts the grid
+ *    for that day. Editing simply re-opens that grid for the row's date.
+ */
 export default function Index({ entries, students, filters, dayTotals }) {
     const { t, tTitle } = useTerminology();
     const { can } = useCan();

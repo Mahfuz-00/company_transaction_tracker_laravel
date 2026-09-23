@@ -1,6 +1,21 @@
+/**
+ * ProgressCard — a donut chart showing a single completion percentage.
+ *
+ * Built directly from SVG (no chart library): an outer grey ring plus a coloured
+ * arc whose length encodes the value. State-free — it only renders its props.
+ *
+ * Props:
+ *   - percent?: number  Completion 0–100. Defaults to 41.
+ *   - title?: string    Caption shown to the right of the ring.
+ */
 export default function ProgressCard({ percent = 41, title = 'Project Progress' }) {
+    // SVG donut geometry. A circle's full length is 2·π·r; we draw only the
+    // `percent` fraction of it as a coloured arc by setting the arc's
+    // strokeDasharray to `dash gap` (where dash + gap = the whole
+    // circumference), then rotate it -90° so the arc starts at 12 o'clock.
     const radius = 36;
     const stroke = 8;
+    // Clamp into 0..100 so an out-of-range prop can never overrun the ring.
     const normalized = Math.min(100, Math.max(0, percent));
     const circumference = 2 * Math.PI * radius;
     const dash = (normalized / 100) * circumference;

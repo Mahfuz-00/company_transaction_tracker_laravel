@@ -5,15 +5,41 @@ import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, useForm } from '@inertiajs/react';
 
+/**
+ * Confirm-password gate — the screen behind Laravel's `password.confirm`
+ * middleware.
+ *
+ * A plain React FUNCTION component: Inertia resolves it from
+ * `Pages/Auth/ConfirmPassword.jsx` and renders it, so there is no router or
+ * controller wiring in this file. It receives NO page props.
+ *
+ * WHY it exists: sensitive actions (deleting the account, managing roles, ...)
+ * sit behind Laravel's "confirm your password first" middleware. A signed-in
+ * user who has not re-entered their password recently is redirected here; on
+ * success the server forwards them to the page they originally wanted (the
+ * `url.intended` value), so this screen never needs to know the destination.
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` is per-component form state (data, errors, processing) — the
+ *     React counterpart of a view model.
+ *   - `post(route('password.confirm'))` submits via fetch with NO full page
+ *     reload; Inertia then follows the server's redirect.
+ *   - `route()` is Ziggy: it turns the named Laravel route into a URL.
+ *   - `errors.password` is the server's validation bag, keyed by field name, and
+ *     rendered by <InputError>.
+ */
 export default function ConfirmPassword() {
     const { data, setData, post, processing, errors, reset } = useForm({
         password: '',
     });
 
     const submit = (e) => {
+        // Stop the browser's native full-page form POST — Inertia owns submission.
         e.preventDefault();
 
         post(route('password.confirm'), {
+            // onFinish runs after the request settles, success OR failure; wiping
+            // the password keeps the secret out of state once it is spent.
             onFinish: () => reset('password'),
         });
     };

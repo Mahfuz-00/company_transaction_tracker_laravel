@@ -4,6 +4,32 @@ import { useState } from 'react';
 import useCurrencySettings from '@/Utils/useCurrency';
 import Button from '@/Components/UI/Button';
 
+/**
+ * Add Transaction - quick standalone ledger entry.
+ *
+ * PURPOSE
+ * A one-screen form for logging a single money movement WITHOUT the meal
+ * module: either "Cash In" (money received, typically from a member) or
+ * "Cash Out" (money paid to a vendor). It is the thin, dependency-free entry
+ * point that posts straight to the transactions ledger.
+ *
+ * PROPS (from the Laravel controller)
+ *  - auth: the shared Inertia auth bag (auth.user drives the layout header).
+ *  - students: the roster used to populate the member <select> on Cash In.
+ *
+ * FLOW / REACT + INERTIA NOTES
+ *  - useForm({ item, by_whom, type, ... }) is Inertia's form helper: `data` is
+ *    the form state, `setData` updates one field, `post` submits, `processing`
+ *    is the in-flight flag, `reset` clears it, and `errors` holds server-side
+ *    validation messages rendered under each field.
+ *  - handleSubmit() calls post(route('transactions.store'), { onSuccess,
+ *    onError }); Ziggy's route() builds the URL from the named Laravel route.
+ *    onSuccess resets the form and flashes a temporary toast (local state,
+ *    cleared by setTimeout).
+ *  - `type` ('in' / 'out') switches the counterparty field: a member <select>
+ *    for Cash In, a free-text vendor input for Cash Out. The legacy `by_whom`
+ *    column is kept in step for older views.
+ */
 export default function AddTransaction({ auth, students = [] }) {
     const { data, setData, post, processing, reset, errors } = useForm({
         item: '',

@@ -22,6 +22,50 @@ import { Doughnut, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Filler, Title, Tooltip, Legend);
 
+/**
+ * Analytics - the money and meal intelligence dashboard.
+ *
+ * PURPOSE
+ * One page that answers "where did the money go, and how are meals trending?".
+ * It renders a filter bar, four cash metric cards, four institution metrics, a
+ * subsidy-tracking panel, a three-month forecast, and the visualisations listed
+ * below. Every figure flows through useMoney(), which applies the admin's global
+ * abbreviation threshold (1,234 -> 1.23 K) so the whole page scales uniformly.
+ *
+ * PROPS (from the Laravel controller)
+ *  - auth: shared auth bag (auth.user feeds the layout header).
+ *  - totalIn / totalOut / netBalance / currentBalance: the headline cash values.
+ *  - monthlySummary: [{ period|month, income, expense }] for the trends chart.
+ *  - activeFilters / previousPeriod: current filter echo + prior-period totals
+ *    used to compute the % trend chips on the metric cards.
+ *  - dorm: institution metrics { pool_balance, deposits, expenses, meals,
+ *    breakfast, lunch, dinner, cost_per_meal, active_students }.
+ *  - mealTrend: [{ period, breakfast, lunch, dinner }] for the meal-trend chart.
+ *  - expenseByCategory: [{ category, total }] for the doughnut + legend list.
+ *  - topExpenses: the largest single outgoings (table).
+ *  - grouping: 'daily' | 'monthly' - labels the meal-trend x-axis text.
+ *  - month / months: the month selector's option list and selected value.
+ *  - subsidyTracking / forecast: payloads passed whole into their panels.
+ *
+ * CHART MAP (Chart.js via react-chartjs-2)
+ *  - Meal Consumption Trend (Bar, stacked): breakfast/lunch/dinner per period,
+ *    plain meal counts - not money.
+ *  - Where Money Went (Doughnut): expense totals per category, with the total
+ *    drawn in the middle by a custom plugin.
+ *  - Cash Flow Distribution (Doughnut): total income vs total expense split.
+ *  - Monthly Trends (Bar): income as a filled line and expense as bars; the
+ *    view toggle swaps this for true stacked bars.
+ *
+ * FLOW
+ *  - Period / custom date range (filter bar): handlePeriodChange() and
+ *    handleDateApply() call router.get(route('analytics'), {...}, {
+ *    preserveState, preserveScroll, replace }) - a partial Inertia visit that
+ *    keeps the filters in sync via the useEffect on activeFilters.
+ *  - Month + chart-view selects do the same router.get or a local setState.
+ *  - Data objects (pieData, barData, mealTrendData, categoryData) are rebuilt
+ *    each render from props, which is the idiomatic react-chartjs-2 pattern:
+ *    you pass `data` + `options` and the library diffs them for you.
+ */
 export default function Analytics({
     auth,
     totalIn = 0,

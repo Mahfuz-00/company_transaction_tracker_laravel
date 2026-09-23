@@ -3,7 +3,14 @@ import { Link } from '@inertiajs/react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import usePlatformBranding from '@/Utils/usePlatformBranding';
 
-/** Landing footer: brand, copyright and the two account entry points. */
+/**
+ * LandingFooter — the public landing page's footer.
+ *
+ * Shows the platform brand (read from `usePlatformBranding`, not props, so it
+ * stays in sync with the SSA's branding), a copyright year computed at render
+ * time, and the two account entry points (Log in / Register) as Inertia `<Link>`s
+ * that perform client-side navigation.
+ */
 export default function LandingFooter() {
     const { name } = usePlatformBranding();
 

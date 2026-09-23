@@ -7,6 +7,26 @@ import GuestLayout from '@/Layouts/GuestLayout';
 import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, useForm } from '@inertiajs/react';
 
+/**
+ * Login screen — the entry point for every signed-in session.
+ *
+ * Inertia page component. The user enters email + password and POSTs to
+ * `route('login')`; Laravel authenticates and redirects to the intended page
+ * (or the dashboard), and Inertia swaps the view without a reload.
+ *
+ * PROPS (the standard Laravel Breeze contract)
+ *   - `status`           : a flash message (e.g. after a password reset), shown
+ *                          in the green banner.
+ *   - `canResetPassword` : when true, the "Forgot password?" link is offered;
+ *                          driven by Laravel's password-reset feature flag.
+ *
+ * Inertia / React concepts on show:
+ *   - `useForm` is the form's isolated state (data / errors / processing).
+ *   - `post(route('login'))` is an Inertia visit; `onFinish` clears the password
+ *     once the request settles, success or failure.
+ *   - `useTerminology` supplies the tenant-aware word for "institution" in the
+ *     subheading, so the copy follows the workspace type.
+ */
 export default function Login({ status, canResetPassword }) {
     const { t } = useTerminology();
 

@@ -18,6 +18,15 @@ use Inertia\Inertia;
  */
 class SubsidySourceController extends Controller
 {
+    /**
+     * List this institution's funding sources.
+     *
+     * `ensureDefaults()` runs first so the out-of-the-box sources always exist -
+     * it is an idempotent `firstOrCreate`, safe to call on every page load. The
+     * list then shows the institution's OWN sources plus the shared,
+     * platform-wide defaults (`institution_id` NULL). `withCount` gives each row
+     * its usage count in a single extra query instead of one per row.
+     */
     public function index(Request $request)
     {
         $institution = Institution::current();
@@ -25,6 +34,10 @@ class SubsidySourceController extends Controller
         // Make sure the out-of-the-box sources exist before listing.
         SubsidySource::ensureDefaults($institution?->id);
 
+        // "Mine OR the shared defaults" - the model's overridden global scope
+        // already widens SubsidySource this way; repeating the clause here keeps
+        // the rule visible at the point it is relied upon (and covers the global
+        // /SSA context where the tenant scope adds nothing).
         $sources = SubsidySource::query()
             ->where(fn ($q) => $q->whereNull('institution_id')
                 ->orWhere('institution_id', $institution?->id))
@@ -50,6 +63,15 @@ class SubsidySourceController extends Controller
         ]);
     }
 
+    /**
+     * Add a funding source for the current institution.
+     *
+     * `institution_id` is pinned to `Institution::current()` SERVER-SIDE, never
+     * taken from the request, so a source is always created inside the caller's
+     * own tenant. The explicit duplicate check enforces uniqueness of the derived
+     * `key` within that tenant - two sources sharing a key would collide in any
+     * report that groups by key.
+     */
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -80,6 +102,15 @@ class SubsidySourceController extends Controller
         return back()->with('success', "Funding source \"{$data['name']}\" added.");
     }
 
+    /**
+     * Update one funding source.
+     *
+     * `$subsidySource` is resolved by ROUTE-MODEL BINDING, which runs the model's
+     * tenant global scope - so a source belonging to another institution 404s
+     * before this body is ever reached and cannot be edited across tenants. `key`
+     * is deliberately NOT accepted here: recorded subsidies reference it, so
+     * changing it would silently detach historical rows.
+     */
     public function update(Request $request, SubsidySource $subsidySource)
     {
         $data = $request->validate([
@@ -94,6 +125,14 @@ class SubsidySourceController extends Controller
         return back()->with('success', "Funding source \"{$subsidySource->name}\" updated.");
     }
 
+    /**
+     * Remove a funding source - unless recorded subsidies reference it.
+     *
+     * A source already used in financial history must not be deleted: the
+     * `subsidies` relation matches on `key`, so deleting the row would orphan
+     * those records. The user is told to DEACTIVATE it instead, which keeps the
+     * history intact while hiding the source from new-entry pickers.
+     */
     public function destroy(SubsidySource $subsidySource)
     {
         // A source already used by recorded subsidies is financial history.

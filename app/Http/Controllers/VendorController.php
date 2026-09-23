@@ -12,8 +12,49 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
+/**
+ * Vendor & supplier management, and the spend ledger they carry.
+ *
+ * WHAT THIS IS
+ * ------------
+ * A "vendor" is anyone the institution buys from - a grocery shop, a gas
+ * supplier, or the institution's own internal hub. Vendors are the counterparty
+ * for money-out: meal expenses may point at one, and these screens roll those
+ * expenses (and their ledger transactions) up into spend and outstanding
+ * figures.
+ *
+ * MONEY MATH - "OUTSTANDING"
+ * -------------------------
+ * The figure the list shows is NOT just the sum of purchases:
+ *     outstanding = opening_balance + sum(expenses where payment_status = 'unpaid')
+ * i.e. whatever the institution already owed the vendor when they were onboarded,
+ * PLUS everything since bought on credit that has not been marked paid. Purchases
+ * paid at the time are deliberately excluded - only genuinely outstanding money
+ * stays on the books.
+ *
+ * TENANCY
+ * -------
+ * `Vendor` uses `BelongsToInstitution`, so all reads and writes are confined to
+ * the active institution automatically, and `institution_id` on create is pinned
+ * to `Institution::current()` server-side.
+ *
+ * ROUTE-MODEL BINDING
+ * -------------------
+ * `Vendor::getRouteKeyName()` returns `slug`, so a method signature of
+ * `Vendor $vendor` resolves from the URL SLUG (not an id) - and because binding
+ * runs through the tenant scope, a slug belonging to another institution 404s.
+ */
 class VendorController extends Controller
 {
+    /**
+     * Paginated vendor list with search / category / status filters, plus each
+     * row's outstanding balance.
+     *
+     * Performance note: the outstanding totals are gathered in a SECOND aggregate
+     * query (see below) instead of calling `$vendor->outstandingBalance()` per
+     * row, which would fire one query per vendor - the classic N+1 that makes a
+     * 15-row page cost 15 extra round-trips.
+     */
     public function index(Request $request)
     {
         $search = trim((string) $request->query('search', ''));
@@ -54,6 +95,9 @@ class VendorController extends Controller
             ->withSum(['expenses as unpaid_total' => fn ($q) => $q->where('payment_status', 'unpaid')], 'amount')
             ->pluck('unpaid_total', 'id');
 
+        // Paginator::through() maps each row in place, so the derived attribute
+        // attaches to the paginated items WITHOUT discarding the pagination
+        // metadata (total, per-page, links) the view needs.
         $vendors->through(function (Vendor $vendor) use ($outstanding) {
             $vendor->setAttribute(
                 'outstanding_balance',
@@ -163,6 +207,13 @@ class VendorController extends Controller
         return $format === 'pdf' ? $exporter->pdf() : $exporter->excel();
     }
 
+    /**
+     * Create a vendor.
+     *
+     * `institution_id` and a normalised `opening_balance` are filled in by
+     * `validated()` first, so the mass-assignable payload is complete before
+     * `create()` runs.
+     */
     public function store(Request $request)
     {
         $data = $this->validated($request);
@@ -174,6 +225,14 @@ class VendorController extends Controller
             ->with('success', "Vendor \"{$vendor->name}\" added.");
     }
 
+    /**
+     * Update a vendor.
+     *
+     * `$vendor` is resolved by ROUTE-MODEL BINDING on the slug, running through
+     * the tenant scope - a vendor from another institution can never be reached
+     * here. `validated()` receives the model so it knows this is an update and
+     * skips re-stamping `institution_id`.
+     */
     public function update(Request $request, Vendor $vendor)
     {
         $data = $this->validated($request, $vendor);
@@ -185,6 +244,14 @@ class VendorController extends Controller
             ->with('success', "Vendor \"{$vendor->name}\" updated.");
     }
 
+    /**
+     * Delete a vendor - unless it has financial history.
+     *
+     * A vendor referenced by any expense or ledger transaction is a historical
+     * record: deleting it would orphan those rows and skew past reports. Rather
+     * than cascade a deletion through financial history, the user is told to mark
+     * the vendor INACTIVE instead.
+     */
     public function destroy(Vendor $vendor)
     {
         // A vendor with purchase history is a financial record; removing it
@@ -204,6 +271,17 @@ class VendorController extends Controller
             ->with('success', "Vendor \"{$name}\" deleted.");
     }
 
+    /**
+     * Shared validation + normalisation for store() and update().
+     *
+     * Beyond the plain rules, this fixes two "web form" realities a mobile
+     * developer would not expect:
+     *   1. an optional field left blank arrives as `""`, not null - and an empty
+     *      string violates the NOT NULL columns, so blanks are coerced to null
+     *      (and `opening_balance`, a numeric column, to 0);
+     *   2. `institution_id` is stamped here for a NEW vendor only, so an edit can
+     *      never move a supplier into another tenant.
+     */
     protected function validated(Request $request, ?Vendor $vendor = null): array
     {
         $data = $request->validate([
