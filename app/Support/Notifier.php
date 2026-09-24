@@ -165,6 +165,24 @@ class Notifier
         );
     }
 
+    /** A balance refund was paid to a member: tell the member. */
+    public static function refundRecorded(?Student $student, float $amount, ?User $actor = null): void
+    {
+        $member = $student?->user;
+
+        static::send(
+            collect([$member]),
+            'refund_recorded',
+            'Balance refunded',
+            number_format($amount, 2) . ' was paid back from your meal balance.',
+            [
+                'url' => route('member.dashboard', [], false),
+                'amount' => $amount,
+            ],
+            $actor?->id,
+        );
+    }
+
     /** Broadcast an announcement to an institution. */
     public static function announcement(?Institution $institution, string $title, string $body, ?User $actor = null): int
     {

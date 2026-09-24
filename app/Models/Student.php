@@ -85,9 +85,43 @@ class Student extends Model
         return $this->manager?->name;
     }
 
+    protected static function booted(): void
+    {
+        /*
+         * DUAL-ROLE SUPPORT.
+         *
+         * A member is a `students` row, but the member AREA is gated by the
+         * `role:Member` route middleware. When a roster record is linked to a
+         * login that already holds a staff role (Institution Admin / Meal
+         * Manager), that staff member never had the Member role - so their own
+         * member area 403'd. Linking a member record to a user now guarantees
+         * they hold the Member role TOO, without stripping their staff roles.
+         * The `hasRole` guard keeps this a no-op on every subsequent save.
+         */
+        static::saved(function (Student $student) {
+            try {
+                $user = $student->user;
+
+                if ($user && ! $user->hasRole('Member')) {
+                    $user->assignInstitutionRole('Member');
+                }
+            } catch (\Throwable $e) {
+                // Never let a role-table problem break saving a member record
+                // (e.g. a seeder running before the RBAC roles exist).
+                report($e);
+            }
+        });
+    }
+
     public function deposits()
     {
         return $this->hasMany(Deposit::class);
+    }
+
+    /** Balance refunds paid back to this member (the mirror of deposits). */
+    public function refunds()
+    {
+        return $this->hasMany(Refund::class);
     }
 
     public function entries()
@@ -134,24 +168,44 @@ class Student extends Model
     }
 
     /**
-     * Money remaining for this student: deposits minus the cost of the
-     * meals they ate, priced at the given per-meal rate.
+     * Total refunds paid back OUT of this member's wallet. Reversed refunds are
+     * excluded, exactly like reversed deposits - a corrected refund stops
+     * reducing the balance.
+     */
+    public function getTotalRefundsAttribute(): float
+    {
+        if (! $this->relationLoaded('refunds')) {
+            return (float) $this->refunds()->whereNull('reversed_at')->sum('amount');
+        }
+
+        return (float) $this->refunds
+            ->whereNull('reversed_at')
+            ->sum('amount');
+    }
+
+    /**
+     * Money remaining for this student: deposits, MINUS anything refunded, minus
+     * the cost of the meals they ate, priced at the given per-meal rate.
      * Positive = credit left, negative = amount owed.
      */
     public function balance(float $costPerMeal = 0): float
     {
-        return round($this->total_deposits - ($this->total_meals * $costPerMeal), 2);
+        return round(
+            $this->total_deposits - $this->total_refunds - ($this->total_meals * $costPerMeal),
+            2
+        );
     }
 
     /**
      * Subsidy-aware balance applying the strict rule: a member's own deposits
-     * are always spent first, and reserve subsidy credit only covers what is
-     * left over. Returns the effective balance plus the subsidy portion used.
+     * (net of refunds) are always spent first, and reserve subsidy credit only
+     * covers what is left over. Returns the effective balance plus the subsidy
+     * portion used.
      */
     public function balanceWithSubsidy(float $costPerMeal = 0): array
     {
         $mealCost = $this->total_meals * $costPerMeal;
-        $own = $this->total_deposits;
+        $own = round($this->total_deposits - $this->total_refunds, 2);
         $raw = round($own - $mealCost, 2);
 
         // Reserve subsidy tops up a shortfall only.
@@ -193,6 +247,6 @@ class Student extends Model
      */
     public function scopeWithStats($query)
     {
-        return $query->with(['department:id,name,slug', 'user:id,name,email', 'deposits:id,student_id,amount', 'entries:id,student_id,breakfast,lunch,dinner']);
+        return $query->with(['department:id,name,slug', 'user:id,name,email', 'deposits:id,student_id,amount', 'refunds:id,student_id,amount,reversed_at', 'entries:id,student_id,breakfast,lunch,dinner']);
     }
 }

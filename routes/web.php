@@ -27,12 +27,14 @@ use App\Http\Controllers\VendorController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SmtpSettingsController;
 use App\Http\Controllers\Meals\DepartmentController;
 use App\Http\Controllers\Meals\StudentController;
 use App\Http\Controllers\Meals\DepositController;
 use App\Http\Controllers\Meals\MealEntryController;
 use App\Http\Controllers\Meals\MealExpenseController;
 use App\Http\Controllers\Meals\MealReportController;
+use App\Http\Controllers\Meals\RefundController;
 use App\Http\Controllers\Meals\SubsidyController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -433,6 +435,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('permission:plans.manage');
 
     /*
+     * PLATFORM SMTP / MAIL SETTINGS - Software Super Admin ONLY.
+     *
+     * A dedicated settings sub-module that lets the SSA point the whole platform
+     * at an SMTP relay (pre-filled with the production Brevo relay), and send a
+     * test email, with no redeploy. Gated by the global role at the route AND
+     * re-asserted in every controller action, so no institution-scoped role can
+     * ever read or change the platform's mail relay.
+     */
+    Route::get('/platform/smtp', [SmtpSettingsController::class, 'edit'])
+        ->name('ssa.smtp.edit')
+        ->middleware('role:Software Super Admin');
+    Route::put('/platform/smtp', [SmtpSettingsController::class, 'update'])
+        ->name('ssa.smtp.update')
+        ->middleware('role:Software Super Admin');
+    Route::post('/platform/smtp/test', [SmtpSettingsController::class, 'sendTest'])
+        ->name('ssa.smtp.test')
+        ->middleware('role:Software Super Admin');
+
+    /*
      * TRIAL & SUBSCRIPTION MANAGEMENT - the SSA's view of who is on a 7-day
      * trial vs a permanent subscription, with expiry countdowns and one-click
      * upgrade prompts.
@@ -496,6 +517,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('deposits/export', [DepositController::class, 'export'])
             ->name('deposits.export')
             ->middleware('permission:exports.download');
+
+        /*
+         * REFUNDS - money paid back OUT of a member's meal balance when they
+         * stop meals or withdraw funds. Gated by `meals.deposit`, the same
+         * permission the Deposit module uses, so whoever can take money in can
+         * pay it back out (Institution Admin + Meal Manager; managers scoped to
+         * their assigned members in the controller).
+         */
+        Route::get('refunds', [RefundController::class, 'index'])
+            ->name('refunds.index')
+            ->middleware('permission:meals.deposit');
+        Route::post('refunds', [RefundController::class, 'store'])
+            ->name('refunds.store')
+            ->middleware('permission:meals.deposit');
+        Route::patch('refunds/{refund}/reverse', [RefundController::class, 'reverse'])
+            ->name('refunds.reverse')
+            ->middleware('permission:meals.deposit');
 
         Route::resource('entries', MealEntryController::class)->only(['index', 'create', 'store'])->middleware('permission:meals.entry');
         Route::resource('expenses', MealExpenseController::class)

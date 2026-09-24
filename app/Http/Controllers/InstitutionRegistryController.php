@@ -232,7 +232,11 @@ class InstitutionRegistryController extends Controller
             'contact_phone' => $data['contact_phone'] ?? null,
             'address' => $data['address'] ?? null,
             'currency_code' => $data['currency_code'] ?? null,
-            'timezone' => $data['timezone'] ?? null,
+            // Default when omitted - an explicit null would override the NOT NULL
+            // column default and fail provisioning.
+            'timezone' => filled($data['timezone'] ?? null)
+                ? $data['timezone']
+                : config('app.timezone', 'UTC'),
             'onboarding_mode' => $mode,
             'subscription_plan' => $data['subscription_plan'] ?? null,
             'subscription_amount' => $data['subscription_amount'] ?? 0,

@@ -1,0 +1,49 @@
+# Render Blueprint - persistent SQLite deployment.
+#
+# THE DATA-SAFETY STORY IN ONE PLACE
+# ----------------------------------
+# Render web services are EPHEMERAL: without a persistent disk, the container
+# filesystem (and therefore database/database.sqlite) is discarded and recreated
+# on every deploy. No amount of application code can preserve data in that case.
+#
+# This blueprint therefore attaches a PERSISTENT DISK mounted at Laravel's
+# database directory, so `database/database.sqlite` survives every redeploy:
+#
+#   disk.mountPath = /var/www/html/database
+#
+# Combined with scripts/entrypoint.sh (which only creates the file when missing
+# and only ever runs ADDITIVE migrations - never `migrate:fresh` / `db:wipe`),
+# the production database is preserved across all future deployments.
+#
+# IMPORTANT: `sizeGB` can only be increased (never decreased) once created.
+services:
+  - type: web
+    name: transaction-tracker
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /up
+    # Persist the SQLite database across deploys and restarts.
+    disk:
+      name: sqlite-data
+      mountPath: /var/www/html/database
+      sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: DB_CONNECTION
+        value: sqlite
+      # Point Laravel at the file on the mounted disk.
+      - key: DB_DATABASE
+        value: /var/www/html/database/database.sqlite
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      # Set APP_KEY in the Render dashboard (do NOT commit it): `php artisan key:generate --show`
+      - key: APP_KEY
+        sync: false

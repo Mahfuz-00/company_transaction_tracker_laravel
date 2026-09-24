@@ -238,6 +238,16 @@ export const NAV_SECTIONS = [
                 permission: 'meals.deposit',
             },
             {
+                // Money paid back OUT of a member's balance (stopped meals /
+                // withdrawal). Same permission as Deposits - if you can take
+                // money in, you can pay it back out.
+                label: 'Refunds',
+                route: 'meals.refunds.index',
+                match: 'meals.refunds.*',
+                icon: 'upload',
+                permission: 'meals.deposit',
+            },
+            {
                 label: 'Meal Entries',
                 route: 'meals.entries.index',
                 icon: 'clipboard',
@@ -433,6 +443,16 @@ export const NAV_SECTIONS = [
                         match: 'settings.emails.*',
                         icon: 'mail',
                         permission: 'emails.view',
+                    },
+                    {
+                        // SSA-only SMTP relay configuration (dynamic mail setup,
+                        // pre-filled with the production Brevo relay).
+                        label: 'SMTP Settings',
+                        route: 'ssa.smtp.edit',
+                        match: 'ssa.smtp.*',
+                        icon: 'mail',
+                        roles: ['Software Super Admin'],
+                        rolesOnly: true,
                     },
                     // NOTE: "Pricing & Plans" is intentionally NOT repeated here.
                     // Plan management is reached once, from the Platform Overview

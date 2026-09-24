@@ -6,6 +6,7 @@ use App\Models\Deposit;
 use App\Models\Institution;
 use App\Models\MealEntry;
 use App\Models\MealRateSetting;
+use App\Models\Refund;
 use App\Models\Student;
 use App\Models\Subsidy;
 use App\Models\Transaction;
@@ -110,6 +111,10 @@ class FinanceCalculator
 
             return (float) Transaction::query()
                 ->where('type', 'out')
+                // A member REFUND is money returned from the wallet, not a mess
+                // expense - counting it would inflate the per-meal rate. Exclude
+                // the refund's cash-out (and any deposit reversal) here.
+                ->whereNotIn('transactions.source', ['refund', 'deposit'])
                 // An out-transaction whose meal expense was later reversed is no
                 // longer a real expense - exclude it so the month total falls.
                 ->where(function ($q) {
@@ -136,10 +141,12 @@ class FinanceCalculator
             return (float) Transaction::query()
                 ->where('type', 'in')
                 // Reversal entries (cash-ins posted to cancel a reversed expense)
-                // are not deposits - exclude them from the deposit figure.
+                // are not deposits - exclude them from the deposit figure. A
+                // refund reversal (a cash-in that undoes a refund) is likewise not
+                // a new deposit.
                 ->where(function ($q) {
                     $q->whereNull('transactions.category')
-                        ->orWhere('transactions.category', '!=', 'Expense Reversal');
+                        ->orWhereNotIn('transactions.category', ['Expense Reversal', 'Refund Reversal']);
                 })
                 ->whereDate('created_at', '>=', $start->toDateString())
                 ->whereDate('created_at', '<=', $end->toDateString())
@@ -258,7 +265,7 @@ class FinanceCalculator
          * so a multi-institution caller (the SSA registry) gets EACH institution's
          * own roster, meals and deposits - never a platform-wide blend.
          */
-        [$mealCounts, $depositTotals, $members] = $this->scoped(function () use ($start, $end) {
+        [$mealCounts, $depositTotals, $refundTotals, $members] = $this->scoped(function () use ($start, $end) {
             $mealCounts = MealEntry::query()
                 ->whereDate('date', '>=', $start->toDateString())
                 ->whereDate('date', '<=', $end->toDateString())
@@ -285,12 +292,24 @@ class FinanceCalculator
                 ->get()
                 ->keyBy('student_id');
 
+            // Refunds paid back in the month - subtracted from the member's
+            // credit. Reversed refunds are excluded (same rule as deposits).
+            $refundTotals = Refund::query()
+                ->whereNull('reversed_at')
+                ->whereDate('created_at', '>=', $start->toDateString())
+                ->whereDate('created_at', '<=', $end->toDateString())
+                ->select('student_id')
+                ->selectRaw('COALESCE(SUM(amount), 0) as total')
+                ->groupBy('student_id')
+                ->get()
+                ->keyBy('student_id');
+
             $members = Student::query()
                 ->with('department:id,name')
                 ->orderBy('name')
                 ->get();
 
-            return [$mealCounts, $depositTotals, $members];
+            return [$mealCounts, $depositTotals, $refundTotals, $members];
         });
 
         // Split the subsidy pool evenly for a per-head contribution figure.
@@ -298,14 +317,16 @@ class FinanceCalculator
             ? round($subsidyPool / $members->count(), 2)
             : 0.0;
 
-        return $members->map(function (Student $member) use ($mealCounts, $depositTotals, $rate, $subsidyPerHead) {
+        return $members->map(function (Student $member) use ($mealCounts, $depositTotals, $refundTotals, $rate, $subsidyPerHead) {
             $row = $mealCounts->get($member->id);
             $meals = (int) ($row->meals ?? 0);
             $deposited = (float) ($depositTotals->get($member->id)->total ?? 0);
+            $refunded = (float) ($refundTotals->get($member->id)->total ?? 0);
 
             $cost = round($meals * $rate, 2);
-            // Balance is what the member still owes (negative) or has in credit.
-            $balance = round($deposited - $cost, 2);
+            // Balance is what the member still has in credit (positive) or owes
+            // (negative), net of any refunds paid back to them.
+            $balance = round($deposited - $refunded - $cost, 2);
 
             return [
                 'id' => $member->id,
@@ -320,6 +341,7 @@ class FinanceCalculator
                 'meals' => $meals,
                 'meal_cost' => $cost,
                 'deposited' => $deposited,
+                'refunded' => $refunded,
                 'subsidy_share' => $subsidyPerHead,
                 'balance' => $balance,
                 'is_due' => $balance < 0,

@@ -388,6 +388,13 @@ class Institution extends Model
                 $institution->slug = Str::slug($institution->name) ?: 'institution';
             }
 
+            // `timezone` is NOT NULL. An explicit NULL from any caller would
+            // override the column default and fail the insert, so heal it here as
+            // a last line of defence (see InstitutionProvisioner for the cause).
+            if (blank($institution->timezone)) {
+                $institution->timezone = config('app.timezone', 'UTC');
+            }
+
             // Every institution gets an invite code on first save, so a public
             // signup can always be mapped to a tenant (never orphaned).
             if (blank($institution->invite_code)) {
