@@ -79,16 +79,35 @@ class SmtpSettingsTest extends DuskTestCase
         $this->seedRbac();
         $ssa = $this->makeSuperAdmin();
 
+        // Enabled => the connection fields are contextually REQUIRED, so the
+        // payload must be complete; only the password is left blank on the 2nd.
         $this->httpAs($ssa)->put('/platform/smtp', [
-            'enabled' => true, 'host' => 'smtp-relay.brevo.com', 'port' => 587, 'password' => 'first-secret',
-        ]);
+            'enabled' => true, 'host' => 'smtp-relay.brevo.com', 'port' => 587,
+            'username' => 'b9c6fb001@smtp-brevo.com', 'from_address' => 'no-reply@mahfuz.com',
+            'password' => 'first-secret',
+        ])->assertSessionHas('success');
 
         $this->httpAs($ssa)->put('/platform/smtp', [
             'enabled' => true, 'host' => 'smtp.relay.two.test', 'port' => 465, 'encryption' => 'ssl',
-        ]);
+            'username' => 'b9c6fb001@smtp-brevo.com', 'from_address' => 'no-reply@mahfuz.com',
+        ])->assertSessionHas('success');
 
         $this->assertSame('smtp.relay.two.test', MailSettings::all()['host']);
         $this->assertSame('first-secret', MailSettings::all()['password']);
+    }
+
+    public function test_enabling_smtp_without_the_connection_fields_is_rejected(): void
+    {
+        $this->seedRbac();
+        $ssa = $this->makeSuperAdmin();
+
+        // CONTEXTUAL VALIDATION: with SMTP enabled and no relay details, the
+        // save must fail and nothing may be persisted.
+        $this->httpAs($ssa)
+            ->put('/platform/smtp', ['enabled' => true])
+            ->assertSessionHasErrors(['host', 'port', 'username', 'from_address']);
+
+        $this->assertDatabaseCount('platform_settings', 0);
     }
 
     public function test_the_super_admin_can_send_a_test_email(): void

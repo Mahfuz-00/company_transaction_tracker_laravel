@@ -4,6 +4,7 @@ import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import ThemedText from '@/Components/UI/ThemedText';
 import useCan from '@/Utils/can';
+import { Spinner } from '@/Components/UI/Loading';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import { Head, router, useForm } from '@inertiajs/react';
 
@@ -15,7 +16,7 @@ import { Head, router, useForm } from '@inertiajs/react';
  * Dashboard" button that switches the SSA into that institution. New
  * institutions are created together with their first admin account.
  */
-export default function InstitutionRegistry({ institutions, filters, totals, types = [] }) {
+export default function InstitutionRegistry({ institutions, filters, totals, types = [], timezones = [] }) {
     const { can } = useCan();
     const { confirm } = useFeedback();
     const canManage = can('institutions.manage');
@@ -283,6 +284,7 @@ export default function InstitutionRegistry({ institutions, filters, totals, typ
                             disabled={processing}
                             className="inline-flex items-center gap-2 rounded-lg bg-[var(--accent)] px-5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                         >
+                            {processing && <Spinner className="h-4 w-4" />}
                             {processing ? 'Creating...' : 'Create Institution'}
                         </button>
                     </>
@@ -352,9 +354,11 @@ export default function InstitutionRegistry({ institutions, filters, totals, typ
                             <Field
                                 label="Timezone"
                                 name="timezone"
+                                type="select"
                                 value={data.timezone}
                                 error={errors.timezone}
-                                placeholder="Asia/Dhaka"
+                                options={[{ value: '', label: 'Default (UTC)' }, ...timezones]}
+                                hint="Pick a valid global timezone. Defaults to UTC if left unset."
                                 onChange={(e) => setData('timezone', e.target.value)}
                             />
                         </div>
@@ -457,6 +461,7 @@ function OnboardingFields({ data, setData, errors }) {
                     label="Trial length (days)"
                     name="trial_days"
                     type="number"
+                    required
                     value={data.trial_days}
                     error={errors.trial_days}
                     hint="Defaults to 7 days. A reminder email is sent automatically as it nears its end."
@@ -467,6 +472,7 @@ function OnboardingFields({ data, setData, errors }) {
                     <Field
                         label="Plan name"
                         name="subscription_plan"
+                        required
                         value={data.subscription_plan}
                         error={errors.subscription_plan}
                         placeholder="e.g. Standard"
@@ -476,6 +482,7 @@ function OnboardingFields({ data, setData, errors }) {
                         label="Monthly amount"
                         name="subscription_amount"
                         type="number"
+                        required
                         value={data.subscription_amount}
                         error={errors.subscription_amount}
                         placeholder="0.00"

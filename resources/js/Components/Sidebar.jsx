@@ -59,7 +59,7 @@ export default function Sidebar({ user, onNavigate }) {
      * sidebar must NOT show a tenant institution name (which wrongly implied the
      * SSA "belonged" to whichever workspace happened to be active).
      *
-     *   - SSA, not switched in : platform branding ("SaaS Control Center").
+     *   - SSA, not switched in : platform branding ("NomNomytics").
      *   - SSA, switched into a tenant : that tenant's name (they ARE inside it),
      *     so it stays clear which workspace they are operating in.
      *   - Everyone else : their own institution.

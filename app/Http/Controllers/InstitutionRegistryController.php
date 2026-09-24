@@ -8,6 +8,7 @@ use App\Support\AuditLogger;
 use App\Support\FinanceCalculator;
 use App\Support\InstitutionProvisioner;
 use App\Support\TenantManager;
+use App\Support\Timezones;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -141,6 +142,8 @@ class InstitutionRegistryController extends Controller
                 ])
                 ->values(),
             'filters' => ['search' => $search],
+            // Valid IANA timezones for the create form's dropdown.
+            'timezones' => Timezones::options(),
             'totals' => [
                 'institutions' => $institutions->count(),
                 'active' => $institutions->where('is_active', true)->count(),
@@ -197,15 +200,18 @@ class InstitutionRegistryController extends Controller
             'contact_phone' => ['nullable', 'string', 'max:30'],
             'address' => ['nullable', 'string', 'max:255'],
             'currency_code' => ['nullable', 'string', 'max:10'],
-            'timezone' => ['nullable', 'string', 'max:64'],
+            // A real IANA timezone only (from the dropdown).
+            'timezone' => ['nullable', 'string', Rule::in(Timezones::all())],
             // FLEXIBLE ONBOARDING: the SSA chooses a 7-day free trial or an
             // immediate permanent subscription. Defaults to the trial so a
             // mis-configured form never silently commits a customer to billing.
             'onboarding_mode' => ['nullable', Rule::in(['trial', 'subscription'])],
-            // Subscription details (only relevant for the subscription path).
-            'subscription_plan' => ['nullable', 'string', 'max:40'],
-            'subscription_amount' => ['nullable', 'numeric', 'min:0'],
-            'trial_days' => ['nullable', 'integer', 'min:1', 'max:90'],
+            // CONTEXTUAL VALIDATION: the ACTIVE mode's fields become mandatory,
+            // while the columns stay nullable. A trial needs its length; a paid
+            // subscription needs a plan name and an amount.
+            'subscription_plan' => ['nullable', 'string', 'max:40', 'required_if:onboarding_mode,subscription'],
+            'subscription_amount' => ['nullable', 'numeric', 'min:0', 'required_if:onboarding_mode,subscription'],
+            'trial_days' => ['nullable', 'integer', 'min:1', 'max:90', 'required_if:onboarding_mode,trial'],
             // The institution admin account provisioned alongside the workspace.
             'admin_name' => ['required', 'string', 'max:255'],
             'admin_email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],

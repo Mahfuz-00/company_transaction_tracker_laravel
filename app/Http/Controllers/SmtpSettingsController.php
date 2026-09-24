@@ -41,13 +41,23 @@ class SmtpSettingsController extends Controller
 
         $data = $request->validate([
             'enabled' => ['boolean'],
-            'host' => ['nullable', 'string', 'max:255'],
-            'port' => ['nullable', 'integer', 'min:1', 'max:65535'],
-            'username' => ['nullable', 'string', 'max:255'],
-            // Blank means "keep the stored secret", so it must be nullable.
-            'password' => ['nullable', 'string', 'max:255'],
+            /*
+             * CONTEXTUAL VALIDATION (UI-state driven, columns stay nullable).
+             *
+             * While SMTP is DISABLED every field is optional - the platform
+             * simply falls back to the .env mailer. The moment the SSA switches
+             * it ON, the connection fields become mandatory, so a half-configured
+             * relay can never be saved and silently break all outbound mail.
+             */
+            'host' => ['nullable', 'string', 'max:255', Rule::requiredIf($request->boolean('enabled'))],
+            'port' => ['nullable', 'integer', 'min:1', 'max:65535', Rule::requiredIf($request->boolean('enabled'))],
+            'username' => ['nullable', 'string', 'max:255', Rule::requiredIf($request->boolean('enabled'))],
+            // Required unless a secret is already stored (blank = keep existing).
+            'password' => ['nullable', 'string', 'max:255', Rule::requiredIf(
+                fn () => $request->boolean('enabled') && ! MailSettings::forDisplay()['has_password']
+            )],
             'encryption' => ['nullable', Rule::in(['tls', 'ssl', 'none'])],
-            'from_address' => ['nullable', 'email', 'max:255'],
+            'from_address' => ['nullable', 'email', 'max:255', Rule::requiredIf($request->boolean('enabled'))],
             'from_name' => ['nullable', 'string', 'max:120'],
         ]);
 

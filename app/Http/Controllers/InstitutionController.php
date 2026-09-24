@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Institution;
 use App\Support\AuditLogger;
+use App\Support\Timezones;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -92,6 +93,9 @@ class InstitutionController extends Controller
             'termKeys' => collect(self::EDITABLE_TERMS)
                 ->map(fn ($label, $key) => ['key' => $key, 'label' => $label])
                 ->values(),
+            // Valid IANA timezones for the dropdown, so the field is a picker
+            // (never free text) and always saves a real identifier.
+            'timezones' => Timezones::options(),
         ]);
     }
 
@@ -118,7 +122,9 @@ class InstitutionController extends Controller
             'subtitle' => ['nullable', 'string', 'max:160'],
             'type' => ['required', Rule::in(array_keys(Institution::TYPES))],
             'currency_code' => ['nullable', 'string', 'max:10'],
-            'timezone' => ['nullable', 'string', 'max:64'],
+            // A real IANA timezone only - the UI offers a dropdown, and this
+            // rejects any crafted value that is not on that list.
+            'timezone' => ['nullable', 'string', Rule::in(Timezones::all())],
             'address' => ['nullable', 'string', 'max:255'],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'contact_phone' => ['nullable', 'string', 'max:30'],

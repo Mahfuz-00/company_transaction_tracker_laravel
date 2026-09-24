@@ -241,7 +241,13 @@ export default function SubsidySources({ sources, totalPercentage }) {
                             value={data.key}
                             error={errors.key}
                             placeholder="Auto from name"
-                            hint="Optional. Lowercase, underscores only."
+                            // KEY FIELD RULE: on edit the key is an immutable
+                            // identifier (recorded subsidies reference it), so it
+                            // is shown read-only and never modified.
+                            disabled={Boolean(editing)}
+                            hint={editing
+                                ? 'Immutable - recorded subsidies reference this key.'
+                                : 'Optional. Lowercase, underscores only. Auto-derived from the name if left blank.'}
                             onChange={(e) => setData('key', e.target.value)}
                         />
                         <Field

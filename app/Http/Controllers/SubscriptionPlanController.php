@@ -205,7 +205,10 @@ class SubscriptionPlanController extends Controller
             'key' => ['nullable', 'string', 'max:60', 'regex:/^[a-z0-9_]+$/',
                 Rule::unique('subscription_plans', 'key')->ignore($plan?->id)],
             'description' => ['nullable', 'string', 'max:500'],
-            'monthly_price' => ['required', 'numeric', 'min:0'],
+            // CONTEXTUAL VALIDATION: a PAID plan must carry a price; a free plan
+            // does not - so the rule tracks the `is_free` toggle while the
+            // underlying column stays nullable.
+            'monthly_price' => ['nullable', 'numeric', 'min:0', Rule::requiredIf(fn () => ! $request->boolean('is_free'))],
             'is_free' => ['boolean'],
             'is_trial_default' => ['boolean'],
             'member_limit' => ['required', 'integer', 'min:-1'],
@@ -217,7 +220,19 @@ class SubscriptionPlanController extends Controller
             'is_public' => ['boolean'],
         ]);
 
-        $data['key'] = $data['key'] ?? Str::slug($data['name'], '_');
+        /*
+         * KEY PROTECTION (edit vs create).
+         *
+         * `key` is the stable identifier institutions store as their plan.
+         *   - create: a blank key is fine - derive one from the name.
+         *   - update: a blank key must NEVER clear the stored value - keep the
+         *     existing key. (The previous `$data['key'] ?? ...` treated an empty
+         *     string as present and overwrote the key with '', which would detach
+         *     every institution already on the plan.)
+         */
+        $data['key'] = filled($data['key'] ?? null)
+            ? $data['key']
+            : ($plan?->key ?: Str::slug($data['name'], '_'));
         $data['features'] = array_values(array_filter($data['features'] ?? [], fn ($f) => filled($f)));
         // A free plan is always priced at zero.
         if (! empty($data['is_free'])) {

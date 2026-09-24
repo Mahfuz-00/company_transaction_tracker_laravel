@@ -38,7 +38,8 @@ class InstitutionWelcomeMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Welcome to ' . config('app.name', 'the platform') . ' - your workspace is ready',
+            subject: 'Welcome to ' . \App\Support\PlatformBranding::name()
+                . ' - "' . $this->institution->name . '" is ready',
             tags: ['institution_welcome'],
         );
     }
@@ -49,6 +50,7 @@ class InstitutionWelcomeMail extends Mailable
             view: 'mail.institution-welcome',
             with: [
                 'institutionName' => $this->institution->name,
+                'platformName' => \App\Support\PlatformBranding::name(),
                 'adminName' => $this->admin->name,
                 'adminEmail' => $this->admin->email,
                 'loginUrl' => route('login'),

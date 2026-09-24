@@ -1,4 +1,4 @@
-# Transaction Tracker
+# NomNomytics
 
 A multi-institution **SaaS for tracking shared meal money** — member **deposits**, daily **meal entries**, mess **expenses**, and institutional **subsidies** — settling who owes what through a per-meal rate. One Laravel 12 + Inertia/React monolith serves both the web console and a Sanctum-protected mobile JSON API.
 

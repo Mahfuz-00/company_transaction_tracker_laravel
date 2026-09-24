@@ -107,6 +107,7 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                             {!data.enabled && (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
                                     SMTP is disabled - the platform falls back to the mailer configured in the environment.
+                                    Enable it to be prompted for the required connection fields.
                                 </div>
                             )}
 
@@ -115,6 +116,7 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                     <Field
                                         label="SMTP Host"
                                         name="host"
+                                        required={data.enabled}
                                         value={data.host}
                                         error={errors.host}
                                         placeholder="e.g. smtp-relay.brevo.com"
@@ -126,6 +128,7 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                     label="Port"
                                     name="port"
                                     type="number"
+                                    required={data.enabled}
                                     min={1}
                                     max={65535}
                                     value={data.port}
@@ -137,6 +140,7 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                     label="Encryption"
                                     name="encryption"
                                     type="select"
+                                    required={data.enabled}
                                     value={data.encryption}
                                     error={errors.encryption}
                                     options={[
@@ -150,6 +154,7 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                 <Field
                                     label="Username"
                                     name="username"
+                                    required={data.enabled}
                                     value={data.username}
                                     error={errors.username}
                                     placeholder="SMTP username"
@@ -159,6 +164,9 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                 <div>
                                     <label htmlFor="password" className="mb-1.5 block text-xs font-semibold text-slate-700">
                                         Password
+                                        {!(data.enabled && !settings.has_password) && (
+                                            <span className="font-normal text-slate-400"> (optional)</span>
+                                        )}
                                     </label>
                                     <div className="flex items-center gap-2">
                                         <input
@@ -189,6 +197,7 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                         label="From Address"
                                         name="from_address"
                                         type="email"
+                                        required={data.enabled}
                                         value={data.from_address}
                                         error={errors.from_address}
                                         placeholder="no-reply@yourdomain.com"

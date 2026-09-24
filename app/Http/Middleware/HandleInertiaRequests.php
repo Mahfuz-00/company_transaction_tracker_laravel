@@ -134,6 +134,10 @@ class HandleInertiaRequests extends Middleware
                     'type' => $this->institution()->type,
                     'type_label' => $this->institution()->typeLabel(),
                     'currency_code' => $this->institution()->currency_code,
+                    // The workspace timezone, so any page can render dates in the
+                    // institution's own local time (and the Settings dropdown can
+                    // show the currently-saved value).
+                    'timezone' => $this->institution()->timezone,
                     'terms' => $this->institution()->terminologyMap(),
                     'logo_url' => $this->institution()->logoUrl(),
                     'banner_url' => $this->institution()->bannerUrl(),

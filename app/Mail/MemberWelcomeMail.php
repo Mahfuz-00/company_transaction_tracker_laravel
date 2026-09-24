@@ -30,7 +30,7 @@ class MemberWelcomeMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $brand = $this->institution?->name ?: config('app.name', 'the platform');
+        $brand = $this->institution?->name ?: \App\Support\PlatformBranding::name();
 
         return new Envelope(
             subject: 'Welcome aboard - your ' . $brand . ' account is active',

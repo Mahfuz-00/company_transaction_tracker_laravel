@@ -78,6 +78,25 @@ class ResolveTenant
             $manager->force($resolved);
         }
 
+        /*
+         * 5. REFLECT THE WORKSPACE TIMEZONE in the operational context.
+         *
+         * The active institution's timezone (set in Settings → Institution)
+         * becomes the request's default timezone, so every `now()`, date format,
+         * report heading and scheduled reminder inside this tenant renders in the
+         * workspace's own local time. UTC-stored values are unaffected; only the
+         * presentation/derivation context shifts per tenant. Guarded so an
+         * unknown/blank value never overrides the platform default.
+         */
+        if ($resolved !== null) {
+            $timezone = Institution::query()->whereKey($resolved)->value('timezone');
+
+            if (\App\Support\Timezones::isValid($timezone)) {
+                config(['app.timezone' => $timezone]);
+                date_default_timezone_set($timezone);
+            }
+        }
+
         return $next($request);
     }
 

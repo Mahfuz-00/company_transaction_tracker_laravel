@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import useMoney from '@/Utils/useMoney';
+import { Spinner } from '@/Components/UI/Loading';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 
 /**
@@ -243,7 +244,7 @@ function PlanModal({ plan, onClose }) {
                             className="w-full rounded-xl border-slate-200 px-3.5 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
                         />
                     </Field>
-                    <Field label="Monthly price" error={errors.monthly_price}>
+                    <Field label={data.is_free ? 'Monthly price' : 'Monthly price *'} error={errors.monthly_price}>
                         <input
                             type="number"
                             min="0"
@@ -255,6 +256,26 @@ function PlanModal({ plan, onClose }) {
                         />
                     </Field>
                 </div>
+
+                {/*
+                 * KEY FIELD RULE (edit vs create).
+                 *
+                 * On EDIT the plan key is a stable identifier institutions store
+                 * as their plan, so it is shown but never re-generated or cleared
+                 * - a blank submit keeps the existing key server-side. On CREATE
+                 * the key is derived from the name automatically, so the operator
+                 * never has to invent one.
+                 */}
+                {isEdit ? (
+                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs text-slate-500">
+                        <span>Plan key (immutable)</span>
+                        <code className="font-semibold text-slate-700">{plan.key}</code>
+                    </div>
+                ) : (
+                    <p className="text-[11px] text-slate-400">
+                        A unique plan key is generated from the name automatically.
+                    </p>
+                )}
 
                 <Field label="Description" error={errors.description}>
                     <input
@@ -375,8 +396,8 @@ function AssignModal({ target, plans, onClose }) {
 
 function ModalShell({ title, onClose, children }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
-            <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border-slate-100 bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs animate-in">
+            <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border-slate-100 bg-white p-6 shadow-xl animate-rise">
                 <h3 className="text-base font-bold text-slate-900">{title}</h3>
                 <div className="mt-5">{children}</div>
             </div>
@@ -421,8 +442,9 @@ function ModalActions({ onCancel, processing, submitLabel }) {
             <button
                 type="submit"
                 disabled={processing}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50"
             >
+                {processing && <Spinner className="h-4 w-4" />}
                 {processing ? 'Saving...' : submitLabel}
             </button>
         </div>
