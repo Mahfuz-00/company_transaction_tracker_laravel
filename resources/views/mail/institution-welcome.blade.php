@@ -5,8 +5,12 @@
     'headerSubtitle' => $typeLabel ?? 'Institution workspace',
 ])
 
+@php
+    $platform = $platformName ?? \App\Support\PlatformBranding::name();
+    $institution = $institutionName ?? 'your workspace';
+@endphp
 <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.01em;">
-    Welcome to the platform! 🎉
+    Welcome to {{ $platform }}! 🎉
 </h1>
 
 <p style="margin:0 0 16px;font-size:14px;line-height:1.65;color:#475569;">
@@ -14,9 +18,9 @@
 </p>
 
 <p style="margin:0 0 16px;font-size:14px;line-height:1.65;color:#475569;">
-    Your institution workspace <strong style="color:#0f172a;">{{ $institutionName }}</strong>
-    has been set up successfully. You are the administrator for this workspace, so you can
-    invite your team, add members, and start tracking meals and expenses right away.
+    Your workspace on {{ $platform }} - <strong style="color:#0f172a;">{{ $institution }}</strong> -
+    has been created successfully, and you are its administrator. You can invite your team,
+    add members, and start tracking meals, deposits and expenses right away.
 </p>
 
 {{-- Billing-status panel: the key detail the admin needs up front. --}}

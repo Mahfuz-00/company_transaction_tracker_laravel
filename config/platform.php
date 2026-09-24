@@ -19,7 +19,7 @@ return [
     |
     */
 
-    'name' => env('PLATFORM_NAME', 'SaaS Control Center'),
+    'name' => env('PLATFORM_NAME', 'NomNomytics'),
 
     // The short line under the name in headers.
     'tagline' => env('PLATFORM_TAGLINE', 'Multi-institution meal & expense platform'),
@@ -29,7 +29,7 @@ return [
 
     // The SSA sidebar heading (kept separate so it can read differently from the
     // public marketing name if you ever want that).
-    'control_center' => env('PLATFORM_CONTROL_CENTER', 'SaaS Control Center'),
+    'control_center' => env('PLATFORM_CONTROL_CENTER', 'NomNomytics'),
 
     // Optional platform-wide logo path (public disk). Null falls back to the app
     // logo component.

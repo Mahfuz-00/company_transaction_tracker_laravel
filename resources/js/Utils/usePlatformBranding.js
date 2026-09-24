@@ -14,10 +14,10 @@ import { usePage } from '@inertiajs/react';
  *   const { name, tagline, adminSubtitle, controlCenter, logoUrl } = usePlatformBranding();
  */
 const FALLBACK = {
-    name: 'Meal Tracking Platform',
+    name: 'NomNomytics',
     tagline: 'Multi-institution meal & expense platform',
     admin_subtitle: 'Super Admin Portal',
-    control_center: 'Meal Tracking Platform',
+    control_center: 'NomNomytics',
     logo_url: null,
 };
 

@@ -34,7 +34,7 @@ class PlatformBranding
 
     public static function name(): string
     {
-        return (string) config('platform.name', config('app.name', 'Meal Tracking Platform'));
+        return (string) config('platform.name', config('app.name', 'NomNomytics'));
     }
 
     public static function tagline(): string

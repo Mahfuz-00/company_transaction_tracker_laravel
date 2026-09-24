@@ -8,7 +8,9 @@
      * outbox preview is byte-for-byte what the recipient receives.
      */
     $accent = $accent ?? '#4f46e5';
-    $appName = config('app.name', 'Meal & Expense Manager');
+    // The PLATFORM name (NomNomytics) - single source of truth, so a rebrand in
+    // config/platform.php flows straight into every email shell.
+    $appName = \App\Support\PlatformBranding::name();
     $brandName = $institutionName ?? $appName;
 @endphp
 <!DOCTYPE html>

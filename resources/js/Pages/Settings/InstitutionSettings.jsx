@@ -77,7 +77,7 @@ function TerminologyPreview({ terms, effect }) {
  *   - a pending-type-change confirmation guards against silently discarding the
  *     user's terminology overrides.
  */
-export default function InstitutionSettings({ institution, types = [], termKeys = [] }) {
+export default function InstitutionSettings({ institution, types = [], termKeys = [], timezones = [] }) {
     const { can } = useCan();
     const canManage = can('institution.manage');
 
@@ -477,7 +477,8 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
                         <div className="border-b border-slate-100 pb-4">
                             <h3 className="text-base font-bold text-slate-900">Regional</h3>
                             <p className="mt-0.5 text-xs text-slate-500">
-                                Configure system timezone settings.
+                                The timezone this workspace operates in. Dates, reports and reminders
+                                render in this zone immediately after saving.
                             </p>
                         </div>
 
@@ -485,11 +486,25 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
                             <Field
                                 label="Timezone"
                                 name="timezone"
+                                type="select"
                                 value={data.timezone}
                                 error={errors.timezone}
-                                placeholder="Asia/Dhaka"
+                                disabled={!canManage}
+                                options={
+                                    timezones.length
+                                        ? timezones
+                                        : [{ value: data.timezone || 'UTC', label: data.timezone || 'UTC' }]
+                                }
                                 onChange={(event) => setData('timezone', event.target.value)}
                             />
+                            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-400">
+                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                {institution?.timezone && institution.timezone !== data.timezone
+                                    ? `Saving will switch this workspace from ${institution.timezone} to ${data.timezone}.`
+                                    : 'Pick from the list of valid global timezones.'}
+                            </p>
                         </div>
                     </section>
                 </div>

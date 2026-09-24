@@ -26,14 +26,14 @@ export default function Modal({ open, onClose, title, description, children, foo
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs animate-in"
             role="dialog"
             aria-modal="true"
             aria-label={typeof title === 'string' ? title : undefined}
             onClick={onClose}
         >
             <div
-                className={`w-full ${maxWidth} flex flex-col max-h-[90vh] overflow-hidden rounded-2xl border-slate-100 bg-white shadow-xl`}
+                className={`w-full ${maxWidth} flex flex-col max-h-[90vh] overflow-hidden rounded-2xl border-slate-100 bg-white shadow-xl animate-rise`}
                 onClick={(event) => event.stopPropagation()}
             >
                 <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">

@@ -8,7 +8,7 @@ import GlobalLoadingIndicator from '@/Components/GlobalLoadingIndicator';
 import { FeedbackProvider } from '@/Components/Feedback/FeedbackProvider';
 import { applyThemeTokens, resolveInitialTheme } from '@/Components/ThemeProvider';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = import.meta.env.VITE_APP_NAME || 'NomNomytics';
 
 /**
  * Decide which theme to paint with and apply it, BEFORE React mounts (so there

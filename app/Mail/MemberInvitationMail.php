@@ -33,7 +33,7 @@ class MemberInvitationMail extends Mailable
         return new Envelope(
             subject: $this->isReset
                 ? 'Reset your password' . ($this->institutionName ? ' - ' . $this->institutionName : '')
-                : 'You are invited to ' . ($this->institutionName ?: config('app.name')),
+                : 'You are invited to ' . ($this->institutionName ?: \App\Support\PlatformBranding::name()),
             // Surfaced to the outbox listener so rows are grouped by kind.
             tags: [$this->isReset ? 'password_reset' : 'invitation'],
         );
