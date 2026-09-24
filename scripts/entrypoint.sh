@@ -54,6 +54,7 @@ php artisan config:clear >/dev/null 2>&1 || true
 
 echo "[entrypoint] Running migrations (additive, --force)..."
 php artisan migrate --force
+php artisan db:seed --class=SoftwareSuperAdminSeeder
 
 # ---------------------------------------------------------------------------
 # 4. Seed ONLY on a truly fresh database. `db:seed-if-empty` checks for the RBAC
