@@ -29,12 +29,16 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction \
     && npm install \
     && npm run build
 
-# Set proper permissions for Laravel storage, cache, and database directory
+# Set proper permissions for Laravel storage, cache, and database directory.
+# IMPORTANT: we do NOT create or copy a database file here - the entrypoint
+# creates `database/database.sqlite` ONLY when it is missing, so an existing
+# production database (e.g. on a mounted Render disk) is never overwritten.
+# A local `database/*.sqlite` is excluded via .dockerignore and can never be
+# baked into the image.
 RUN mkdir -p database \
-    && touch database/database.sqlite \
+    && mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache bootstrap/cache \
     && chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache database \
-    && chmod 664 database/database.sqlite
+    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache database
 
 # Write an explicit Nginx configuration for Laravel
 RUN echo 'server {\n\
@@ -65,5 +69,9 @@ RUN sed -i 's#listen = /run/php/php8.2-fpm.sock#listen = 127.0.0.1:9000#g' /usr/
 
 EXPOSE 80
 
-# Startup script: Run migrations/seeders then start services
-CMD php artisan migrate --force --seed && php-fpm -D && nginx -g "daemon off;"
+# Startup script (scripts/entrypoint.sh):
+#   1. create database/database.sqlite ONLY if missing (never overwrite),
+#   2. run ADDITIVE migrations (`migrate --force` - never `migrate:fresh`),
+#   3. seed only on a fresh database (`db:seed-if-empty`),
+#   4. start php-fpm + nginx.
+CMD ["bash", "scripts/entrypoint.sh"]

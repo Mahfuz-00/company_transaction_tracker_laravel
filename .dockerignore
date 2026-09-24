@@ -1,0 +1,46 @@
+# Docker build context exclusions.
+#
+# CRITICAL FOR DATA SAFETY: the SQLite database files are NEVER copied into the
+# image. If a local `database/database.sqlite` were baked in, every redeploy
+# would ship that snapshot over the production file.
+.git
+.gitignore
+.github
+
+# Secrets - never bake into an image; Render injects env vars at runtime.
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output are regenerated inside the image
+# (composer install / npm install && npm run build).
+/vendor
+/node_modules
+/public/build
+/public/hot
+/public/storage
+
+# Local databases - MUST NOT enter the image.
+/database/*.sqlite
+/database/*.sqlite-journal
+/database/*.sqlite-wal
+/database/*.sqlite-shm
+
+# Runtime / local artefacts.
+*.log
+/storage/logs/*
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/pail
+/.phpunit.cache
+/.phpunit.result.cache
+/database/dusk.sqlite
+/tests/Browser/console
+/tests/Browser/screenshots
+
+# Editor / OS noise.
+.idea
+.vscode
+.DS_Store
+Thumbs.db

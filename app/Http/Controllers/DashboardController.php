@@ -44,9 +44,18 @@ class DashboardController extends Controller
             // Intentional tenant view: fall through to the scoped dashboard.
         }
 
-        // Members get their OWN dashboard, not the manager's pooled overview.
-        // Sending them there also keeps the org-wide figures off their screen.
-        if ($user && $user->isMember() && ! $user->isSuperAdmin() && ! $user->isInstitutionAdmin()) {
+        /*
+         * Members get their OWN dashboard, not the manager's pooled overview.
+         * Sending them there also keeps the org-wide figures off their screen.
+         *
+         * DUAL-ROLE GUARD: a staff account that is ALSO a member (an admin /
+         * meal manager who lives in the workspace they run) keeps the STAFF
+         * dashboard as its landing page - it must not be swallowed by the
+         * member redirect. That user still reaches their personal member area
+         * through the "My Account" sidebar section, which the Member role
+         * exposes. Only a member with NO staff role is redirected here.
+         */
+        if ($user && $user->isMember() && ! $user->hasAnyStaffRole()) {
             return redirect()->route('member.dashboard');
         }
 

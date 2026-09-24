@@ -8,6 +8,7 @@ use App\Models\Institution;
 use App\Models\MealEntry;
 use App\Models\MealExpense;
 use App\Models\MealRateSetting;
+use App\Models\Refund;
 use App\Models\Student;
 use App\Models\Subsidy;
 use App\Models\SubsidySource;
@@ -69,7 +70,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Every model carrying business meaning is audited. `Student` is the
         // member record; `User` covers account changes and invitations.
-        foreach ([Student::class, User::class, Deposit::class, Subsidy::class, SubsidySource::class, MealRateSetting::class, Vendor::class, Department::class, MealEntry::class, MealExpense::class, Transaction::class] as $model) {
+        foreach ([Student::class, User::class, Deposit::class, Refund::class, Subsidy::class, SubsidySource::class, MealRateSetting::class, Vendor::class, Department::class, MealEntry::class, MealExpense::class, Transaction::class] as $model) {
             $model::observe(RecordActivity::class);
         }
 
@@ -97,6 +98,18 @@ class AppServiceProvider extends ServiceProvider
 
         if ($this->app->environment('production')) {
             \Illuminate\Support\Facades\URL::forceScheme('https');
+        }
+
+        /*
+         * DYNAMIC SMTP: if the Software Super Admin has configured a mail relay
+         * in the SSA panel, override the env-based mailer for this process. The
+         * read is cached and fully guarded, so a missing table (fresh migrate) or
+         * a bad decrypt simply leaves the .env configuration in place.
+         */
+        try {
+            \App\Support\MailSettings::apply();
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 }

@@ -23,6 +23,12 @@
 /storage/*.key
 /storage/pail
 /vendor
+# SQLite databases are per-environment state, never source. Committing one would
+# let a local snapshot overwrite (or be shipped into) the production database.
+/database/*.sqlite
+/database/*.sqlite-journal
+/database/*.sqlite-wal
+/database/*.sqlite-shm
 # Command Code: share the deliberate stack agents, but NOT machine-local config
 # or the auto-learned taste preferences.
 /.commandcode/settings.json

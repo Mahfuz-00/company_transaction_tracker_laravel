@@ -230,6 +230,21 @@ class User extends Authenticatable
         return $this->hasRole('Member') || $this->studentRecord() !== null;
     }
 
+    /**
+     * Does this user hold ANY staff (non-member) role?
+     *
+     * DUAL-ROLE AWARENESS: a staff account can ALSO be a meal member (an admin
+     * who lives in the dorm they manage). This answers "do they have a
+     * management-facing role" so routing can decide between the staff dashboard
+     * and the personal member dashboard without role collisions.
+     */
+    public function hasAnyStaffRole(): bool
+    {
+        return $this->isSuperAdmin()
+            || $this->isInstitutionAdmin()
+            || $this->hasRole('Meal Manager');
+    }
+
     /* ------------------------------------------------------------------ *
      * Role assignment safeguards
      * ------------------------------------------------------------------ */
@@ -369,10 +384,21 @@ class User extends Authenticatable
         }
 
         if ($this->hasRole('Meal Manager')) {
-            return Student::query()
+            $ids = Student::query()
                 ->where('manager_id', $this->id)
                 ->pluck('id')
                 ->all();
+
+            // DUAL-ROLE: a Meal Manager who is ALSO a member must be able to see
+            // and act on their OWN member record, which the manager_id filter
+            // above excludes (a member is never their own manager).
+            $own = $this->studentRecord();
+
+            if ($own && ! in_array($own->id, $ids, true)) {
+                $ids[] = $own->id;
+            }
+
+            return $ids;
         }
 
         // A member sees only their own record.
