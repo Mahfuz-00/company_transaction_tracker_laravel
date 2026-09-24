@@ -21,6 +21,7 @@ import { Head, Link } from '@inertiajs/react';
  *     so it can identify rows across re-renders (the mobile equivalent of a
  *     stable list-diff id).
  */
+
 export default function Index({ auth, roles }) {
     return (
         <AuthenticatedLayout user={auth.user} header={<h2 className="font-semibold text-xl text-gray-800 leading-tight">Roles</h2>}>
