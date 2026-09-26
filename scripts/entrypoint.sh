@@ -42,9 +42,14 @@ if [ "$DB_CONNECTION" = "sqlite" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Runtime permissions (best-effort; a mounted disk may not allow chown).
+# 2. Runtime permissions & storage setup (best-effort; a mounted disk may not allow chown).
 # ---------------------------------------------------------------------------
+mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache storage/logs bootstrap/cache
+touch storage/logs/laravel.log
+
 chown -R www-data:www-data storage bootstrap/cache database 2>/dev/null || true
+chmod -R 775 storage bootstrap/cache database 2>/dev/null || true
+chmod -R 775 storage/logs/laravel.log 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # 3. Clear any stale compiled config, then migrate ADDITIVELY.
