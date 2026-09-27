@@ -40,6 +40,21 @@ abstract class DuskTestCase extends BaseTestCase
         $this->migrateDuskDatabase();
 
         /*
+         * FLUSH THE SPATIE PERMISSION CACHE BEFORE EACH TEST.
+         *
+         * spatie/laravel-permission caches the ROLE -> PERMISSION map for 24 hours
+         * (config/permission.php). That cache is shared with the separate
+         * `artisan serve` process the browser talks to, so a role granted in THIS
+         * test (e.g. assigning 'Meal Manager' to a fixture) would still be checked
+         * against a stale map - and a permission the role genuinely holds would be
+         * reported as missing.
+         *
+         * The symptom is a confusing 403 on a route the user should reach. Clearing
+         * the cache here makes each test see the roles as they are NOW.
+         */
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+        /*
          * Several tests ALSO make Laravel HTTP calls directly (actingAs()->post())
          * to assert server-side effects (a flash message, a 403, a DB write). Those
          * calls run through the full HTTP kernel, so CSRF would reject them with a

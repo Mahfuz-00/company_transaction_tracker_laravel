@@ -193,9 +193,22 @@ return [
         /*
          * By default all permissions are cached for 24 hours to speed up performance.
          * When permissions or roles are updated the cache is flushed automatically.
+         *
+         * TEST OVERRIDE: the Dusk suite seeds roles FRESH in every test while the
+         * browser talks to a SEPARATE `artisan serve` process. That process keeps
+         * its own cache, so a role granted in the test would be checked against a
+         * stale map - producing a confusing 403 on a route the user genuinely holds
+         * the permission for. Setting PERMISSION_CACHE_ENABLED=false (as
+         * .env.dusk.local does) makes every check read the database directly.
          */
 
-        'expiration_time' => DateInterval::createFromDateString('24 hours'),
+        /*
+         * A zero-length interval effectively disables caching, which is what the
+         * test environment needs (see the note above).
+         */
+        'expiration_time' => env('PERMISSION_CACHE_ENABLED', true)
+            ? DateInterval::createFromDateString('24 hours')
+            : DateInterval::createFromDateString('0 seconds'),
 
         /*
          * The cache key used to store all permissions.

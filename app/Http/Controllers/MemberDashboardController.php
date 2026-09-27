@@ -29,10 +29,13 @@ class MemberDashboardController extends Controller
         $student = $user->studentRecord();
 
         // A user with no member record yet (e.g. a fresh staff account that was
-        // mis-routed here) is shown a clear, non-crashing empty state.
+        // mis-routed here) is shown a clear, non-crashing empty state. A
+        // self-signup now creates the roster row, so this state should be rare -
+        // it remains as a safe fallback rather than a dead end.
         if (! $student) {
             return Inertia::render('Member/Dashboard', [
                 'hasMemberRecord' => false,
+                'institutionName' => \App\Models\Institution::current()?->name,
             ]);
         }
 
@@ -64,6 +67,9 @@ class MemberDashboardController extends Controller
 
         return Inertia::render('Member/Dashboard', [
             'hasMemberRecord' => true,
+            // The workspace this member belongs to, so the header can confirm the
+            // account is linked and active (the fix for the "not linked" report).
+            'institutionName' => $student->institution?->name,
             'member' => [
                 'id' => $student->id,
                 'name' => $student->name,

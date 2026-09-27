@@ -1,9 +1,15 @@
 import React from 'react';
+import PasswordInput from '@/Components/PasswordInput';
 
 /**
  * Consistent labelled form control used across the meal modules.
  * Renders the right element per `type` and always surfaces the error,
  * so validation feedback stays uniform no matter which field it is.
+ *
+ * PASSWORD FIELDS: `type="password"` automatically renders the shared
+ * <PasswordInput> (with its eye / visibility toggle) instead of a bare input, so
+ * every Field-based password box in the app gains the reveal affordance at once
+ * with no call-site changes.
  */
 export default function Field({
     label,
@@ -43,6 +49,14 @@ export default function Field({
                         </option>
                     ))}
                 </select>
+            ) : type === 'password' ? (
+                /* PasswordInput owns the type toggle; pass every other prop through. */
+                <PasswordInput
+                    id={name}
+                    name={name}
+                    className={`${baseInput} ${invalid}`}
+                    {...props}
+                />
             ) : (
                 <input
                     id={name}

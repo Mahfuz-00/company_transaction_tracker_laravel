@@ -5,6 +5,7 @@ use App\Http\Controllers\ClaimController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MemberDashboardController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PasswordSetupController;
 use App\Http\Controllers\EmailLogController;
 use App\Http\Controllers\InstitutionBroadcastController;
@@ -98,12 +99,52 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/deposits', [MemberDashboardController::class, 'deposits'])->name('deposits');
         // Personal analytics, scoped exclusively to this member.
         Route::get('/analytics', [MemberDashboardController::class, 'analytics'])->name('analytics');
+        /*
+         * MEMBER-INITIATED PAYMENTS. A member records a payment intent here; it is
+         * PENDING until a manager verifies it, so this route can never move the
+         * balance on its own.
+         */
+        Route::get('/payments', [\App\Http\Controllers\MemberPaymentController::class, 'index'])->name('payments');
+        Route::post('/payments', [\App\Http\Controllers\MemberPaymentController::class, 'store'])->name('payments.store');
+    });
+
+    /*
+     * MEAL MENU VOTING.
+     *
+     * DELIBERATELY OUTSIDE the `role:Member` group above.
+     *
+     * Eligibility is not the same thing as the Member role: an Institution Admin
+     * or Meal Manager who eats in the mess may also vote (that is the whole point
+     * of the `is_meal_participant` opt-in). Gating this behind `role:Member` would
+     * have made an opted-in manager's vote impossible - the 403 this routing fixes.
+     *
+     * The controller therefore owns the eligibility check
+     * (MealMenuController::isEligibleVoter), and refuses anyone who is not a member
+     * and has not opted in.
+     */
+    Route::middleware(['permission:meals.view'])->prefix('my')->name('member.')->group(function () {
+        Route::get('/menus', [\App\Http\Controllers\Meals\MealMenuController::class, 'myMenus'])->name('menus');
+        Route::post('/menus/{mealMenu}/vote', [\App\Http\Controllers\Meals\MealMenuController::class, 'vote'])->name('menus.vote');
     });
 
     // Forced / voluntary password change. Reachable even while a user still
     // holds a temporary password (the middleware allow-lists these names).
     Route::get('/password/change', [ProfileController::class, 'showChangePassword'])->name('password.change');
     Route::put('/password/change', [ProfileController::class, 'updatePassword'])->name('password.change.update');
+
+    // Unlink an external SSO identity from the signed-in account. Refused when it
+    // is the account's only sign-in method (that would lock the user out).
+    Route::delete('/profile/social/{provider}', [\App\Http\Controllers\Auth\SocialAuthController::class, 'unlink'])
+        ->name('oauth.unlink');
+
+    /*
+     * FIRST-TIME ONBOARDING. Every authenticated role sees a role-specific guide
+     * on first login; these endpoints record that it was seen and let the user
+     * replay it later. The CONTENT is delivered via shared Inertia props.
+     */
+    Route::post('/onboarding/complete', [OnboardingController::class, 'complete'])->name('onboarding.complete');
+    Route::post('/onboarding/replay', [OnboardingController::class, 'replay'])->name('onboarding.replay');
+    Route::get('/onboarding/guide', [OnboardingController::class, 'show'])->name('onboarding.guide');
 
     // Email Log / Outbox. SSA sees the whole platform; IA / Meal Manager are
     // scoped to their institution (enforced in the controller).
@@ -191,6 +232,48 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/settings/currency', [SettingsController::class, 'store'])
         ->name('settings.currency.store')
         ->middleware('permission:currency.manage');
+
+    /*
+     * INSTITUTION SUBSCRIPTION PAYMENTS.
+     *
+     * An Institution Admin pays the platform fee from their own dashboard; the
+     * Software Super Admin verifies it. The submission is PENDING until verified,
+     * so an unverified claim can never silently extend access.
+     */
+    Route::get('/settings/subscription', [\App\Http\Controllers\SubscriptionPaymentController::class, 'show'])
+        ->name('settings.subscription.show')
+        ->middleware('permission:institution.view');
+    Route::post('/settings/subscription/payments', [\App\Http\Controllers\SubscriptionPaymentController::class, 'store'])
+        ->name('settings.subscription.store')
+        ->middleware('permission:institution.view');
+
+    // Platform-side verification queue (SSA only; re-asserted in the controller).
+    Route::get('/platform/subscription-payments', [\App\Http\Controllers\SubscriptionPaymentController::class, 'queue'])
+        ->name('ssa.subscription-payments.index')
+        ->middleware('role:Software Super Admin');
+    Route::patch('/platform/subscription-payments/{subscriptionPayment}/approve', [\App\Http\Controllers\SubscriptionPaymentController::class, 'approve'])
+        ->name('ssa.subscription-payments.approve')
+        ->middleware('role:Software Super Admin');
+    Route::patch('/platform/subscription-payments/{subscriptionPayment}/reject', [\App\Http\Controllers\SubscriptionPaymentController::class, 'reject'])
+        ->name('ssa.subscription-payments.reject')
+        ->middleware('role:Software Super Admin');
+
+    /*
+     * MULTI-CURRENCY / FX RATE SNAPSHOTS - SSA only.
+     *
+     * An exchange rate is a PLATFORM-WIDE fact, not a workspace setting: it exists
+     * so the SSA can report revenue across institutions that bill in different
+     * currencies. Only the global role may read or write the rate book.
+     */
+    Route::get('/platform/currencies', [\App\Http\Controllers\FxRateController::class, 'index'])
+        ->name('ssa.currencies.index')
+        ->middleware('role:Software Super Admin');
+    Route::post('/platform/currencies', [\App\Http\Controllers\FxRateController::class, 'store'])
+        ->name('ssa.currencies.store')
+        ->middleware('role:Software Super Admin');
+    Route::delete('/platform/currencies/{fxRate}', [\App\Http\Controllers\FxRateController::class, 'destroy'])
+        ->name('ssa.currencies.destroy')
+        ->middleware('role:Software Super Admin');
 
     /*
      * Theme Customizer - a dedicated settings sub-module available to EVERY
@@ -452,6 +535,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/platform/smtp/test', [SmtpSettingsController::class, 'sendTest'])
         ->name('ssa.smtp.test')
         ->middleware('role:Software Super Admin');
+    // Live connection check (ping) - verifies the relay actually accepts the
+    // credentials without saving or sending anything.
+    Route::post('/platform/smtp/check', [SmtpSettingsController::class, 'check'])
+        ->name('ssa.smtp.check')
+        ->middleware('role:Software Super Admin');
 
     /*
      * TRIAL & SUBSCRIPTION MANAGEMENT - the SSA's view of who is on a 7-day
@@ -549,6 +637,141 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('reports/export', [MealReportController::class, 'export'])
             ->name('reports.export')
             ->middleware('permission:exports.download');
+
+        /*
+         * BULK IMPORT (members / opening balances / historical meals).
+         * The dedicated `import` permission keeps this heavy, write-capable module
+         * off a read-only account.
+         */
+        Route::get('import', [\App\Http\Controllers\Meals\ImportController::class, 'index'])
+            ->name('import.index')->middleware('permission:students.manage');
+        Route::post('import/analyse', [\App\Http\Controllers\Meals\ImportController::class, 'analyse'])
+            ->name('import.analyse')->middleware('permission:students.manage');
+        Route::post('import/commit', [\App\Http\Controllers\Meals\ImportController::class, 'commit'])
+            ->name('import.commit')->middleware('permission:students.manage');
+        Route::get('import/template/{dataset}', [\App\Http\Controllers\Meals\ImportController::class, 'template'])
+            ->name('import.template')->middleware('permission:students.manage');
+
+        /*
+         * ANOMALY MONITOR - flag duplicate deposits, meal spikes, negative
+         * balances and unusual expenses for an administrator to review.
+         */
+        Route::get('anomalies', [\App\Http\Controllers\Meals\AnomalyController::class, 'index'])
+            ->name('anomalies.index')->middleware('permission:meals.reports');
+        Route::post('anomalies/scan', [\App\Http\Controllers\Meals\AnomalyController::class, 'scan'])
+            ->name('anomalies.scan')->middleware('permission:meals.reports');
+        Route::patch('anomalies/{anomaly}/review', [\App\Http\Controllers\Meals\AnomalyController::class, 'review'])
+            ->name('anomalies.review')->middleware('permission:meals.reports');
+
+        /*
+         * DYNAMIC REPORTS BUILDER - compose, save and re-run reports over the
+         * finance engine. Gated by meals.reports (the same right as the fixed
+         * reports it supplements).
+         */
+        Route::get('report-builder', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'index'])
+            ->name('report-builder.index')->middleware('permission:meals.reports');
+        Route::post('report-builder/run', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'run'])
+            ->name('report-builder.run')->middleware('permission:meals.reports');
+        Route::post('report-builder', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'store'])
+            ->name('report-builder.store')->middleware('permission:meals.reports');
+        Route::put('report-builder/{savedReport}', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'update'])
+            ->name('report-builder.update')->middleware('permission:meals.reports');
+        Route::delete('report-builder/{savedReport}', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'destroy'])
+            ->name('report-builder.destroy')->middleware('permission:meals.reports');
+        Route::get('report-builder/{savedReport}/run', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'runSaved'])
+            ->name('report-builder.run-saved')->middleware('permission:meals.reports');
+
+        /*
+         * MENU CYCLE & PROCUREMENT FORECASTS. Managing the menu is a planning act
+         * (meals.reports); the forecasts it produces drive purchasing decisions.
+         */
+        Route::get('menu-cycle', [\App\Http\Controllers\Meals\MenuCycleController::class, 'index'])
+            ->name('menu-cycle.index')->middleware('permission:meals.reports');
+        Route::post('menu-cycle', [\App\Http\Controllers\Meals\MenuCycleController::class, 'store'])
+            ->name('menu-cycle.store')->middleware('permission:meals.reports');
+        Route::put('menu-cycle/{menuCycle}', [\App\Http\Controllers\Meals\MenuCycleController::class, 'update'])
+            ->name('menu-cycle.update')->middleware('permission:meals.reports');
+        Route::delete('menu-cycle/{menuCycle}', [\App\Http\Controllers\Meals\MenuCycleController::class, 'destroy'])
+            ->name('menu-cycle.destroy')->middleware('permission:meals.reports');
+        Route::put('menu-cycle/{menuCycle}/days/{dayNumber}', [\App\Http\Controllers\Meals\MenuCycleController::class, 'updateDay'])
+            ->name('menu-cycle.days.update')->middleware('permission:meals.reports');
+        Route::post('menu-cycle/{menuCycle}/ingredients', [\App\Http\Controllers\Meals\MenuCycleController::class, 'storeIngredient'])
+            ->name('menu-cycle.ingredients.store')->middleware('permission:meals.reports');
+        Route::delete('menu-cycle/ingredients/{ingredient}', [\App\Http\Controllers\Meals\MenuCycleController::class, 'destroyIngredient'])
+            ->name('menu-cycle.ingredients.destroy')->middleware('permission:meals.reports');
+
+        /*
+         * PURCHASE ORDERS, GOODS RECEIPTS & INVOICES (3-way match). Raising a PO is
+         * a purchasing act (meals.expense); APPROVING one is restricted inside the
+         * controller to an Institution Admin.
+         */
+        Route::get('purchase-orders', [\App\Http\Controllers\Meals\PurchaseOrderController::class, 'index'])
+            ->name('purchase-orders.index')->middleware('permission:meals.expense');
+        Route::post('purchase-orders', [\App\Http\Controllers\Meals\PurchaseOrderController::class, 'store'])
+            ->name('purchase-orders.store')->middleware('permission:meals.expense');
+        Route::get('purchase-orders/{purchaseOrder}', [\App\Http\Controllers\Meals\PurchaseOrderController::class, 'show'])
+            ->name('purchase-orders.show')->middleware('permission:meals.expense');
+        Route::patch('purchase-orders/{purchaseOrder}/approve', [\App\Http\Controllers\Meals\PurchaseOrderController::class, 'approve'])
+            ->name('purchase-orders.approve')->middleware('permission:meals.expense');
+        Route::patch('purchase-orders/{purchaseOrder}/status', [\App\Http\Controllers\Meals\PurchaseOrderController::class, 'updateStatus'])
+            ->name('purchase-orders.status')->middleware('permission:meals.expense');
+        Route::post('purchase-orders/{purchaseOrder}/receipts', [\App\Http\Controllers\Meals\PurchaseOrderController::class, 'storeReceipt'])
+            ->name('purchase-orders.receipts.store')->middleware('permission:meals.expense');
+        Route::post('purchase-orders/{purchaseOrder}/invoices', [\App\Http\Controllers\Meals\PurchaseOrderController::class, 'storeInvoice'])
+            ->name('purchase-orders.invoices.store')->middleware('permission:meals.expense');
+        Route::post('purchase-orders/invoices/{vendorInvoice}/match', [\App\Http\Controllers\Meals\PurchaseOrderController::class, 'rematch'])
+            ->name('purchase-orders.invoices.match')->middleware('permission:meals.expense');
+
+        /*
+         * AI FORECASTING (RAG). Viewing uses the reporting right; rebuilding the
+         * vector corpus is a heavier maintenance act, so it is grouped with it
+         * rather than exposed to every reader.
+         */
+        Route::get('forecasting', [\App\Http\Controllers\Meals\ForecastingController::class, 'index'])
+            ->name('forecasting.index')->middleware('permission:meals.reports');
+        Route::post('forecasting/embed', [\App\Http\Controllers\Meals\ForecastingController::class, 'embed'])
+            ->name('forecasting.embed')->middleware('permission:meals.reports');
+        Route::post('forecasting/benchmarks', [\App\Http\Controllers\Meals\ForecastingController::class, 'storeBenchmark'])
+            ->name('forecasting.benchmarks.store')->middleware('permission:meals.reports');
+
+        /*
+         * MEMBER-INITIATED PAYMENTS - the VERIFICATION queue. A manager confirms a
+         * payment the member submitted; only then does a real deposit exist.
+         */
+        Route::get('member-payments', [\App\Http\Controllers\MemberPaymentController::class, 'queue'])
+            ->name('member-payments.index')->middleware('permission:meals.deposit');
+        Route::patch('member-payments/{memberPayment}/approve', [\App\Http\Controllers\MemberPaymentController::class, 'approve'])
+            ->name('member-payments.approve')->middleware('permission:meals.deposit');
+        Route::patch('member-payments/{memberPayment}/reject', [\App\Http\Controllers\MemberPaymentController::class, 'reject'])
+            ->name('member-payments.reject')->middleware('permission:meals.deposit');
+
+        /*
+         * MEAL MENU & VOTING.
+         *
+         * Staff PROPOSE a menu and its options; eligible members vote; an Admin or
+         * Meal Manager APPROVES it before it becomes active. Proposing is a
+         * management act (meals.reports); voting itself is open to every eligible
+         * member and lives under /my/menus below.
+         */
+        Route::get('menus', [\App\Http\Controllers\Meals\MealMenuController::class, 'index'])
+            ->name('menus.index')->middleware('permission:meals.reports');
+        Route::post('menus', [\App\Http\Controllers\Meals\MealMenuController::class, 'store'])
+            ->name('menus.store')->middleware('permission:meals.reports');
+        Route::get('menus/{mealMenu}', [\App\Http\Controllers\Meals\MealMenuController::class, 'show'])
+            ->name('menus.show')->middleware('permission:meals.reports');
+        Route::post('menus/{mealMenu}/options', [\App\Http\Controllers\Meals\MealMenuController::class, 'storeOption'])
+            ->name('menus.options.store')->middleware('permission:meals.reports');
+        Route::delete('menus/options/{option}', [\App\Http\Controllers\Meals\MealMenuController::class, 'destroyOption'])
+            ->name('menus.options.destroy')->middleware('permission:meals.reports');
+        Route::patch('menus/{mealMenu}/open', [\App\Http\Controllers\Meals\MealMenuController::class, 'openVoting'])
+            ->name('menus.open')->middleware('permission:meals.reports');
+        // APPROVAL is re-asserted in the controller to an Admin / Meal Manager.
+        Route::patch('menus/{mealMenu}/approve', [\App\Http\Controllers\Meals\MealMenuController::class, 'approve'])
+            ->name('menus.approve')->middleware('permission:meals.reports');
+        Route::patch('menus/{mealMenu}/reject', [\App\Http\Controllers\Meals\MealMenuController::class, 'reject'])
+            ->name('menus.reject')->middleware('permission:meals.reports');
+        Route::patch('menus/{mealMenu}/cancel', [\App\Http\Controllers\Meals\MealMenuController::class, 'cancel'])
+            ->name('menus.cancel')->middleware('permission:meals.reports');
 
         // Institutional subsidies - funds from university/company/college, kept
         // distinct from personal deposits.

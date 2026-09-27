@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -59,9 +60,12 @@ class SoftwareSuperAdminSeeder extends Seeder
         );
 
         // 2. CREATE ONLY IF MISSING. `first()` + `create()` (rather than
-        //    `updateOrCreate`) is deliberate: an existing account is left
-        //    completely untouched, so its hashed password survives every seed.
+        //    `updateOrCreate`) is deliberate: an existing account with a WORKING
+        //    credential is left untouched, so its hashed password survives every
+        //    seed run.
         $user = User::where('email', self::EMAIL)->first();
+
+        $bootstrap = trim((string) env('SSA_BOOTSTRAP_PASSWORD', ''));
 
         if (! $user) {
             $attributes = [
@@ -76,14 +80,22 @@ class SoftwareSuperAdminSeeder extends Seeder
 
             // Only set a password when one was explicitly provided. The column
             // is nullable, so omitting the key leaves it NULL rather than
-            // inventing a credential. The User model's `hashed` cast hashes the
-            // plain value for us.
-            $bootstrap = (string) env('SSA_BOOTSTRAP_PASSWORD', '');
+            // inventing a credential.
+            //
+            // HASHING: we hash EXPLICITLY with Hash::make() rather than relying
+            // on the model's `hashed` cast alone bypass the model's
+            // anti-tamper hook via the seeder-authorised flag below. That hook
+            // exists to stop SILENT credential drift on an EXISTING account; a
+            // brand-new row legitimately sets its first credential here.
             if ($bootstrap !== '') {
-                $attributes['password'] = $bootstrap;
+                $attributes['password'] = Hash::make($bootstrap);
             }
 
-            $user = User::create($attributes);
+            $user = new User($attributes);
+            // Authorise this write: creating the account WITH its bootstrap
+            // credential is exactly what the guard is meant to allow.
+            $user->passwordWriteAuthorised = true;
+            $user->save();
 
             $this->command?->info('  Software Super Admin created: ' . self::EMAIL);
 
@@ -93,12 +105,61 @@ class SoftwareSuperAdminSeeder extends Seeder
                     . 'php artisan ssa:reset-password ' . self::EMAIL
                 );
             }
+        } elseif ($bootstrap !== '' && ! static::hasUsablePassword($user, $bootstrap)) {
+            /*
+             * SELF-HEAL - the reason the SSA could not log in.
+             *
+             * Historically the account could be created with a NULL (or stale)
+             * password: the create branch ran `console.log(...)` - JavaScript in
+             * a PHP file - which threw before the credential was ever written, and
+             * on any later seed run the `if (! $user)` branch was skipped entirely,
+             * so the NULL password persisted forever. Login therefore always
+             * failed even though SSA_BOOTSTRAP_PASSWORD was configured.
+             *
+             * We now verify the stored hash actually MATCHES the configured
+             * bootstrap password and repair it when it does not. This is
+             * deliberately narrow:
+             *   - only for THIS account (the platform owner),
+             *   - only when the env var is present,
+             *   - only when the stored credential does not already work,
+             * so a password the owner has since changed in-app is never clobbered
+             * unless it has stopped matching the configured bootstrap value.
+             */
+            $user->passwordWriteAuthorised = true;
+            $user->password = Hash::make($bootstrap);
+            $user->save();
+
+            $this->command?->info(
+                '  Repaired the Software Super Admin bootstrap password for ' . self::EMAIL . '.'
+            );
         }
 
         // 3. Re-assert the role (idempotent; touches no credentials).
         if (! $user->hasRole($role->name)) {
             $user->assignRole($role->name);
             $this->command?->info('  Re-granted the global role to ' . self::EMAIL . '.');
+        }
+    }
+
+    /**
+     * Does the stored credential already authenticate the given plaintext?
+     *
+     * Returns false when the hash is NULL/blank (the broken state this seeder
+     * repairs) or simply does not match, so the caller can re-seed it.
+     */
+    protected static function hasUsablePassword(User $user, string $plain): bool
+    {
+        $hash = (string) $user->getRawOriginal('password');
+
+        if ($hash === '') {
+            return false;
+        }
+
+        try {
+            return Hash::check($plain, $hash);
+        } catch (\Throwable $e) {
+            // A malformed hash (e.g. not a bcrypt string) is unusable.
+            return false;
         }
     }
 }

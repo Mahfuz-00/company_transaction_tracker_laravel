@@ -6,6 +6,7 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import GlobalLoadingIndicator from '@/Components/GlobalLoadingIndicator';
 import { FeedbackProvider } from '@/Components/Feedback/FeedbackProvider';
+import OnboardingProvider from '@/Components/Onboarding/OnboardingProvider';
 import { applyThemeTokens, resolveInitialTheme } from '@/Components/ThemeProvider';
 
 const appName = import.meta.env.VITE_APP_NAME || 'NomNomytics';
@@ -53,6 +54,10 @@ createInertiaApp({
             // including the guest pages.
             <FeedbackProvider>
                 <App {...props} />
+                {/* Role-specific first-time onboarding. Mounted globally so the
+                    guide appears on whichever dashboard the user first lands on,
+                    without every page needing to render it. */}
+                <OnboardingProvider />
                 {/* One central spinner for every async request. */}
                 <GlobalLoadingIndicator />
             </FeedbackProvider>

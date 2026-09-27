@@ -86,7 +86,40 @@ class MailSettings
         $settings['has_password'] = filled($settings['password']);
         $settings['password'] = '';
 
+        // SETUP COMPLETENESS, so the UI can decide which helper/warning text to
+        // show WITHOUT re-deriving the rules. `configured` means the relay has
+        // everything it needs to deliver mail; `active` means it is also switched
+        // on. The SMTP form uses these to hide the "SMTP is disabled - falls back"
+        // warning once setup is complete and enabled.
+        $settings['configured'] = static::isConfigured($settings);
+        $settings['active'] = (bool) $settings['enabled'] && $settings['configured'];
+
         return $settings;
+    }
+
+    /**
+     * Does this configuration have everything required to deliver mail?
+     *
+     * A relay needs a host, a port, a from-address, and - when a username is set -
+     * a password to authenticate with. This is the single source of truth the UI
+     * and the save-validation both read.
+     */
+    public static function isConfigured(array $settings): bool
+    {
+        if (blank($settings['host'] ?? null) || blank($settings['port'] ?? null)) {
+            return false;
+        }
+
+        if (blank($settings['from_address'] ?? null)) {
+            return false;
+        }
+
+        // A username without a password cannot authenticate.
+        if (filled($settings['username'] ?? null) && blank($settings['password'] ?? null)) {
+            return false;
+        }
+
+        return true;
     }
 
     /** Raw stored payload (password still encrypted). */

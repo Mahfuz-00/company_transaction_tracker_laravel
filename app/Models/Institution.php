@@ -18,6 +18,11 @@ class Institution extends Model
         'type',
         'currency_code',
         'currency_settings',
+        // Institutional SSO + forecasting country (see the sso/forecasting docs).
+        'sso_enabled',
+        'sso_domain',
+        'sso_provider_hint',
+        'country_code',
         'theme',
         'logo_path',
         'banner_path',
@@ -30,6 +35,10 @@ class Institution extends Model
         'subsidy_mode',
         'subscription_plan',
         'subscription_status',
+        'subscription_plan',
+        'subscription_amount',
+        // The paid-up date: extended when a subscription payment is approved.
+        'subscription_ends_at',
         'subscription_amount',
         'subscription_started_at',
         'subscription_renews_at',
@@ -57,6 +66,7 @@ class Institution extends Model
         'last_reviewed_at' => 'datetime',
         'trial_started_at' => 'datetime',
         'trial_ends_at' => 'datetime',
+        'subscription_ends_at' => 'date',
         'trial_reminder_sent_at' => 'datetime',
         'converted_at' => 'datetime',
     ];

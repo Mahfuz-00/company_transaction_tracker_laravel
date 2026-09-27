@@ -217,6 +217,10 @@ trait DuskDatabase
      */
     protected function truncateDuskTables(): void
     {
+        /*
+         * ORDER MATTERS: children before parents, so a foreign-key constraint is
+         * never violated by deleting a parent while its rows still exist.
+         */
         $tables = [
             'model_has_roles',
             'model_has_permissions',
@@ -234,6 +238,37 @@ trait DuskDatabase
             'subsidy_sources',
             'claims',
             'vendors',
+
+            /* ---- Meal Menu & Voting (children first) ---- */
+            'meal_menu_votes',
+            'meal_menu_options',
+            'meal_menus',
+
+            /* ---- Procurement: invoices -> receipts -> items -> orders ---- */
+            'vendor_invoices',
+            'goods_receipts',
+            'purchase_order_items',
+            'purchase_orders',
+
+            /* ---- Menu cycle & procurement forecasts ---- */
+            'menu_ingredients',
+            'menu_cycle_days',
+            'menu_cycles',
+
+            /* ---- Money in / out (member + platform) ---- */
+            'member_payments',
+            'subscription_payments',
+
+            /* ---- Intelligence modules ---- */
+            'anomalies',
+            'saved_reports',
+            'forecast_embeddings',
+            'forecast_benchmarks',
+            'fx_rates',
+
+            /* ---- Identity linking ---- */
+            'social_accounts',
+
             'students',
             'departments',
             'activity_logs',

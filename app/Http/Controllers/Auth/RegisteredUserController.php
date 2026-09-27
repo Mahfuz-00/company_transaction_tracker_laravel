@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\Institution;
+use App\Models\Student;
 use App\Models\User;
 use App\Support\AuditLogger;
 use Illuminate\Auth\Events\Registered;
@@ -108,12 +109,40 @@ class RegisteredUserController extends Controller
 
             // SAFE ROLE: the guard strips any global role and coerces unknown
             // values, defaulting to Member. A self-signup can never be an admin.
-            $user->assignInstitutionRole($data['role'] ?? 'Member');
+            $role = $user->assignInstitutionRole($data['role'] ?? 'Member');
+
+            /*
+             * THE LINKING FIX.
+             *
+             * Mapping `users.institution_id` alone was NOT enough: the member
+             * AREA (dashboard, meals, deposits, analytics) resolves the person
+             * through `users.studentRecord()` -> `students.user_id`. Without a
+             * roster row pointing at this new login, `studentRecord()` returned
+             * null and every member screen rendered the "Your account is not
+             * linked yet" empty state - even though the account WAS correctly
+             * bound to the institution.
+             *
+             * A member signup therefore also creates the roster (Member) record
+             * inside the SAME transaction, so account + roster land together and
+             * the dashboard is immediately active. A Meal Manager signup gets no
+             * roster row (they are staff, not a participant).
+             */
+            if ($role === 'Member') {
+                Student::create([
+                    'institution_id' => $institution->id,
+                    // The ownership link the member dashboard reads.
+                    'user_id' => $user->id,
+                    'name' => $user->name,
+                    'status' => 'active',
+                    'join_date' => now()->toDateString(),
+                ]);
+            }
 
             AuditLogger::log('created', "self-registered via invite code into {$institution->name}", $user, [
                 'email' => $user->email,
-                'role' => $user->getRoleNames()->first(),
+                'role' => $role,
                 'via' => 'public_signup',
+                'member_record_created' => $role === 'Member',
             ], ['subject_label' => $user->name, 'institution_id' => $institution->id]);
 
             return $user;

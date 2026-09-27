@@ -83,6 +83,16 @@ class User extends Authenticatable
         'invitation_pending',
         'must_change_password',
         'password_changed_at',
+        // Stamped when a self-signup / invited account finishes setup. It was
+        // MISSING from this list, so every `User::create([... 'setup_completed_at'
+        // => now()])` silently dropped the value and the account read as "setup
+        // pending" forever - part of the "account not linked" symptom.
+        'setup_completed_at',
+        // When the role-specific first-login onboarding was completed.
+        'onboarding_completed_at',
+        // Staff opt-in to meals: an admin/manager who actually eats in the mess
+        // may vote on menus (see MealMenuController::isEligibleVoter).
+        'is_meal_participant',
         'password',
         'last_login_at',
     ];
@@ -148,6 +158,9 @@ class User extends Authenticatable
         'invitation_pending' => 'boolean',
         'must_change_password' => 'boolean',
         'password_changed_at' => 'datetime',
+        'setup_completed_at' => 'datetime',
+        'onboarding_completed_at' => 'datetime',
+        'is_meal_participant' => 'boolean',
         'password' => 'hashed',
         'theme' => 'array',
     ];
@@ -355,6 +368,56 @@ class User extends Authenticatable
         return (bool) $this->must_change_password;
     }
 
+    /* ------------------------------------------------------------------ *
+     * First-time onboarding
+     * ------------------------------------------------------------------ */
+
+    /**
+     * The user's role "type" for the onboarding journey.
+     *
+     * Deliberately collapses the role model to the four journeys the manual
+     * explains. The SSA check comes first because it is a GLOBAL role that can
+     * coexist with nothing else; a dual-role staff account is treated as staff.
+     *
+     *   ssa    - Software Super Admin (platform operator)
+     *   ia     - Institution Admin (workspace owner)
+     *   mm     - Meal Manager (roster + meal operations)
+     *   member - Member / participant (personal view only)
+     */
+    public function onboardingRole(): string
+    {
+        if ($this->isSuperAdmin()) {
+            return 'ssa';
+        }
+
+        if ($this->isInstitutionAdmin()) {
+            return 'ia';
+        }
+
+        if ($this->hasRole('Meal Manager')) {
+            return 'mm';
+        }
+
+        return 'member';
+    }
+
+    /** Has this account finished (or dismissed) its first-login onboarding? */
+    public function hasCompletedOnboarding(): bool
+    {
+        return $this->onboarding_completed_at !== null;
+    }
+
+    /**
+     * Should the onboarding manual be shown on THIS request?
+     *
+     * Only once, and never while the user still has to change a temporary
+     * password (that flow takes priority and would fight the modal for focus).
+     */
+    public function shouldSeeOnboarding(): bool
+    {
+        return ! $this->hasCompletedOnboarding() && ! $this->mustChangePassword();
+    }
+
     /**
      * Members assigned directly under this user as their meal manager.
      * A Meal Manager only ever sees and manages these - never the whole roster.
@@ -446,5 +509,20 @@ class User extends Authenticatable
     public function transactions()
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    /**
+     * External identities (Google Workspace / Microsoft Entra) linked to this
+     * account. One user may hold several, so this is a normal one-to-many.
+     */
+    public function socialAccounts()
+    {
+        return $this->hasMany(SocialAccount::class);
+    }
+
+    /** Is this account linked to the given provider (google / microsoft)? */
+    public function hasSocialProvider(string $provider): bool
+    {
+        return $this->socialAccounts->contains('provider', $provider);
     }
 }

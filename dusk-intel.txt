@@ -1,0 +1,7 @@
+Warning: TTY mode is not supported on Windows platform.
+"==== STEP: [InstituteAdmin] → [Anomalies] → [visit /meals/anomalies] | Line ~169 ====" // tests\Browser\Support\DuskSupport.php:54
+"==== STEP: [SoftwareSuperAdmin] → [FX] → [record a rate snapshot] | Line ~189 ====" // tests\Browser\Support\DuskSupport.php:54
+"==== STEP: [SoftwareSuperAdmin] → [FX] → [the roll-up names unconvertible institutions] | Line ~223 ====" // tests\Browser\Support\DuskSupport.php:54
+"==== STEP: [SoftwareSuperAdmin] → [FX] → [visit /platform/currencies] | Line ~241 ====" // tests\Browser\Support\DuskSupport.php:54
+"==== STEP: [InstituteAdmin] → [ReportBuilder] → [save a report] | Line ~329 ====" // tests\Browser\Support\DuskSupport.php:54
+"==== STEP: [InstituteAdmin] → [ReportBuilder] → [visit /meals/report-builder] | Line ~376 ====" // tests\Browser\Support\DuskSupport.php:54

@@ -1,11 +1,14 @@
 import Checkbox from '@/Components/Checkbox';
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
+import PasswordInput from '@/Components/PasswordInput';
 import PrimaryButton from '@/Components/PrimaryButton';
+import SsoButtons from '@/Components/SsoButtons';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import useTerminology from '@/Utils/useTerminology';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { useState } from 'react';
 
 /**
  * Login screen — the entry point for every signed-in session.
@@ -29,12 +32,29 @@ import { Head, Link, useForm } from '@inertiajs/react';
  */
 export default function Login({ status, canResetPassword }) {
     const { t } = useTerminology();
+    // SSO providers the server has configured (empty when none are set up).
+    const { oauth = [], flash } = usePage().props;
 
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
         remember: false,
     });
+
+    /*
+     * THE SSO INVITE CODE.
+     *
+     * Held OUTSIDE the login form state because it is not submitted to
+     * /login - it is appended to the SSO redirect URL so the server can pin the
+     * sign-in to the right workspace BEFORE contacting the provider. Keeping it
+     * separate also means a failed password login does not clear it.
+     */
+    const [inviteCode, setInviteCode] = useState('');
+
+    // SSO only needs a code when the user is not already identified by an email
+    // the platform knows. We require it whenever providers exist, so an unknown
+    // external identity always lands somewhere unambiguous.
+    const ssoNeedsCode = oauth.length > 0;
 
     const submit = (e) => {
         e.preventDefault();
@@ -71,7 +91,46 @@ export default function Login({ status, canResetPassword }) {
                 </div>
             )}
 
+            {/* A failed SSO attempt (bad domain, expired state, provider error)
+                reports here, so the user is never left wondering what happened. */}
+            {flash?.error && (
+                <div
+                    role="alert"
+                    data-testid="login-error"
+                    className="mb-6 rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-sm font-medium text-rose-700"
+                >
+                    {flash.error}
+                </div>
+            )}
+
             <form onSubmit={submit} className="space-y-5">
+                {/* The invite code that routes an SSO sign-in to the right
+                    workspace. Only shown when providers are configured. */}
+                {ssoNeedsCode && (
+                    <div>
+                        <InputLabel
+                            htmlFor="invite_code"
+                            value="Institution Invite Code"
+                            className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400"
+                        />
+
+                        <TextInput
+                            id="invite_code"
+                            name="invite_code"
+                            value={inviteCode}
+                            className="mt-1 block w-full rounded-xl border-slate-200 bg-white/60 px-4 py-3 text-sm uppercase tracking-widest text-slate-800 shadow-sm transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
+                            autoComplete="off"
+                            placeholder="e.g. AB12CD34"
+                            data-testid="login-invite-code"
+                            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                        />
+
+                        <p className="mt-1.5 text-[11px] text-slate-400">
+                            Required for single sign-on - it tells us which institution you belong to.
+                        </p>
+                    </div>
+                )}
+
                 <div>
                     <InputLabel htmlFor="email" value="Email Address" className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400" />
 
@@ -103,9 +162,8 @@ export default function Login({ status, canResetPassword }) {
                         )}
                     </div>
 
-                    <TextInput
+                    <PasswordInput
                         id="password"
-                        type="password"
                         name="password"
                         value={data.password}
                         className="mt-1 block w-full rounded-xl border-slate-200 bg-white/60 px-4 py-3 text-sm text-slate-800 shadow-sm transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
@@ -152,6 +210,16 @@ export default function Login({ status, canResetPassword }) {
                     </PrimaryButton>
                 </div>
             </form>
+
+            {/* Institutional SSO: only the providers this deployment has configured.
+                The invite code gates the buttons, so an unknown external identity
+                is always routed to a specific workspace. */}
+            <SsoButtons
+                providers={oauth}
+                requireInviteCode={ssoNeedsCode}
+                inviteCode={inviteCode}
+                subtitle="Or sign in with"
+            />
         </GuestLayout>
     );
 }
