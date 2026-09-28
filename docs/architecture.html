@@ -58,7 +58,7 @@ footer.foot { border-top:1px solid var(--border); margin-top:3rem; padding-top:1
 </style>
 </head>
 <body>
-<nav class="topbar"><div class="inner"><a class="brand" href="index.html">NomNomytics · Docs</a><a href="user-manual.html">User Manual</a><a href="architecture.html" class="active">Architecture</a><a href="api.html">API Reference</a><a href="dusk-testing.html">Dusk Testing</a><a href="dynamism-roadmap.html">Dynamism Roadmap</a></div></nav>
+<nav class="topbar"><div class="inner"><a class="brand" href="index.html">NomNomytics · Docs</a><a href="user-manual.html">User Manual</a><a href="architecture.html" class="active">Architecture</a><a href="api.html">API Reference</a><a href="dusk-testing.html">Dusk Testing</a><a href="flutter-mobile.html">Flutter Mobile App</a><a href="mobile-ide-instructions.html">Mobile IDE Instructions</a><a href="dynamism-roadmap.html">Dynamism Roadmap</a></div></nav>
 <div class="wrap">
 <header class="page">
   <h1>Architecture</h1>
@@ -250,6 +250,9 @@ $request-&gt;session()-&gt;save();</code></pre>
     'role_or_permission'=&gt; \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
     'password.changed'  =&gt; \App\Http\Middleware\EnsurePasswordIsChanged::class,
     'tenant'            =&gt; \App\Http\Middleware\ResolveTenant::class,
+    // Mobile-only: the SSA is a GLOBAL operator with no tenant scope, so the
+    // API refuses them on the whole authenticated group (Section 7.8).
+    'mobile.not-ssa'    =&gt; \App\Http\Middleware\EnsureNotSoftwareSuperAdmin::class,
 ]);</code></pre>
 <p>Usage examples from <code>routes/web.php</code>:</p>
 <pre class="code"><code class="language-php">-&gt;middleware('permission:students.view')                                     // capability
@@ -563,27 +566,43 @@ RateLimiter::for('api-login', fn (Request $r) =&gt; Limit::perMinute(5)
 </div>
 <p>Member lists in <code>MemberApiController</code> map rows inline (joining the model to a precomputed <code>memberBreakdown</code> keyed by id) — that payload is a join, not a plain model serialization.</p>
 <h3 id="76-endpoints">7.6 Endpoints</h3>
+<p>The API provides <strong>full web parity for the three tenant roles</strong>. The complete, permission-annotated list lives in <a href="api.html"><code>docs/API.md</code> §6</a>; this is the controller map.</p>
 <div class="table-wrap">
 <table>
-<thead><tr><th>Method</th><th>Path</th><th>Handler</th></tr></thead>
+<thead><tr><th>Method</th><th>Path (prefix <code>/api</code>)</th><th>Handler</th><th>Gate</th></tr></thead>
 <tbody>
-<tr><td>POST</td><td><code>/api/auth/register</code></td><td><code>AuthController@register</code> (throttle:api-login)</td></tr>
-<tr><td>POST</td><td><code>/api/auth/login</code></td><td><code>AuthController@login</code> (throttle:api-login)</td></tr>
-<tr><td>GET</td><td><code>/api/meta</code></td><td><code>AuthController@meta</code> — currency, terminology, enum lists</td></tr>
-<tr><td>GET</td><td><code>/api/auth/me</code></td><td><code>AuthController@me</code></td></tr>
-<tr><td>POST</td><td><code>/api/auth/logout</code></td><td><code>AuthController@logout</code></td></tr>
-<tr><td>POST</td><td><code>/api/auth/devices</code></td><td><code>AuthController@registerDevice</code></td></tr>
-<tr><td>PATCH</td><td><code>/api/auth/profile</code></td><td><code>AuthController@updateProfile</code></td></tr>
-<tr><td>GET</td><td><code>/api/dashboard</code></td><td><code>DashboardApiController@index</code></td></tr>
-<tr><td>GET</td><td><code>/api/members</code>, <code>/members/{member}</code></td><td><code>MemberApiController</code></td></tr>
-<tr><td>POST/PATCH/DELETE</td><td><code>/api/members…</code></td><td><code>MemberApiController</code></td></tr>
-<tr><td>GET/POST</td><td><code>/api/deposits</code> (+ <code>/deposits/export</code>)</td><td><code>DepositApiController</code></td></tr>
-<tr><td>GET/POST</td><td><code>/api/meals</code>, <code>/meals/day</code></td><td><code>MealApiController</code></td></tr>
-<tr><td>GET/POST</td><td><code>/api/subsidies</code> (+ <code>/subsidies/sources</code>)</td><td><code>SubsidyApiController</code></td></tr>
-<tr><td>GET</td><td><code>/api/reports/meal</code>, <code>/reports/analytics</code>, <code>/reports/forecast</code>, <code>/reports/per-meal-rate</code></td><td><code>ReportApiController</code></td></tr>
+<tr><td>POST</td><td><code>/auth/register</code></td><td><code>AuthController@register</code> (throttle:api-login)</td><td>public</td></tr>
+<tr><td>POST</td><td><code>/auth/login</code></td><td><code>AuthController@login</code> (throttle:api-login)</td><td>public</td></tr>
+<tr><td>GET</td><td><code>/meta</code></td><td><code>AuthController@meta</code></td><td>public</td></tr>
+<tr><td>GET</td><td><code>/auth/me</code></td><td><code>AuthController@me</code></td><td>—</td></tr>
+<tr><td>POST</td><td><code>/auth/logout</code></td><td><code>AuthController@logout</code></td><td>—</td></tr>
+<tr><td>POST</td><td><code>/auth/devices</code></td><td><code>AuthController@registerDevice</code></td><td>—</td></tr>
+<tr><td>PATCH</td><td><code>/auth/profile</code></td><td><code>AuthController@updateProfile</code></td><td>—</td></tr>
+<tr><td>PUT</td><td><code>/auth/password</code></td><td><code>SelfApiController@updatePassword</code></td><td>—</td></tr>
+<tr><td>GET</td><td><code>/me/dashboard</code>, <code>/me/meals</code>, <code>/me/deposits</code>, <code>/me/analytics</code></td><td><code>MemberSelfApiController</code></td><td>—</td></tr>
+<tr><td>PUT</td><td><code>/me/theme</code></td><td><code>SelfApiController@updateTheme</code></td><td>—</td></tr>
+<tr><td>GET/POST/DELETE</td><td><code>/notifications…</code></td><td><code>SelfApiController</code></td><td><code>notifications.announce</code> (broadcast only)</td></tr>
+<tr><td>POST</td><td><code>/notifications/announce</code></td><td><code>SelfApiController@announce</code></td><td><code>notifications.announce</code></td></tr>
+<tr><td>GET</td><td><code>/dashboard</code></td><td><code>DashboardApiController@index</code></td><td>—</td></tr>
+<tr><td>GET/POST/PATCH/DELETE</td><td><code>/members…</code></td><td><code>MemberApiController</code></td><td><code>students.view</code> / <code>students.manage</code></td></tr>
+<tr><td>GET/POST</td><td><code>/deposits</code> (+ <code>/deposits/export</code>)</td><td><code>DepositApiController</code></td><td><code>meals.deposit</code></td></tr>
+<tr><td>GET/POST</td><td><code>/expenses</code></td><td><code>ReferenceApiController</code></td><td><code>meals.expense</code></td></tr>
+<tr><td>GET/POST</td><td><code>/meals</code>, <code>/meals/day</code></td><td><code>MealApiController</code></td><td><code>meals.view</code> / <code>meals.entry</code></td></tr>
+<tr><td>GET/POST</td><td><code>/subsidies</code> (+ <code>/subsidies/sources</code>)</td><td><code>SubsidyApiController</code></td><td><code>subsidies.view</code> / <code>subsidies.manage</code></td></tr>
+<tr><td>GET/POST</td><td><code>/vendors</code></td><td><code>ReferenceApiController</code></td><td><code>vendors.view</code> / <code>vendors.manage</code></td></tr>
+<tr><td>GET/POST</td><td><code>/departments</code></td><td><code>ReferenceApiController</code></td><td><code>departments.view</code> / <code>departments.manage</code></td></tr>
+<tr><td>GET/POST</td><td><code>/claims</code></td><td><code>ClaimApiController</code></td><td>— (own)</td></tr>
+<tr><td>GET/PATCH</td><td><code>/claims/review</code>, <code>/claims/{id}/approve</code>, <code>/claims/{id}/reject</code></td><td><code>ClaimApiController</code></td><td><code>claims.review</code></td></tr>
+<tr><td>GET/POST</td><td><code>/me/payments</code></td><td><code>MemberPaymentApiController</code></td><td>— (own)</td></tr>
+<tr><td>GET/PATCH</td><td><code>/member-payments…</code></td><td><code>MemberPaymentApiController</code></td><td><code>meals.deposit</code></td></tr>
+<tr><td>GET/POST/PATCH</td><td><code>/menus</code>, <code>/menus/{menu}/vote</code>, <code>/menus/{menu}/status</code></td><td><code>MenuApiController</code></td><td><code>meals.reports</code> (manage only)</td></tr>
+<tr><td>GET/PUT</td><td><code>/settings/institution</code></td><td><code>ReferenceApiController</code></td><td><code>institution.view</code> / <code>institution.manage</code></td></tr>
+<tr><td>GET</td><td><code>/settings/subsidy-sources</code></td><td><code>ReferenceApiController</code></td><td><code>subsidies.view</code></td></tr>
+<tr><td>GET</td><td><code>/reports/meal</code>, <code>/reports/analytics</code>, <code>/reports/forecast</code>, <code>/reports/per-meal-rate</code></td><td><code>ReportApiController</code></td><td><code>meals.reports</code> / <code>transactions.view</code></td></tr>
 </tbody>
 </table>
 </div>
+<p><strong>Delegation, not duplication.</strong> <code>ClaimApiController</code> and <code>MemberPaymentApiController</code> extend their <strong>web</strong> controllers and reuse <code>canReview()</code> / <code>present()</code> / the money-moving <code>approve()</code> / <code>reject()</code> bodies. Approving a claim or verifying a payment writes ledger rows inside a database transaction; reimplementing that for mobile would create a second, independently drifting implementation of the platform's most delicate writes — the classic source of &quot;the app and the website disagree about my balance&quot;.</p>
 <h3 id="77-conventions">7.7 Conventions</h3>
 <ul><li>Collections are wrapped in <code>{ data, meta }</code>; <code>meta</code> carries month, totals,</li></ul>
 <p>  enum lists (from <code>Subsidy::APPLY_MODES</code>, <code>Deposit::KINDS</code>, …) and pagination.</p>
@@ -592,6 +611,46 @@ RateLimiter::for('api-login', fn (Request $r) =&gt; Limit::perMinute(5)
 <ul><li>Dates are ISO-8601 (<code>created_at-&gt;toIso8601String()</code>); month filters use</li></ul>
 <p>  <code>YYYY-MM</code>.</p>
 <ul><li>Page sizes are capped (<code>min((int) $request-&gt;query('per_page', 25), 100)</code>).</li><li>Full reference: <a href="api.html"><code>docs/API.md</code></a>.</li></ul>
+<h3 id="78-mobile-access-control--role-parity-with-the-web">7.8 Mobile access control — role parity with the web</h3>
+<p>The API enforces the <strong>same permission matrix as the web</strong>, at the route level, so a role that cannot reach a module in the browser cannot reach it over <code>/api</code> either. Nothing is re-implemented per client: the <code>permission:*</code> middleware reads the identical Spatie permission set the <code>web</code> routes use.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Capability</th><th>Institution Admin</th><th>Meal Manager</th><th>Member</th></tr></thead>
+<tbody>
+<tr><td>Own dashboard / meals / deposits / analytics</td><td>yes</td><td>yes</td><td>yes</td></tr>
+<tr><td>Staff roster (<code>students.view</code>)</td><td>yes</td><td>yes</td><td>no</td></tr>
+<tr><td>Manage members (<code>students.manage</code>)</td><td>yes</td><td>yes</td><td>no</td></tr>
+<tr><td>Record meals (<code>meals.entry</code>)</td><td>yes</td><td>yes</td><td>no</td></tr>
+<tr><td>Deposits / refunds (<code>meals.deposit</code>)</td><td>yes</td><td>yes</td><td>no</td></tr>
+<tr><td>Expenses (<code>meals.expense</code>)</td><td>yes</td><td>yes</td><td>no</td></tr>
+<tr><td>Vendors / departments</td><td>yes</td><td>yes</td><td>no</td></tr>
+<tr><td>Subsidies — view / manage</td><td>yes / yes</td><td>yes / <strong>no</strong></td><td>no</td></tr>
+<tr><td>Reports &amp; forecast (<code>meals.reports</code>)</td><td>yes</td><td>yes</td><td>no</td></tr>
+<tr><td>Claims — raise own / <strong>review</strong></td><td>yes / yes</td><td>yes / yes</td><td>yes / <strong>no</strong></td></tr>
+<tr><td>Payment verification (<code>meals.deposit</code>)</td><td>yes</td><td>yes</td><td>no</td></tr>
+<tr><td>Menus — read / manage (<code>meals.reports</code>)</td><td>yes / yes</td><td>yes / yes</td><td>yes / <strong>no</strong></td></tr>
+<tr><td>Notifications — own</td><td>yes</td><td>yes</td><td>yes</td></tr>
+<tr><td>Broadcast (<code>notifications.announce</code>)</td><td>yes</td><td><strong>no</strong></td><td>no</td></tr>
+<tr><td>Institution settings — view / manage</td><td>yes / yes</td><td>yes / <strong>no</strong></td><td>no</td></tr>
+<tr><td>Theme (own) / change password</td><td>yes</td><td>yes</td><td>yes</td></tr>
+</tbody>
+</table>
+</div>
+<p>The matrix is asserted by <code>tests/Feature/Api/Auth/ApiAccessControlTest.php</code>, which drives each role through the real HTTP boundary — so a future re-scoping of a permission cannot silently diverge between the two clients.</p>
+<h4 id="the-software-super-admin-is-excluded-in-three-layers">The Software Super Admin is excluded in three layers</h4>
+<p>The SSA is a <strong>global</strong> role: <code>TenantManager::resolveTenantId()</code> returns <code>null</code> for it, so tenant-owned queries would run <strong>without</strong> an institution filter and an SSA token would read every workspace. Defence in depth:</p>
+<ol><li><strong>Mint guard.</strong> <code>AuthController::login()</code> returns <code>403</code></li></ol>
+<p>   <code>&quot;Platform administrators must use the web console.&quot;</code> and creates <strong>no</strong> token.    The check runs <em>after</em> the credential check so a wrong password on an SSA    account still returns the neutral <code>422</code> (no account enumeration).</p>
+<ol><li><strong>Identity guard.</strong> <code>AuthController::me()</code> returns the same <code>403</code>, so a token</li></ol>
+<p>   minted before this rule cannot be reused.</p>
+<ol><li><strong>Group guard.</strong> <code>EnsureNotSoftwareSuperAdmin</code> (<code>mobile.not-ssa</code>) wraps the</li></ol>
+<p>   <strong>entire</strong> authenticated API group in <code>routes/api.php</code>, so every protected    endpoint refuses an SSA token regardless of how it was obtained.</p>
+<h4 id="tenant-isolation-at-the-write-path">Tenant isolation at the write path</h4>
+<p>Two independent layers, unchanged by the API expansion:</p>
+<ul><li><strong>Automatic query scoping</strong> — tenant-owned models use the</li></ul>
+<p>  <code>BelongsToInstitution</code> global scope, so a controller cannot forget to scope.</p>
+<ul><li><strong>Tenant-scoped validation</strong> — <code>ApiFormRequest::tenantExists()</code> restricts every</li></ul>
+<p>  foreign-key <code>exists</code> rule to the active institution (see the class docblock for   the hole it closed). The new controllers follow the same rule: <code>vendor_id</code>,   <code>student_id</code>, <code>department_id</code> and <code>manager_id</code> are all scoped, so a foreign id is a clean <code>422</code> rather than a cross-tenant write.</p>
 <hr>
 <h2 id="8-frontend-architecture-inertia--react">8. Frontend architecture (Inertia + React)</h2>
 <h3 id="81-inertia-bootstrap--the-page-resolution-contract">8.1 Inertia bootstrap &amp; the page-resolution contract</h3>

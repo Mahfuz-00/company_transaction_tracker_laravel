@@ -14,7 +14,7 @@ A multi-institution **SaaS for tracking shared meal money** — member **deposit
 | Frontend | **Inertia.js 2** + **React 18** (no separate SPA server for the web UI) |
 | Styling | **Tailwind CSS** |
 | Auth — web | Laravel session guards |
-| Auth — mobile API | **Laravel Sanctum 4** (personal access tokens) |
+| Auth — mobile API | **Laravel Sanctum 4** (personal access tokens, 30-day lifetime) |
 | Roles & permissions | **spatie/laravel-permission 6** |
 | JS route helper | **Ziggy 2** |
 | Bundler | **Vite 7** (`@vitejs/plugin-react`) |
@@ -68,7 +68,29 @@ composer setup
 
 `composer setup` runs: `composer install` → create `.env` from `.env.example` → `php artisan key:generate` → `php artisan migrate` → `npm install` → `npm run build`. It migrates the schema **without seeding**, so add `php artisan db:seed` afterwards for the RBAC roles, the currency catalogue and the default institution.
 
-> The seeders are production-shaped: `DatabaseSeeder` runs `RolesAndPermissionsSeeder`, `CurrenciesTableSeeder` and `InstitutionSeeder` — it deliberately creates **no** dummy users or sample data.
+> The seeders are production-shaped: `DatabaseSeeder` runs `RolesAndPermissionsSeeder`, `CurrenciesTableSeeder`, `InstitutionSeeder` and `SoftwareSuperAdminSeeder` — it deliberately creates **no** dummy users or sample data. Every seeder is idempotent (`firstOrCreate` keyed on a natural identifier) and **never overwrites an existing credential**, so `db:seed` is safe to run against a live database.
+
+### Want realistic sample data locally?
+
+A rich five-institution fixture set (members, deposits, meals, expenses, subsidies, vendors, menu votes, claims) lives in the **git-ignored** `MockDataSeeder`:
+
+```bash
+php artisan db:seed --class=MockDataSeeder      # create it
+php artisan db:clear-dummy --force              # remove it again
+```
+
+Because the file is excluded from version control, the sample dataset **cannot** be deployed to production.
+
+### Is the platform-owner account healthy?
+
+If `admin@mahfuz.com` cannot sign in, diagnose before reaching for a manual seed:
+
+```bash
+php artisan ssa:doctor          # read-only diagnosis (exit 1 if unhealthy)
+php artisan ssa:doctor --fix    # repair the safe subset
+```
+
+It checks the account exists, holds the global role, has a usable password, is active, and is correctly unbound from any institution — and never overwrites a working password.
 
 ---
 
@@ -79,6 +101,7 @@ composer setup
 | `php artisan test` | **Unit + Feature** (PHPUnit; config `phpunit.xml`, `:memory:` SQLite) |
 | `php artisan dusk` | **Browser** tests (Laravel Dusk; config `phpunit.dusk.xml`) |
 | `composer run phpcs` | Code style (PHP_CodeSniffer against `phpcs.xml`) |
+| `npm run lint:nav-icons` | Sidebar icon-consistency gate (every module has a distinct, defined icon) |
 | `npm run build` | Production Vite assets |
 
 Dusk drives a real browser against a real server, so it needs built assets **and** a running `php artisan serve` (on `APP_URL`). See **[docs/DUSK_TESTING.md](docs/DUSK_TESTING.md)** for the full playbook.
@@ -92,6 +115,8 @@ Dusk drives a real browser against a real server, so it needs built assets **and
 | [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | End-user guide: role-by-role walkthroughs (Super Admin, Institution Admin, Meal Manager, Member) and the per-meal-rate maths. |
 | [docs/SOFTWARE_ARCHITECTURE.md](docs/SOFTWARE_ARCHITECTURE.md) | Developer guide: stack, multi-tenancy, domain model + schema, theme engine, the API layer and testing. |
 | [docs/API.md](docs/API.md) | Mobile JSON API reference (`/api`, Sanctum bearer tokens, envelopes, endpoints). |
+| [docs/FLUTTER_MOBILE_APP.md](docs/FLUTTER_MOBILE_APP.md) | **Flutter mobile client spec**: Clean Architecture + BLoC, DI, Dio interceptors, offline-first sync, FCM, design tokens and the SSA exclusion policy. |
+| [docs/mobile_app_ide_instructions.md](docs/mobile_app_ide_instructions.md) | **Master build spec for an IDE agent**: stack, the exact RBAC permission matrix, production folder tree, offline queue + conflict policy, FCM handling, memory-leak disposal rules, and a complete worked feature (Meal Voting: entity → repo → BLoC → UI → test). |
 | [docs/DUSK_TESTING.md](docs/DUSK_TESTING.md) | Test-suite documentation: the Dusk browser suite (`106` tests, `{Role}/{Module}/Feature` hierarchy) plus the Unit/Feature suites, and how to run and debug each. |
 | [docs/index.html](docs/index.html) | **Browsable HTML docs** (open in any browser). Generated from the markdown above by `npm run docs:build`. |
 

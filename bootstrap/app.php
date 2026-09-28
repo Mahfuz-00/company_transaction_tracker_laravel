@@ -45,6 +45,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'password.changed' => \App\Http\Middleware\EnsurePasswordIsChanged::class,
             'tenant' => \App\Http\Middleware\ResolveTenant::class,
+            // Mobile-only guard: the Software Super Admin is a GLOBAL operator
+            // with no tenant scope, so the mobile API refuses them outright.
+            // Applied to the whole authenticated API group (see routes/api.php).
+            'mobile.not-ssa' => \App\Http\Middleware\EnsureNotSoftwareSuperAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

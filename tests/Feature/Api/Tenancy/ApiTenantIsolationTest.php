@@ -17,9 +17,23 @@ use Tests\Feature\Api\ApiTestCase;
  *   - depositing for a foreign member   -> 422 (scoped exists) - the write hole
  *   - meal grid naming a foreign member -> 422 (the previously exploitable hole)
  *   - member in a foreign department    -> 422 (scoped exists)
+ *
+ * RBAC IS SEEDED HERE
+ *   The API now enforces the web's permission matrix at the route level, so a
+ *   roleless user would be refused with a 403 BEFORE the tenant rule under test
+ *   was ever reached. Seeding the roles and giving the actor an Institution Admin
+ *   role lets these tests assert what they are actually about — the tenant
+ *   boundary — while still running through a realistic, permission-holding staff
+ *   user. (Authorization itself is covered by ApiAccessControlTest.)
  */
 class ApiTenantIsolationTest extends ApiTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(\Database\Seeders\RolesAndPermissionsSeeder::class);
+    }
+
     public function test_a_token_cannot_read_another_institutions_member(): void
     {
         $north = $this->makeInstitution('North Dorm');

@@ -102,12 +102,16 @@ class ApiAuthenticationTest extends ApiTestCase
         // The Member role must exist before register() can assign it.
         $this->seed(RolesAndPermissionsSeeder::class);
 
+        $institution = $this->makeInstitution();
+
         $response = $this->postJson('/api/auth/register', [
             'name' => 'New Mobile User',
             'email' => 'newbie@example.test',
             'password' => 'Password123!',
             'password_confirmation' => 'Password123!',
             'device_name' => 'phpunit',
+            // The tenant-mapping key: without it the account cannot be placed.
+            'invite_code' => $institution->invite_code,
         ]);
 
         $response->assertCreated();
@@ -115,7 +119,68 @@ class ApiAuthenticationTest extends ApiTestCase
 
         $user = \App\Models\User::where('email', 'newbie@example.test')->firstOrFail();
         $this->assertTrue($user->hasRole('Member'));
+        // The account is bound to the institution the CODE resolved to.
+        $this->assertSame($institution->id, $user->institution_id);
         // A crafted global role can never be granted through signup.
         $this->assertFalse($user->hasRole('Software Super Admin'));
+    }
+
+    public function test_registration_is_rejected_without_a_valid_invite_code(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+        $this->makeInstitution();
+
+        $this->postJson('/api/auth/register', [
+            'name' => 'Orphan User',
+            'email' => 'orphan@example.test',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'invite_code' => 'NOPE9999',
+        ])->assertStatus(422)->assertJsonValidationErrors('invite_code');
+
+        // No orphaned account is created when the code does not resolve.
+        $this->assertDatabaseMissing('users', ['email' => 'orphan@example.test']);
+    }
+
+    public function test_a_super_admin_cannot_obtain_a_mobile_token(): void
+    {
+        // The SSA is a GLOBAL operator; a mobile token would have no tenant scope.
+        $ssa = \App\Models\User::factory()->create([
+            'institution_id' => null,
+            'email' => 'owner@platform.test',
+            'password' => 'password',
+            'status' => 'active',
+            'must_change_password' => false,
+            'setup_completed_at' => now(),
+        ]);
+        $ssa->assignRole('Software Super Admin');
+
+        $this->postJson('/api/auth/login', [
+            'email' => 'owner@platform.test',
+            'password' => 'password',
+        ])
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Platform administrators must use the web console.');
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_me_refuses_a_super_admin_token(): void
+    {
+        $ssa = \App\Models\User::factory()->create([
+            'institution_id' => null,
+            'email' => 'owner@platform.test',
+            'password' => 'password',
+            'status' => 'active',
+            'must_change_password' => false,
+            'setup_completed_at' => now(),
+        ]);
+        $ssa->assignRole('Software Super Admin');
+
+        Sanctum::actingAs($ssa);
+
+        $this->getJson('/api/auth/me')
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Platform administrators must use the web console.');
     }
 }

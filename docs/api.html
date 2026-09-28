@@ -58,7 +58,7 @@ footer.foot { border-top:1px solid var(--border); margin-top:3rem; padding-top:1
 </style>
 </head>
 <body>
-<nav class="topbar"><div class="inner"><a class="brand" href="index.html">NomNomytics · Docs</a><a href="user-manual.html">User Manual</a><a href="architecture.html">Architecture</a><a href="api.html" class="active">API Reference</a><a href="dusk-testing.html">Dusk Testing</a><a href="dynamism-roadmap.html">Dynamism Roadmap</a></div></nav>
+<nav class="topbar"><div class="inner"><a class="brand" href="index.html">NomNomytics · Docs</a><a href="user-manual.html">User Manual</a><a href="architecture.html">Architecture</a><a href="api.html" class="active">API Reference</a><a href="dusk-testing.html">Dusk Testing</a><a href="flutter-mobile.html">Flutter Mobile App</a><a href="mobile-ide-instructions.html">Mobile IDE Instructions</a><a href="dynamism-roadmap.html">Dynamism Roadmap</a></div></nav>
 <div class="wrap">
 <header class="page">
   <h1>API Reference</h1>
@@ -71,8 +71,9 @@ footer.foot { border-top:1px solid var(--border); margin-top:3rem; padding-top:1
 <p>  <code>Content-Type: application/json</code></p>
 <ul><li><strong>Money:</strong> returned as a JSON <strong>number</strong> (e.g. <code>2288.12</code>). Formatting is the</li></ul>
 <p>  client's job; the currency config is served once by <code>/meta</code>.</p>
-<ul><li><strong>Dates:</strong> ISO-8601 (<code>2026-09-16</code>, or a full timestamp <code>2026-09-16T09:00:00+00:00</code>)</li><li><strong>Months:</strong> <code>YYYY-MM</code> (<code>2026-09</code>)</li></ul>
-<blockquote><p>This document is the authoritative contract for the mobile client. The endpoints below are exactly those registered in <code>routes/api.php</code>; the shapes come from the controllers and the <code>app/Http/Resources/*</code> classes they use.</p></blockquote>
+<ul><li><strong>Dates:</strong> ISO-8601 (<code>2026-09-16</code>, or a full timestamp <code>2026-09-16T09:00:00+00:00</code>)</li><li><strong>Months:</strong> <code>YYYY-MM</code> (<code>2026-09</code>)</li><li><strong>Errors:</strong> the standard HTTP codes with a <code>{ message, errors }</code> body (§2)</li></ul>
+<blockquote><p>This document is the authoritative contract for the mobile client. The endpoints below are exactly those registered in <code>routes/api.php</code>; the shapes come from the controllers and the <code>app/Http/Resources/*</code> classes they use.</p>
+<p><strong>Scope.</strong> The API provides <strong>full feature parity with the web dashboard</strong> for the three tenant roles — <strong>Institution Admin</strong>, <strong>Meal Manager</strong> and <strong>Member</strong>. Every route carries the SAME permission gate the web uses, so a role that cannot reach a module in the browser cannot reach it here either. The <strong>Software Super Admin is web-only</strong> and is refused at every layer (§5).</p></blockquote>
 <hr>
 <h2 id="1-how-authentication-works-read-this-first">1. How authentication works (read this first)</h2>
 <p>The mobile app never uses cookies or sessions. The flow is:</p>
@@ -173,56 +174,201 @@ X-RateLimit-Remaining: 0</code></pre>
 <p>  institution → the scoped model fails to bind → <strong>404</strong>. The caller never sees   another workspace's data.</p>
 <ul><li>Every list/response is confined to the caller's institution, including the</li></ul>
 <p>  month totals and the reports.</p>
-<h3 id="documented-limitation--software-super-admin">Documented limitation — Software Super Admin</h3>
-<p>A <strong>Software Super Admin (SSA)</strong> is a platform-level role. In the <strong>web</strong> app an SSA uses a session-scoped &quot;switch into a workspace&quot; control. The <strong>mobile API has no tenant-switch</strong>, and there is no session. As a result, an SSA bearer token currently resolves to a <strong>GLOBAL, unscoped context</strong> (<code>TenantManager::resolveTenantId()</code> returns <code>null</code>):</p>
-<ul><li>Tenant-owned queries run <strong>without</strong> an institution filter, so an SSA token sees</li></ul>
-<p>  <strong>all</strong> institutions' data.</p>
-<ul><li><code>tenantExists()</code> has no scope to apply, so the <code>exists</code> rules stay <strong>table-wide</strong></li></ul>
-<p>  for an SSA token.</p>
-<ul><li><code>GET /api/meta</code> returns <code>institution: null</code> for an SSA token (there is no single</li></ul>
-<p>  &quot;current&quot; institution).</p>
-<p>This is by design for platform oversight, but it means a mobile SSA token is <strong>not</strong> tenant-isolated. If the mobile client is ever exposed to SSA accounts, handle this case explicitly (or restrict the mobile app to non-SSA roles).</p>
+<h3 id="software-super-admin--excluded-from-the-mobile-api">Software Super Admin — excluded from the mobile API</h3>
+<p>A <strong>Software Super Admin (SSA)</strong> is a platform-level role. In the <strong>web</strong> app an SSA uses a session-scoped &quot;switch into a workspace&quot; control. The <strong>mobile API has no tenant-switch</strong>, and there is no session — so an SSA bearer token would resolve to a <strong>GLOBAL, unscoped context</strong> (<code>TenantManager::resolveTenantId()</code> returns <code>null</code>), meaning tenant-owned queries would run <strong>without</strong> an institution filter and an SSA token would see <strong>every</strong> institution's data.</p>
+<p><strong>The mobile API therefore refuses SSA accounts outright</strong> (three layers, see <a href="flutter-mobile.html">FLUTTER_MOBILE_APP.md §1.1</a>):</p>
+<ul><li><code>POST /api/auth/login</code> returns <strong>403</strong></li></ul>
+<p>  <code>{ &quot;message&quot;: &quot;Platform administrators must use the web console.&quot; }</code> and mints   <strong>no</strong> token for an SSA account.</p>
+<ul><li><code>GET /api/auth/me</code> returns the same <strong>403</strong> if a stored token resolves to an SSA,</li></ul>
+<p>  so a token issued before this rule cannot be reused.</p>
+<ul><li>Every other protected endpoint is reached only through a token that passed the</li></ul>
+<p>  two guards above, so an SSA can never hold a working mobile session.</p>
+<p><strong>What a normal tenant client expects:</strong> an SSA is simply not a mobile user. There is no global context to render, and <code>GET /api/meta</code> never returns a null institution for a legitimate mobile session.</p>
 <hr>
 <h2 id="6-endpoint-reference">6. Endpoint reference</h2>
-<p><strong>26 endpoints total.</strong> Grouped by area. &quot;Auth&quot; indicates whether <code>Authorization: Bearer</code> is required.</p>
+<p><strong>61 endpoints total.</strong> Grouped by area. &quot;Auth&quot; indicates whether <code>Authorization: Bearer</code> is required; <strong>Permission</strong> is the route-level gate (<code>permission:*</code> middleware) — a request without it gets <strong>403</strong>.</p>
+<blockquote><p><strong>The mobile app serves three roles only:</strong> Institution Admin, Meal Manager and Member. A <strong>Software Super Admin</strong> is refused at login, at <code>/auth/me</code>, and by the <code>mobile.not-ssa</code> middleware on <strong>every</strong> authenticated route (§5).</p></blockquote>
 <h3 id="60-quick-index">6.0 Quick index</h3>
+<h4 id="public">Public</h4>
 <div class="table-wrap">
 <table>
 <thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th></tr></thead>
 <tbody>
 <tr><td>1</td><td>POST</td><td><code>/api/auth/register</code></td><td>public</td></tr>
 <tr><td>2</td><td>POST</td><td><code>/api/auth/login</code></td><td>public</td></tr>
-<tr><td>3</td><td>GET</td><td><code>/api/auth/me</code></td><td>✅</td></tr>
-<tr><td>4</td><td>POST</td><td><code>/api/auth/logout</code></td><td>✅</td></tr>
-<tr><td>5</td><td>POST</td><td><code>/api/auth/devices</code></td><td>✅</td></tr>
-<tr><td>6</td><td>PATCH</td><td><code>/api/auth/profile</code></td><td>✅</td></tr>
-<tr><td>7</td><td>GET</td><td><code>/api/meta</code></td><td>public</td></tr>
-<tr><td>8</td><td>GET</td><td><code>/api/dashboard</code></td><td>✅</td></tr>
-<tr><td>9</td><td>GET</td><td><code>/api/members</code></td><td>✅</td></tr>
-<tr><td>10</td><td>GET</td><td><code>/api/members/{member}</code></td><td>✅</td></tr>
-<tr><td>11</td><td>POST</td><td><code>/api/members</code></td><td>✅</td></tr>
-<tr><td>12</td><td>PATCH</td><td><code>/api/members/{member}</code></td><td>✅</td></tr>
-<tr><td>13</td><td>DELETE</td><td><code>/api/members/{member}</code></td><td>✅</td></tr>
-<tr><td>14</td><td>GET</td><td><code>/api/deposits</code></td><td>✅</td></tr>
-<tr><td>15</td><td>POST</td><td><code>/api/deposits</code></td><td>✅</td></tr>
-<tr><td>16</td><td>GET</td><td><code>/api/deposits/export</code></td><td>✅</td></tr>
-<tr><td>17</td><td>GET</td><td><code>/api/meals</code></td><td>✅</td></tr>
-<tr><td>18</td><td>GET</td><td><code>/api/meals/day</code></td><td>✅</td></tr>
-<tr><td>19</td><td>POST</td><td><code>/api/meals/day</code></td><td>✅</td></tr>
-<tr><td>20</td><td>GET</td><td><code>/api/subsidies</code></td><td>✅</td></tr>
-<tr><td>21</td><td>POST</td><td><code>/api/subsidies</code></td><td>✅</td></tr>
-<tr><td>22</td><td>GET</td><td><code>/api/subsidies/sources</code></td><td>✅</td></tr>
-<tr><td>23</td><td>GET</td><td><code>/api/reports/meal</code></td><td>✅</td></tr>
-<tr><td>24</td><td>GET</td><td><code>/api/reports/analytics</code></td><td>✅</td></tr>
-<tr><td>25</td><td>GET</td><td><code>/api/reports/forecast</code></td><td>✅</td></tr>
-<tr><td>26</td><td>GET</td><td><code>/api/reports/per-meal-rate</code></td><td>✅</td></tr>
+<tr><td>3</td><td>GET</td><td><code>/api/meta</code></td><td>public</td></tr>
 </tbody>
 </table>
 </div>
+<h4 id="session--identity">Session &amp; identity</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>4</td><td>GET</td><td><code>/api/auth/me</code></td><td>✅</td><td>—</td></tr>
+<tr><td>5</td><td>POST</td><td><code>/api/auth/logout</code></td><td>✅</td><td>—</td></tr>
+<tr><td>6</td><td>POST</td><td><code>/api/auth/devices</code></td><td>✅</td><td>—</td></tr>
+<tr><td>7</td><td>PATCH</td><td><code>/api/auth/profile</code></td><td>✅</td><td>—</td></tr>
+<tr><td>8</td><td>PUT</td><td><code>/api/auth/password</code></td><td>✅</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="my-account-self-service--any-role">My account (self-service — any role)</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>9</td><td>GET</td><td><code>/api/me/dashboard</code></td><td>✅</td><td>—</td></tr>
+<tr><td>10</td><td>GET</td><td><code>/api/me/meals</code></td><td>✅</td><td>—</td></tr>
+<tr><td>11</td><td>GET</td><td><code>/api/me/deposits</code></td><td>✅</td><td>—</td></tr>
+<tr><td>12</td><td>GET</td><td><code>/api/me/analytics</code></td><td>✅</td><td>—</td></tr>
+<tr><td>13</td><td>PUT</td><td><code>/api/me/theme</code></td><td>✅</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="notifications">Notifications</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>14</td><td>GET</td><td><code>/api/notifications</code></td><td>✅</td><td>—</td></tr>
+<tr><td>15</td><td>GET</td><td><code>/api/notifications/latest</code></td><td>✅</td><td>—</td></tr>
+<tr><td>16</td><td>POST</td><td><code>/api/notifications/{id}/read</code></td><td>✅</td><td>—</td></tr>
+<tr><td>17</td><td>POST</td><td><code>/api/notifications/read-all</code></td><td>✅</td><td>—</td></tr>
+<tr><td>18</td><td>DELETE</td><td><code>/api/notifications/{id}</code></td><td>✅</td><td>—</td></tr>
+<tr><td>19</td><td>POST</td><td><code>/api/notifications/announce</code></td><td>✅</td><td><code>notifications.announce</code> (Admin)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="dashboard--members">Dashboard &amp; members</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>20</td><td>GET</td><td><code>/api/dashboard</code></td><td>✅</td><td>—</td></tr>
+<tr><td>21</td><td>GET</td><td><code>/api/members</code></td><td>✅</td><td><code>students.view</code></td></tr>
+<tr><td>22</td><td>GET</td><td><code>/api/members/{member}</code></td><td>✅</td><td><code>students.view</code></td></tr>
+<tr><td>23</td><td>POST</td><td><code>/api/members</code></td><td>✅</td><td><code>students.manage</code></td></tr>
+<tr><td>24</td><td>PATCH</td><td><code>/api/members/{member}</code></td><td>✅</td><td><code>students.manage</code></td></tr>
+<tr><td>25</td><td>DELETE</td><td><code>/api/members/{member}</code></td><td>✅</td><td><code>students.manage</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="money-in--out">Money in / out</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>26</td><td>GET</td><td><code>/api/deposits</code></td><td>✅</td><td><code>meals.deposit</code></td></tr>
+<tr><td>27</td><td>POST</td><td><code>/api/deposits</code></td><td>✅</td><td><code>meals.deposit</code></td></tr>
+<tr><td>28</td><td>GET</td><td><code>/api/deposits/export</code></td><td>✅</td><td><code>meals.deposit</code></td></tr>
+<tr><td>29</td><td>GET</td><td><code>/api/expenses</code></td><td>✅</td><td><code>meals.expense</code></td></tr>
+<tr><td>30</td><td>POST</td><td><code>/api/expenses</code></td><td>✅</td><td><code>meals.expense</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="meals">Meals</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>31</td><td>GET</td><td><code>/api/meals</code></td><td>✅</td><td>—</td></tr>
+<tr><td>32</td><td>GET</td><td><code>/api/meals/day</code></td><td>✅</td><td><code>meals.view</code></td></tr>
+<tr><td>33</td><td>POST</td><td><code>/api/meals/day</code></td><td>✅</td><td><code>meals.entry</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="subsidies">Subsidies</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>34</td><td>GET</td><td><code>/api/subsidies</code></td><td>✅</td><td><code>subsidies.view</code></td></tr>
+<tr><td>35</td><td>POST</td><td><code>/api/subsidies</code></td><td>✅</td><td><code>subsidies.manage</code></td></tr>
+<tr><td>36</td><td>GET</td><td><code>/api/subsidies/sources</code></td><td>✅</td><td><code>subsidies.view</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="vendors--departments">Vendors &amp; departments</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>37</td><td>GET</td><td><code>/api/vendors</code></td><td>✅</td><td><code>vendors.view</code></td></tr>
+<tr><td>38</td><td>POST</td><td><code>/api/vendors</code></td><td>✅</td><td><code>vendors.manage</code></td></tr>
+<tr><td>39</td><td>GET</td><td><code>/api/departments</code></td><td>✅</td><td><code>departments.view</code></td></tr>
+<tr><td>40</td><td>POST</td><td><code>/api/departments</code></td><td>✅</td><td><code>departments.manage</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="claims">Claims</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>41</td><td>GET</td><td><code>/api/claims</code></td><td>✅</td><td>— (own only)</td></tr>
+<tr><td>42</td><td>POST</td><td><code>/api/claims</code></td><td>✅</td><td>— (own only)</td></tr>
+<tr><td>43</td><td>GET</td><td><code>/api/claims/review</code></td><td>✅</td><td><code>claims.review</code></td></tr>
+<tr><td>44</td><td>PATCH</td><td><code>/api/claims/{id}/approve</code></td><td>✅</td><td><code>claims.review</code></td></tr>
+<tr><td>45</td><td>PATCH</td><td><code>/api/claims/{id}/reject</code></td><td>✅</td><td><code>claims.review</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="member-payments">Member payments</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>46</td><td>GET</td><td><code>/api/me/payments</code></td><td>✅</td><td>— (own only)</td></tr>
+<tr><td>47</td><td>POST</td><td><code>/api/me/payments</code></td><td>✅</td><td>— (own only)</td></tr>
+<tr><td>48</td><td>GET</td><td><code>/api/member-payments</code></td><td>✅</td><td><code>meals.deposit</code></td></tr>
+<tr><td>49</td><td>PATCH</td><td><code>/api/member-payments/{id}/approve</code></td><td>✅</td><td><code>meals.deposit</code></td></tr>
+<tr><td>50</td><td>PATCH</td><td><code>/api/member-payments/{id}/reject</code></td><td>✅</td><td><code>meals.deposit</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="meal-menus--voting">Meal menus &amp; voting</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>51</td><td>GET</td><td><code>/api/menus</code></td><td>✅</td><td>—</td></tr>
+<tr><td>52</td><td>GET</td><td><code>/api/menus/{menu}</code></td><td>✅</td><td>—</td></tr>
+<tr><td>53</td><td>POST</td><td><code>/api/menus/{menu}/vote</code></td><td>✅</td><td>— (own vote)</td></tr>
+<tr><td>54</td><td>POST</td><td><code>/api/menus</code></td><td>✅</td><td><code>meals.reports</code></td></tr>
+<tr><td>55</td><td>PATCH</td><td><code>/api/menus/{menu}/status</code></td><td>✅</td><td><code>meals.reports</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="workspace-settings">Workspace settings</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>56</td><td>GET</td><td><code>/api/settings/institution</code></td><td>✅</td><td><code>institution.view</code></td></tr>
+<tr><td>57</td><td>PUT</td><td><code>/api/settings/institution</code></td><td>✅</td><td><code>institution.manage</code></td></tr>
+<tr><td>58</td><td>GET</td><td><code>/api/settings/subsidy-sources</code></td><td>✅</td><td><code>subsidies.view</code></td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="reports">Reports</h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Method</th><th>Path</th><th>Auth</th><th>Permission</th></tr></thead>
+<tbody>
+<tr><td>59</td><td>GET</td><td><code>/api/reports/meal</code></td><td>✅</td><td><code>meals.reports</code></td></tr>
+<tr><td>60</td><td>GET</td><td><code>/api/reports/analytics</code></td><td>✅</td><td><code>transactions.view</code></td></tr>
+<tr><td>61</td><td>GET</td><td><code>/api/reports/forecast</code></td><td>✅</td><td><code>meals.reports</code></td></tr>
+<tr><td>62</td><td>GET</td><td><code>/api/reports/per-meal-rate</code></td><td>✅</td><td><code>meals.reports</code></td></tr>
+</tbody>
+</table>
+</div>
+<blockquote><p><strong>Counting note:</strong> the index above lists 62 rows; three are the public routes and one (<code>/api/reports/per-meal-rate</code>) is an alias of the report family, so the route-level total mounts at <strong>61 authenticated + 3 public</strong> distinct entries.</p></blockquote>
 <hr>
 <h3 id="61-auth--identity">6.1 Auth &amp; identity</h3>
 <h4 id="post-apiauthregister--self-registration-public"><code>POST /api/auth/register</code> — self-registration <em>(public)</em></h4>
-<p>Registers a new account and returns a token immediately. The account is <strong>always</strong> assigned the <strong>Member</strong> role (there is no <code>role</code> field accepted — never trust a client for a role). The account is attached to the currently resolved institution.</p>
+<p>Registers a new account and returns a token immediately. The account is <strong>always</strong> assigned the <strong>Member</strong> role (there is no <code>role</code> field accepted — never trust a client for a role).</p>
+<p>The account's institution is resolved from the <strong><code>invite_code</code></strong> — the same tenant-mapping key the web sign-up form uses. The code is resolved <strong>before</strong> anything is written, so an invalid code fails cleanly (<strong>422</strong>) instead of creating an orphaned account.</p>
 <p><strong>Throttle:</strong> <code>api-login</code> (5/min per email+IP) <strong>and</strong> baseline <code>api</code> (60/min).</p>
 <div class="table-wrap">
 <table>
@@ -231,11 +377,12 @@ X-RateLimit-Remaining: 0</code></pre>
 <tr><td><code>name</code></td><td>string</td><td>✅</td><td>max 255</td></tr>
 <tr><td><code>email</code></td><td>string</td><td>✅</td><td>valid email, max 255, unique</td></tr>
 <tr><td><code>password</code></td><td>string</td><td>✅</td><td>must be <strong>confirmed</strong> (send <code>password_confirmation</code>)</td></tr>
+<tr><td><code>invite_code</code></td><td>string</td><td>✅</td><td>max 24; must resolve to an <strong>active</strong> institution</td></tr>
 <tr><td><code>device_name</code></td><td>string</td><td>✕</td><td>max 120; used to label the token</td></tr>
 </tbody>
 </table>
 </div>
-<pre class="code"><code class="language-json">{ &quot;name&quot;: &quot;New Member&quot;, &quot;email&quot;: &quot;new@example.com&quot;, &quot;password&quot;: &quot;secret123&quot;, &quot;password_confirmation&quot;: &quot;secret123&quot;, &quot;device_name&quot;: &quot;Pixel 8&quot; }</code></pre>
+<pre class="code"><code class="language-json">{ &quot;name&quot;: &quot;New Member&quot;, &quot;email&quot;: &quot;new@example.com&quot;, &quot;password&quot;: &quot;secret123&quot;, &quot;password_confirmation&quot;: &quot;secret123&quot;, &quot;invite_code&quot;: &quot;AB12CD34&quot;, &quot;device_name&quot;: &quot;Pixel 8&quot; }</code></pre>
 <p><strong>201</strong></p>
 <pre class="code"><code class="language-json">{
   &quot;data&quot;: {
@@ -244,6 +391,17 @@ X-RateLimit-Remaining: 0</code></pre>
     &quot;user&quot;: { &quot;id&quot;: 7, &quot;name&quot;: &quot;New Member&quot;, &quot;email&quot;: &quot;new@example.com&quot;, &quot;roles&quot;: [&quot;Member&quot;], &quot;permissions&quot;: [], &quot;is_super_admin&quot;: false, &quot;institution_id&quot;: 1, &quot;status&quot;: &quot;active&quot; }
   }
 }</code></pre>
+<p><strong>Failures</strong></p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Code</th><th>Body</th><th>When</th></tr></thead>
+<tbody>
+<tr><td>422</td><td><code>{ &quot;message&quot;: &quot;...&quot;, &quot;errors&quot;: { &quot;invite_code&quot;: [&quot;That invitation code is not valid. Ask your institution admin for the correct code.&quot;] } }</code></td><td>the code does not resolve to an institution</td></tr>
+<tr><td>422</td><td><code>{ &quot;message&quot;: &quot;...&quot;, &quot;errors&quot;: { &quot;invite_code&quot;: [&quot;That institution is not currently accepting new members.&quot;] } }</code></td><td>the resolved institution is inactive</td></tr>
+<tr><td>422</td><td><code>{ &quot;message&quot;: &quot;...&quot;, &quot;errors&quot;: { &quot;email&quot;: [...] } }</code></td><td>the email is already registered</td></tr>
+</tbody>
+</table>
+</div>
 <hr>
 <h4 id="post-apiauthlogin--exchange-credentials-for-a-token-public"><code>POST /api/auth/login</code> — exchange credentials for a token <em>(public)</em></h4>
 <p><strong>Throttle:</strong> <code>api-login</code> (5/min per email+IP) <strong>and</strong> baseline <code>api</code>.</p>
@@ -387,8 +545,8 @@ X-RateLimit-Remaining: 0</code></pre>
   }
 }</code></pre>
 <p>Notes:</p>
-<ul><li><code>institution</code> is <code>null</code> when no tenant is resolvable (e.g. a fresh install or an</li></ul>
-<p>  <strong>SSA token</strong> in the global context — see §5).</p>
+<ul><li><code>institution</code> is <code>null</code> when no tenant is resolvable (e.g. a fresh install before</li></ul>
+<p>  an institution exists). An <strong>SSA token never reaches this endpoint</strong> — it is   refused with 403 at login and at <code>/auth/me</code> (see §5).</p>
 <ul><li><strong>Render with <code>terms</code>, never hard-coded nouns.</strong> A company says &quot;Employees&quot;, a</li></ul>
 <p>  dorm says &quot;Students&quot;. The keys are stable; the values change per institution.</p>
 <ul><li><code>subsidy_sources</code> here is the <strong>fixed platform list</strong> (enum keys → labels).</li></ul>
@@ -715,6 +873,389 @@ X-RateLimit-Remaining: 0</code></pre>
   ]
 }</code></pre>
 <p><code>percentage</code> is the source's <strong>default</strong> share (<code>null</code> when unset). All returned sources are active.</p>
+<hr>
+<h2 id="67b-my-account-member-self-service">6.7b My account (member self-service)</h2>
+<p>Every route here resolves the member from the <strong>token</strong>, so no member id is ever accepted — cross-member reads are structurally impossible. Open to any authenticated non-SSA user.</p>
+<h4 id="get-apimedashboardmonth-auth"><code>GET /api/me/dashboard?month=</code> <em>(auth)</em></h4>
+<p>The member's own month summary plus lifetime totals. Mirrors the web <code>Member/Dashboard</code> page.</p>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: {
+    &quot;has_member_record&quot;: true,
+    &quot;month&quot;: &quot;2026-09&quot;,
+    &quot;member&quot;: { &quot;id&quot;: 1, &quot;name&quot;: &quot;Farhan Hossain&quot;, &quot;roll&quot;: &quot;CS-2021-045&quot;, &quot;status&quot;: &quot;active&quot;, &quot;department&quot;: &quot;Computer Science&quot;, &quot;manager&quot;: &quot;Rakib Hasan&quot;, &quot;institution&quot;: &quot;North South University Hall&quot; },
+    &quot;summary&quot;: {
+      &quot;balance&quot;: 33.87, &quot;is_due&quot;: false,
+      &quot;month_meals&quot;: 24, &quot;month_breakfast&quot;: 8, &quot;month_lunch&quot;: 9, &quot;month_dinner&quot;: 7,
+      &quot;month_meal_cost&quot;: 566.13, &quot;month_deposited&quot;: 600, &quot;subsidy_share&quot;: 0,
+      &quot;lifetime_deposits&quot;: 4712.25, &quot;lifetime_meals&quot;: 148,
+      &quot;lifetime_meal_cost_estimate&quot;: 3491.16, &quot;cost_per_meal&quot;: 23.5889
+    },
+    &quot;recent_entries&quot;: [ { &quot;date&quot;: &quot;2026-09-16&quot;, &quot;breakfast&quot;: 1, &quot;lunch&quot;: 1, &quot;dinner&quot;: 0, &quot;total&quot;: 2 } ],
+    &quot;recent_deposits&quot;: [ { &quot;id&quot;: 9, &quot;amount&quot;: 3000, &quot;kind&quot;: &quot;personal&quot;, &quot;payment_method&quot;: &quot;bKash&quot;, &quot;date&quot;: &quot;2026-09-10T09:00:00+00:00&quot; } ],
+    &quot;claims_pending&quot;: 1
+  }
+}</code></pre>
+<ul><li><code>has_member_record: false</code> means the login is not yet linked to a roster row —</li></ul>
+<p>the UI shows a clear empty state, and no <code>404</code> is raised.</p>
+<ul><li><code>lifetime_meal_cost_estimate</code> is an <strong>estimate</strong> priced at the CURRENT rate, not</li></ul>
+<p>exact historical pricing. Label it as such.</p>
+<h4 id="get-apimemealsmonthper_page-auth"><code>GET /api/me/meals?month=&amp;per_page=</code> <em>(auth)</em></h4>
+<p>The member's own meal entries, with month totals computed over <strong>all</strong> rows (not just the page).</p>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 5, &quot;date&quot;: &quot;2026-09-16&quot;, &quot;breakfast&quot;: 1, &quot;lunch&quot;: 1, &quot;dinner&quot;: 0, &quot;total&quot;: 2 } ],
+  &quot;meta&quot;: { &quot;month&quot;: &quot;2026-09&quot;, &quot;has_member_record&quot;: true, &quot;totals&quot;: { &quot;breakfast&quot;: 4, &quot;lunch&quot;: 4, &quot;dinner&quot;: 3, &quot;total&quot;: 11 }, &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 50, &quot;total&quot;: 24 } }
+}</code></pre>
+<h4 id="get-apimedepositsmonthper_page-auth"><code>GET /api/me/deposits?month=&amp;per_page=</code> <em>(auth)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 9, &quot;amount&quot;: 3000, &quot;kind&quot;: &quot;personal&quot;, &quot;kind_label&quot;: &quot;Personal deposit&quot;, &quot;payment_method&quot;: &quot;bKash&quot;, &quot;notes&quot;: null, &quot;date&quot;: &quot;2026-09-10T09:00:00+00:00&quot; } ],
+  &quot;meta&quot;: { &quot;month&quot;: &quot;2026-09&quot;, &quot;has_member_record&quot;: true, &quot;month_total&quot;: 600, &quot;lifetime_total&quot;: 4712.25, &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 25, &quot;total&quot;: 2 } }
+}</code></pre>
+<h4 id="get-apimeanalyticsmonths-auth"><code>GET /api/me/analytics?months=</code> <em>(auth)</em></h4>
+<p>The member's personal month-by-month trend (default 6 months, max 24), newest first so it maps straight onto the chart's x-axis.</p>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: {
+    &quot;has_member_record&quot;: true,
+    &quot;member&quot;: { &quot;id&quot;: 1, &quot;name&quot;: &quot;Farhan Hossain&quot;, &quot;roll&quot;: &quot;CS-2021-045&quot; },
+    &quot;months&quot;: [ { &quot;month&quot;: &quot;2026-09&quot;, &quot;label&quot;: &quot;Sep 2026&quot;, &quot;meals&quot;: 24, &quot;breakfast&quot;: 8, &quot;lunch&quot;: 9, &quot;dinner&quot;: 7, &quot;meal_cost&quot;: 566.13, &quot;deposited&quot;: 600, &quot;balance&quot;: 33.87, &quot;per_meal_rate&quot;: 23.5889, &quot;cost_per_meal&quot;: 23.59 } ]
+  }
+}</code></pre>
+<h4 id="put-apimetheme-auth"><code>PUT /api/me/theme</code> <em>(auth)</em></h4>
+<p>Set the caller's OWN theme preference. Fields are <strong>merged</strong>, so the app may send only what the user changed.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>mode</code></td><td>string</td><td>✕</td><td><code>light</code> \</td><td><code>dark</code> \</td><td><code>system</code></td></tr>
+<tr><td><code>accent</code></td><td>string</td><td>✕</td><td>accent key, max 30</td></tr>
+<tr><td><code>density</code></td><td>string</td><td>✕</td><td>e.g. <code>comfortable</code> \</td><td><code>compact</code></td></tr>
+</tbody>
+</table>
+</div>
+<pre class="code"><code class="language-json">{ &quot;mode&quot;: &quot;dark&quot; }</code></pre>
+<p><strong>200</strong> -&gt; <code>{ &quot;data&quot;: { &quot;theme&quot;: { &quot;mode&quot;: &quot;dark&quot; } }, &quot;message&quot;: &quot;Theme updated.&quot; }</code></p>
+<h4 id="put-apiauthpassword--change-your-own-password-auth"><code>PUT /api/auth/password</code> — change your own password <em>(auth)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>current_password</code></td><td>string</td><td>✅</td><td>verified against the stored hash</td></tr>
+<tr><td><code>password</code></td><td>string</td><td>✅</td><td>must be <strong>confirmed</strong> (<code>password_confirmation</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>200</strong> -&gt; <code>{ &quot;message&quot;: &quot;Password updated. Other devices were signed out.&quot; }</code></p>
+<ul><li>A wrong current password is a <strong>422</strong> with <code>errors.current_password</code>.</li><li>On success every <strong>other</strong> device token is revoked; the calling token survives,</li></ul>
+<p>so the user is not ejected from the app they just used to make the change.</p>
+<hr>
+<h2 id="67c-notifications">6.7c Notifications</h2>
+<p>A user only ever sees their OWN notifications (the notifiable morph scopes it).</p>
+<h4 id="get-apinotificationsper_page-auth"><code>GET /api/notifications?per_page=</code> <em>(auth)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: &quot;9f...&quot;, &quot;kind&quot;: &quot;deposit_verified&quot;, &quot;title&quot;: &quot;Payment verified&quot;, &quot;body&quot;: &quot;Your payment of 3000 was approved.&quot;, &quot;url&quot;: &quot;/deposits/9&quot;, &quot;amount&quot;: 3000, &quot;read&quot;: false, &quot;created_at&quot;: &quot;2026-09-16T09:00:00+00:00&quot;, &quot;created_human&quot;: &quot;2 hours ago&quot; } ],
+  &quot;meta&quot;: { &quot;unread_count&quot;: 3, &quot;can_announce&quot;: false, &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 20, &quot;total&quot;: 3 } }
+}</code></pre>
+<h4 id="get-apinotificationslatest-auth"><code>GET /api/notifications/latest</code> <em>(auth)</em></h4>
+<p>The glanceable list behind the app's bell / badge. Deliberately capped at <strong>8</strong>.</p>
+<pre class="code"><code class="language-json">{ &quot;data&quot;: { &quot;unread_count&quot;: 3, &quot;items&quot;: [ /* up to 8 as above */ ] } }</code></pre>
+<h4 id="post-apinotificationsidread-auth"><code>POST /api/notifications/{id}/read</code> <em>(auth)</em></h4>
+<p>Marks one notification read. The id is looked up <strong>within the caller's own relation</strong>, so another user's notification id simply does not resolve.</p>
+<p><strong>200</strong> -&gt; <code>{ &quot;data&quot;: { &quot;unread_count&quot;: 2 }, &quot;message&quot;: &quot;Marked as read.&quot; }</code></p>
+<h4 id="post-apinotificationsread-all-auth"><code>POST /api/notifications/read-all</code> <em>(auth)</em></h4>
+<p><strong>200</strong> -&gt; <code>{ &quot;data&quot;: { &quot;unread_count&quot;: 0 }, &quot;message&quot;: &quot;All notifications marked as read.&quot; }</code></p>
+<h4 id="delete-apinotificationsid-auth"><code>DELETE /api/notifications/{id}</code> <em>(auth)</em></h4>
+<p><strong>200</strong> -&gt; <code>{ &quot;message&quot;: &quot;Notification removed.&quot; }</code></p>
+<h4 id="post-apinotificationsannounce--institution-broadcast-auth-notificationsannounce"><code>POST /api/notifications/announce</code> — institution broadcast <em>(auth, <code>notifications.announce</code>)</em></h4>
+<p>Permission-gated; on mobile only an <strong>Institution Admin</strong> holds it (the SSA — the other holder on web — is blocked from the API entirely).</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>title</code></td><td>string</td><td>✅</td><td>max 120</td></tr>
+<tr><td><code>body</code></td><td>string</td><td>✅</td><td>max 1000</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>201</strong> -&gt; <code>{ &quot;data&quot;: { &quot;recipients&quot;: 42 }, &quot;message&quot;: &quot;Announcement sent to 42 user(s).&quot; }</code></p>
+<p><strong>Failures:</strong> <code>403</code> if the caller does not belong to the active institution.</p>
+<hr>
+<h2 id="67d-claims">6.7d Claims</h2>
+<h4 id="get-apiclaimsper_page--the-members-own-claims-auth"><code>GET /api/claims?per_page=</code> — the member's own claims <em>(auth)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 4, &quot;kind&quot;: &quot;dispute&quot;, &quot;kind_label&quot;: &quot;Missing entry / dispute&quot;, &quot;subject&quot;: &quot;meal&quot;, &quot;subject_label&quot;: &quot;Missing meal&quot;, &quot;title&quot;: &quot;Dinner on the 14th&quot;, &quot;summary&quot;: &quot;...&quot;, &quot;description&quot;: null, &quot;amount&quot;: 300, &quot;status&quot;: &quot;pending&quot;, &quot;status_label&quot;: &quot;Pending&quot;, &quot;entry_date&quot;: &quot;14 Sep 2026&quot;, &quot;breakfast&quot;: 1, &quot;lunch&quot;: 0, &quot;dinner&quot;: 1, &quot;claim_date&quot;: &quot;16 Sep 2026&quot;, &quot;payment_method&quot;: null, &quot;review_notes&quot;: null, &quot;created_at&quot;: &quot;16 Sep 2026, 09:00&quot;, &quot;student&quot;: { &quot;id&quot;: 1, &quot;name&quot;: &quot;Farhan Hossain&quot;, &quot;roll&quot;: &quot;CS-2021-045&quot; } } ],
+  &quot;meta&quot;: { &quot;has_member_record&quot;: true, &quot;kinds&quot;: [ { &quot;value&quot;: &quot;dispute&quot;, &quot;label&quot;: &quot;Missing entry / dispute&quot; } ], &quot;subjects&quot;: { &quot;meal&quot;: &quot;Missing meal&quot; }, &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 15, &quot;total&quot;: 1 } }
+}</code></pre>
+<h4 id="post-apiclaims--raise-a-claim-auth"><code>POST /api/claims</code> — raise a claim <em>(auth)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>kind</code></td><td>string</td><td>✅</td><td><code>dispute</code> \</td><td><code>expense</code></td></tr>
+<tr><td><code>subject</code></td><td>string</td><td>✕</td><td>e.g. <code>meal</code></td></tr>
+<tr><td><code>amount</code></td><td>number</td><td>✕</td><td>required when <code>kind=expense</code></td></tr>
+<tr><td><code>title</code></td><td>string</td><td>✅</td><td>max 255</td></tr>
+<tr><td><code>description</code></td><td>string</td><td>✕</td><td>max 2000</td></tr>
+<tr><td><code>claim_date</code></td><td>date</td><td>✕</td><td>defaults to today</td></tr>
+<tr><td><code>payment_method</code></td><td>string</td><td>✕</td><td>max 60</td></tr>
+<tr><td><code>entry_date</code></td><td>date</td><td>✕</td><td>required when <code>subject=meal</code></td></tr>
+<tr><td><code>breakfast</code> / <code>lunch</code> / <code>dinner</code></td><td>int</td><td>✕</td><td>0-10; at least one must be &gt; 0 for a meal dispute</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>201</strong> -&gt; <code>{ &quot;data&quot;: { ...claim... }, &quot;message&quot;: &quot;Claim submitted. Your manager will review it.&quot; }</code></p>
+<p><strong>422</strong> with a field-keyed <code>errors</code> object when the guard rails fail (an expense with no amount; a meal dispute with no meals or no date).</p>
+<p><strong>409</strong> when the account is not linked to a member record.</p>
+<h4 id="get-apiclaimsreviewstatuskindper_page--the-review-queue-auth-claimsreview"><code>GET /api/claims/review?status=&amp;kind=&amp;per_page=</code> — the review queue <em>(auth, <code>claims.review</code>)</em></h4>
+<p>Scoped by BOTH institution and manager assignment: an Institution Admin sees every claim in the institution; a <strong>Meal Manager sees only claims from members assigned to them</strong>. The <code>meta.scoped_to_assigned</code> flag tells the UI which mode it is in.</p>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ /* claims, each with `reviewer` + `reviewed_at` */ ],
+  &quot;meta&quot;: {
+    &quot;stats&quot;: { &quot;pending&quot;: 4, &quot;approved&quot;: 12, &quot;rejected&quot;: 1 },
+    &quot;kinds&quot;: [ { &quot;value&quot;: &quot;dispute&quot;, &quot;label&quot;: &quot;Missing entry / dispute&quot; } ],
+    &quot;scoped_to_assigned&quot;: true,
+    &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 20, &quot;total&quot;: 4 }
+  }
+}</code></pre>
+<h4 id="patch-apiclaimsclaimapprove-auth-claimsreview"><code>PATCH /api/claims/{claim}/approve</code> <em>(auth, <code>claims.review</code>)</em></h4>
+<p><strong>This is the point at which money moves</strong> — the same transaction the web runs.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>review_notes</code></td><td>string</td><td>✕</td><td>max 1000</td></tr>
+<tr><td><code>approved_amount</code></td><td>number</td><td>✕</td><td>a manager may approve a <strong>partial</strong> amount</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>200</strong> -&gt; <code>{ &quot;data&quot;: { ...claim... }, &quot;message&quot;: &quot;Claim approved and the member's balance updated.&quot; }</code></p>
+<p><strong>Failures:</strong> <code>403</code> when the caller cannot review that claim (another institution, or a member not assigned to this manager); <code>409</code> when it was already reviewed.</p>
+<h4 id="patch-apiclaimsclaimreject-auth-claimsreview"><code>PATCH /api/claims/{claim}/reject</code> <em>(auth, <code>claims.review</code>)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>review_notes</code></td><td>string</td><td>✕</td><td>max 1000</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>200</strong> -&gt; <code>{ &quot;data&quot;: { ...claim... }, &quot;message&quot;: &quot;Claim rejected.&quot; }</code></p>
+<hr>
+<h2 id="67e-member-payments">6.7e Member payments</h2>
+<p><strong>The safety rule:</strong> a member can RECORD a payment, but only a manager can ACKNOWLEDGE it — and only acknowledgement moves the balance.</p>
+<h4 id="get-apimepayments--the-members-own-submissions-auth"><code>GET /api/me/payments</code> — the member's own submissions <em>(auth)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 3, &quot;reference&quot;: &quot;MP-2026-0003&quot;, &quot;amount&quot;: 3000, &quot;method&quot;: &quot;bkash&quot;, &quot;method_label&quot;: &quot;bKash&quot;, &quot;status&quot;: &quot;pending&quot;, &quot;status_tone&quot;: &quot;amber&quot;, &quot;payer_reference&quot;: &quot;TRX9921&quot;, &quot;note&quot;: &quot;September top-up&quot;, &quot;review_note&quot;: null, &quot;created_at&quot;: &quot;2026-09-16T09:00:00+00:00&quot;, &quot;reviewed_at&quot;: null } ],
+  &quot;meta&quot;: { &quot;has_member_record&quot;: true, &quot;balance&quot;: 33.87, &quot;pending_total&quot;: 3000, &quot;methods&quot;: [ { &quot;value&quot;: &quot;bkash&quot;, &quot;label&quot;: &quot;bKash&quot; } ], &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 15, &quot;total&quot;: 1 } }
+}</code></pre>
+<h4 id="post-apimepayments--submit-a-payment-intent-auth"><code>POST /api/me/payments</code> — submit a payment intent <em>(auth)</em></h4>
+<p>Creates a <strong>PENDING</strong> intent only. It deliberately does <strong>not</strong> create a deposit — that is what stops a member crediting their own account.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>amount</code></td><td>number</td><td>✅</td><td>1 - 1,000,000</td></tr>
+<tr><td><code>method</code></td><td>string</td><td>✅</td><td>a key of <code>MemberPayment::METHODS</code></td></tr>
+<tr><td><code>payer_reference</code></td><td>string</td><td>✕</td><td>max 120 (the sender's transaction id)</td></tr>
+<tr><td><code>note</code></td><td>string</td><td>✕</td><td>max 500</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>201</strong> -&gt; <code>{ &quot;data&quot;: { ...payment... }, &quot;message&quot;: &quot;Payment submitted. Your manager will verify it... Reference MP-2026-0003.&quot; }</code></p>
+<p><strong>409</strong> — a duplicate guard: the same member submitting the same amount twice within a minute is almost always a double-tap, not intent. The guard lives on the <strong>server</strong> precisely because a flaky mobile connection invites re-taps.</p>
+<h4 id="get-apimember-paymentsstatus--the-verification-queue-auth-mealsdeposit"><code>GET /api/member-payments?status=</code> — the verification queue <em>(auth, <code>meals.deposit</code>)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 3, &quot;reference&quot;: &quot;MP-2026-0003&quot;, &quot;amount&quot;: 3000, &quot;status&quot;: &quot;pending&quot;, &quot;student&quot;: { &quot;id&quot;: 1, &quot;name&quot;: &quot;Farhan Hossain&quot;, &quot;roll&quot;: &quot;CS-2021-045&quot; }, &quot;reviewer&quot;: null } ],
+  &quot;meta&quot;: { &quot;summary&quot;: { &quot;pending&quot;: 2, &quot;pending_total&quot;: 6000, &quot;approved_this_month&quot;: 12000 }, &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 20, &quot;total&quot;: 2 } }
+}</code></pre>
+<h4 id="patch-apimember-paymentsidapprove-auth-mealsdeposit"><code>PATCH /api/member-payments/{id}/approve</code> <em>(auth, <code>meals.deposit</code>)</em></h4>
+<p><strong>This is the moment money actually moves.</strong> It creates a real <code>Deposit</code> inside a transaction — the same row any manager would record — so the member's balance, the roster, the reports and the ledger all agree afterwards.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>review_note</code></td><td>string</td><td>✕</td><td>max 500</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>200</strong> -&gt; <code>{ &quot;data&quot;: { ...payment, &quot;status&quot;: &quot;approved&quot;... }, &quot;message&quot;: &quot;Payment MP-2026-0003 approved...&quot; }</code></p>
+<p><strong>409</strong> when the payment was already reviewed.</p>
+<h4 id="patch-apimember-paymentsidreject-auth-mealsdeposit"><code>PATCH /api/member-payments/{id}/reject</code> <em>(auth, <code>meals.deposit</code>)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>review_note</code></td><td>string</td><td><strong>required</strong></td><td>max 500 — the member sees this reason</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>200</strong> -&gt; <code>{ &quot;message&quot;: &quot;Payment MP-2026-0003 rejected.&quot; }</code></p>
+<hr>
+<h2 id="67f-meal-menus--voting">6.7f Meal menus &amp; voting</h2>
+<h4 id="get-apimenusstatusmeal_typeper_page-auth"><code>GET /api/menus?status=&amp;meal_type=&amp;per_page=</code> <em>(auth)</em></h4>
+<p>A <strong>member sees only menus with <code>status: &quot;voting&quot;</code></strong> (a draft is internal to the kitchen); staff see every status.</p>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [
+    {
+      &quot;id&quot;: 2, &quot;title&quot;: &quot;Friday dinner&quot;, &quot;meal_type&quot;: &quot;dinner&quot;, &quot;meal_type_label&quot;: &quot;Dinner&quot;,
+      &quot;menu_date&quot;: &quot;2026-09-18&quot;, &quot;status&quot;: &quot;voting&quot;, &quot;status_label&quot;: &quot;Voting open&quot;, &quot;status_tone&quot;: &quot;sky&quot;,
+      &quot;description&quot;: &quot;Choose the main course.&quot;, &quot;voting_closes_at&quot;: &quot;2026-09-18T15:00:00+00:00&quot;,
+      &quot;total_votes&quot;: 42, &quot;is_open_for_voting&quot;: true, &quot;allow_vote_changes&quot;: true, &quot;has_voted&quot;: false,
+      &quot;options&quot;: [
+        { &quot;id&quot;: 5, &quot;name&quot;: &quot;Beef tehari&quot;, &quot;description&quot;: null, &quot;estimated_cost&quot;: 120, &quot;is_recommended&quot;: true, &quot;votes&quot;: 30, &quot;percentage&quot;: 71.4, &quot;is_my_choice&quot;: false },
+        { &quot;id&quot;: 6, &quot;name&quot;: &quot;Chicken biryani&quot;, &quot;description&quot;: null, &quot;estimated_cost&quot;: 110, &quot;is_recommended&quot;: false, &quot;votes&quot;: 12, &quot;percentage&quot;: 28.6, &quot;is_my_choice&quot;: false }
+      ],
+      &quot;approved_at&quot;: null, &quot;created_at&quot;: &quot;2026-09-17T09:00:00+00:00&quot;
+    }
+  ],
+  &quot;meta&quot;: { &quot;statuses&quot;: [&quot;draft&quot;,&quot;voting&quot;,&quot;approved&quot;,&quot;rejected&quot;,&quot;cancelled&quot;], &quot;meal_types&quot;: { &quot;dinner&quot;: &quot;Dinner&quot; }, &quot;can_manage&quot;: false, &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 20, &quot;total&quot;: 1 } }
+}</code></pre>
+<ul><li><code>is_open_for_voting</code> is derived <strong>server-side</strong> from the status AND the</li></ul>
+<p>  opens/closes window. Never recompute it on the client.</p>
+<ul><li><code>is_my_choice</code> marks the option the caller already picked.</li></ul>
+<h4 id="get-apimenusmenu-auth"><code>GET /api/menus/{menu}</code> <em>(auth)</em></h4>
+<p>Same shape for a single menu, plus <code>meta.can_manage</code>, <code>meta.statuses</code> and <code>meta.meal_types</code>.</p>
+<h4 id="post-apimenusmenuvote--cast-or-change-your-vote-auth"><code>POST /api/menus/{menu}/vote</code> — cast or change your vote <em>(auth)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>option_id</code></td><td>int</td><td>✅</td><td>must belong to <strong>this</strong> menu</td></tr>
+<tr><td><code>comment</code></td><td>string</td><td>✕</td><td>max 500</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>200</strong> -&gt; the refreshed menu (tallies recomputed), so no second fetch is needed.</p>
+<p><strong>One vote per member per menu.</strong> A repeat vote <strong>updates</strong> the existing row rather than adding a second — enforced by a unique index on <code>(meal_menu_id, user_id)</code>.</p>
+<p><strong>Failures:</strong> <code>409</code> when the menu is not open for voting; <code>422</code> when the option id does not belong to this menu; <code>409</code> when the account has no member record.</p>
+<h4 id="post-apimenus--propose-a-menu-auth-mealsreports"><code>POST /api/menus</code> — propose a menu <em>(auth, <code>meals.reports</code>)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>title</code></td><td>string</td><td>✅</td><td>max 180</td></tr>
+<tr><td><code>meal_type</code></td><td>string</td><td>✅</td><td><code>breakfast</code> \</td><td><code>lunch</code> \</td><td><code>dinner</code> \</td><td><code>snack</code></td></tr>
+<tr><td><code>menu_date</code></td><td>date</td><td>✕</td><td>defaults to today</td></tr>
+<tr><td><code>description</code></td><td>string</td><td>✕</td><td>max 1000</td></tr>
+<tr><td><code>options</code></td><td>array</td><td>✅</td><td>min 2</td></tr>
+<tr><td><code>options[].name</code></td><td>string</td><td>✅</td><td>max 180</td></tr>
+<tr><td><code>options[].description</code></td><td>string</td><td>✕</td><td>max 500</td></tr>
+<tr><td><code>options[].estimated_cost</code></td><td>number</td><td>✕</td><td>per serving</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>201</strong> -&gt; the created menu (status <code>draft</code>).</p>
+<h4 id="patch-apimenusmenustatus--move-the-lifecycle-auth-mealsreports"><code>PATCH /api/menus/{menu}/status</code> — move the lifecycle <em>(auth, <code>meals.reports</code>)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>status</code></td><td>string</td><td>✅</td><td><code>draft</code> \</td><td><code>voting</code> \</td><td><code>approved</code> \</td><td><code>rejected</code> \</td><td><code>cancelled</code></td></tr>
+<tr><td><code>approval_note</code></td><td>string</td><td>✕</td><td>max 1000; recorded when approving</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>200</strong> -&gt; the updated menu. Approving stamps <code>approved_by</code> and <code>approved_at</code>.</p>
+<hr>
+<h2 id="67g-expenses-vendors--departments">6.7g Expenses, vendors &amp; departments</h2>
+<h4 id="get-apiexpensesmonthvendorper_page-auth-mealsexpense"><code>GET /api/expenses?month=&amp;vendor=&amp;per_page=</code> <em>(auth, <code>meals.expense</code>)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 12, &quot;description&quot;: &quot;Weekly vegetables&quot;, &quot;amount&quot;: 8500, &quot;category&quot;: &quot;vegetables&quot;, &quot;vendor&quot;: &quot;Mirpur Fresh Vegetables&quot;, &quot;vendor_id&quot;: 3, &quot;payment_status&quot;: &quot;paid&quot;, &quot;recorded_by&quot;: &quot;Rakib Hasan&quot;, &quot;is_reversed&quot;: false, &quot;date&quot;: &quot;2026-09-15T09:00:00+00:00&quot; } ],
+  &quot;meta&quot;: { &quot;month&quot;: &quot;2026-09&quot;, &quot;total&quot;: 8500, &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 25, &quot;total&quot;: 1 } }
+}</code></pre>
+<p><code>meta.total</code> counts only <strong>non-reversed</strong> expenses, so a reversed row does not inflate the month.</p>
+<h4 id="post-apiexpenses--record-a-kitchen-expense-auth-mealsexpense"><code>POST /api/expenses</code> — record a kitchen expense <em>(auth, <code>meals.expense</code>)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>amount</code></td><td>number</td><td>✅</td><td>min 0.01</td></tr>
+<tr><td><code>description</code></td><td>string</td><td>✕</td><td>max 255</td></tr>
+<tr><td><code>category</code></td><td>string</td><td>✕</td><td>max 120</td></tr>
+<tr><td><code>vendor_id</code></td><td>int</td><td>✕</td><td><strong>scoped to your institution</strong> (a foreign id is a 422)</td></tr>
+<tr><td><code>payment_status</code></td><td>string</td><td>✕</td><td><code>paid</code> (default) \</td><td><code>unpaid</code> \</td><td><code>partial</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>201</strong> -&gt; <code>{ &quot;data&quot;: { &quot;id&quot;: 12, &quot;amount&quot;: 8500 }, &quot;message&quot;: &quot;Expense recorded as a cash-out transaction.&quot; }</code></p>
+<blockquote><p>A ledger cash-out transaction is written <strong>first</strong>, then the module row links to it. Both happen in one database transaction, so the pool totals and the module can never disagree.</p></blockquote>
+<h4 id="get-apivendorssearchcategorystatusper_page-auth-vendorsview"><code>GET /api/vendors?search=&amp;category=&amp;status=&amp;per_page=</code> <em>(auth, <code>vendors.view</code>)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 3, &quot;name&quot;: &quot;Mirpur Fresh Vegetables&quot;, &quot;category&quot;: &quot;vegetables&quot;, &quot;category_label&quot;: &quot;Vegetables&quot;, &quot;contact_person&quot;: &quot;Procurement Desk&quot;, &quot;phone&quot;: &quot;+8801712345678&quot;, &quot;email&quot;: null, &quot;recurrence&quot;: &quot;daily&quot;, &quot;status&quot;: &quot;active&quot;, &quot;is_hub&quot;: false, &quot;opening_balance&quot;: 0, &quot;outstanding_balance&quot;: 8500, &quot;expenses_count&quot;: 4 } ],
+  &quot;meta&quot;: { &quot;categories&quot;: [ { &quot;value&quot;: &quot;groceries&quot;, &quot;label&quot;: &quot;Groceries&quot; } ], &quot;recurrences&quot;: [ { &quot;value&quot;: &quot;daily&quot;, &quot;label&quot;: &quot;Daily&quot; } ], &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 25, &quot;total&quot;: 4 } }
+}</code></pre>
+<h4 id="post-apivendors-auth-vendorsmanage"><code>POST /api/vendors</code> <em>(auth, <code>vendors.manage</code>)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>name</code></td><td>string</td><td>✅</td><td>max 255</td></tr>
+<tr><td><code>category</code></td><td>string</td><td>✕</td><td>a <code>Vendor::CATEGORIES</code> key</td></tr>
+<tr><td><code>recurrence</code></td><td>string</td><td>✕</td><td>a <code>Vendor::RECURRENCES</code> key</td></tr>
+<tr><td><code>contact_person</code></td><td>string</td><td>✕</td><td>max 255</td></tr>
+<tr><td><code>phone</code></td><td>string</td><td>✕</td><td>max 30</td></tr>
+<tr><td><code>email</code></td><td>string</td><td>✕</td><td>valid email</td></tr>
+<tr><td><code>opening_balance</code></td><td>number</td><td>✕</td><td></td></tr>
+<tr><td><code>status</code></td><td>string</td><td>✕</td><td><code>active</code> \</td><td><code>inactive</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>201</strong> -&gt; <code>{ &quot;data&quot;: { &quot;id&quot;: 9, &quot;name&quot;: &quot;New Vendor&quot; }, &quot;message&quot;: &quot;Vendor created.&quot; }</code></p>
+<h4 id="get-apidepartmentssearchper_page-auth-departmentsview"><code>GET /api/departments?search=&amp;per_page=</code> <em>(auth, <code>departments.view</code>)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 1, &quot;name&quot;: &quot;Computer Science&quot;, &quot;slug&quot;: &quot;computer-science&quot;, &quot;description&quot;: null, &quot;students_count&quot;: 12, &quot;active_students_count&quot;: 11 } ],
+  &quot;meta&quot;: { &quot;pagination&quot;: { &quot;current_page&quot;: 1, &quot;last_page&quot;: 1, &quot;per_page&quot;: 25, &quot;total&quot;: 4 } }
+}</code></pre>
+<h4 id="post-apidepartments-auth-departmentsmanage"><code>POST /api/departments</code> <em>(auth, <code>departments.manage</code>)</em></h4>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>name</code></td><td>string</td><td>✅</td><td><strong>unique within your institution</strong>, max 255</td></tr>
+<tr><td><code>slug</code></td><td>string</td><td>✕</td><td><strong>unique within your institution</strong>, max 255</td></tr>
+<tr><td><code>description</code></td><td>string</td><td>✕</td><td>max 1000</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>201</strong> -&gt; <code>{ &quot;data&quot;: { &quot;id&quot;: 5, &quot;name&quot;: &quot;Kitchen&quot; }, &quot;message&quot;: &quot;Department created.&quot; }</code></p>
+<hr>
+<h2 id="67h-institution-settings">6.7h Institution settings</h2>
+<h4 id="get-apisettingsinstitution-auth-institutionview"><code>GET /api/settings/institution</code> <em>(auth, <code>institution.view</code>)</em></h4>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: {
+    &quot;id&quot;: 1, &quot;name&quot;: &quot;North South University Hall&quot;, &quot;subtitle&quot;: &quot;Residential hall meal programme&quot;,
+    &quot;type&quot;: &quot;university_dorm&quot;, &quot;type_label&quot;: &quot;University Dormitory&quot;,
+    &quot;logo_url&quot;: null, &quot;contact_email&quot;: &quot;hello@nsu.test&quot;, &quot;contact_phone&quot;: &quot;+8801700000000&quot;,
+    &quot;invite_code&quot;: &quot;AB12CD34&quot;,
+    &quot;currency&quot;: { &quot;symbol&quot;: &quot;৳&quot;, &quot;symbol_position&quot;: &quot;before&quot;, &quot;decimal_precision&quot;: 2 },
+    &quot;terms&quot;: { &quot;member&quot;: &quot;Student&quot;, &quot;members&quot;: &quot;Students&quot; },
+    &quot;theme&quot;: { &quot;accent&quot;: &quot;indigo&quot;, &quot;mode&quot;: &quot;light&quot;, &quot;radius&quot;: &quot;lg&quot; },
+    &quot;subsidy_mode&quot;: &quot;pool&quot;, &quot;member_limit&quot;: 250,
+    &quot;subscription&quot;: { &quot;plan&quot;: &quot;growth&quot;, &quot;status&quot;: &quot;paid&quot;, &quot;amount&quot;: 2990 }
+  },
+  &quot;meta&quot;: { &quot;can_manage&quot;: true }
+}</code></pre>
+<p><code>meta.can_manage</code> is false for a <strong>Meal Manager</strong> (they hold <code>institution.view</code> but not <code>.manage</code>), so the app hides the edit affordances.</p>
+<h4 id="put-apisettingsinstitution-auth-institutionmanage"><code>PUT /api/settings/institution</code> <em>(auth, <code>institution.manage</code>)</em></h4>
+<p>Send as <strong><code>multipart/form-data</code></strong> when uploading a <code>logo</code>.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>name</code></td><td>string</td><td>✕</td><td>max 255</td></tr>
+<tr><td><code>subtitle</code></td><td>string</td><td>✕</td><td>max 255</td></tr>
+<tr><td><code>contact_email</code></td><td>string</td><td>✕</td><td>valid email</td></tr>
+<tr><td><code>contact_phone</code></td><td>string</td><td>✕</td><td>max 30</td></tr>
+<tr><td><code>subsidy_mode</code></td><td>string</td><td>✕</td><td>max 40</td></tr>
+<tr><td><code>logo</code></td><td>file</td><td>✕</td><td>image, max 2048 KB</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>200</strong> -&gt; <code>{ &quot;data&quot;: { &quot;id&quot;: 1, &quot;name&quot;: &quot;...&quot;, &quot;logo_url&quot;: &quot;...&quot; }, &quot;message&quot;: &quot;Institution settings updated.&quot; }</code></p>
+<h4 id="get-apisettingssubsidy-sources-auth-subsidiesview"><code>GET /api/settings/subsidy-sources</code> <em>(auth, <code>subsidies.view</code>)</em></h4>
+<p>The funding sources configured for this institution.</p>
+<pre class="code"><code class="language-json">{
+  &quot;data&quot;: [ { &quot;id&quot;: 1, &quot;name&quot;: &quot;NSU Authority Grant&quot;, &quot;key&quot;: &quot;university_authority&quot;, &quot;percentage&quot;: 60, &quot;description&quot;: null, &quot;is_active&quot;: true } ],
+  &quot;meta&quot;: { &quot;can_manage&quot;: false, &quot;platform_sources&quot;: { &quot;university_authority&quot;: &quot;University Authority&quot; } }
+}</code></pre>
 <hr>
 <h3 id="68-reports--analytics">6.8 Reports &amp; analytics</h3>
 <p>All reports are month-scoped via <code>?month=YYYY-MM</code> (defaults to the current month) and reuse the shared month snapshot.</p>

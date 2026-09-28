@@ -133,6 +133,56 @@
       animation: none !important;
     }
   }
+
+  /*
+   * AUTH SPLIT PANEL (`ap-*`).
+   *
+   * The redesigned login/register shell is a two-column split: a LIGHT
+   * introduction panel on the left, the form on the right. These utilities give
+   * the left panel a subtle, software-appropriate motion vocabulary:
+   *
+   *   .ap-drift   - the slow ambient blob drift behind the panel (background)
+   *   .ap-stagger - children fade+lift in sequence (uses --ap-index for delay)
+   *   .ap-sheen   - a soft highlight sweeping the headline once on mount
+   *
+   * Everything animates opacity/transform only (compositor-friendly, no layout
+   * shift) and is fully disabled under prefers-reduced-motion, so the panel is
+   * still readable - just static - for motion-sensitive users.
+   */
+  .ap-drift { animation: ap-drift 22s ease-in-out infinite; }
+  .ap-drift-slow { animation: ap-drift 30s ease-in-out infinite reverse; }
+
+  .ap-stagger {
+    animation: ap-stagger-in 0.62s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--ap-index, 0) * 90ms);
+  }
+
+  .ap-sheen { animation: ap-sheen 1.4s cubic-bezier(0.16, 1, 0.3, 1) 260ms both; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ap-drift,
+    .ap-drift-slow,
+    .ap-stagger,
+    .ap-sheen {
+      animation: none !important;
+    }
+  }
+}
+
+@keyframes ap-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(24px, -30px, 0) scale(1.06); }
+  66%      { transform: translate3d(-20px, 18px, 0) scale(0.96); }
+}
+
+@keyframes ap-stagger-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ap-sheen {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes wa-rise {

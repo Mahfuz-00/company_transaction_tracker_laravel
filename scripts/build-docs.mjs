@@ -36,6 +36,8 @@ const PAGES = [
     { src: 'SOFTWARE_ARCHITECTURE.md', out: 'architecture.html', label: 'Architecture', blurb: 'Stack, multi-tenancy, domain model + schema, theme engine, API layer and testing.' },
     { src: 'API.md', out: 'api.html', label: 'API Reference', blurb: 'Mobile JSON API: auth, conventions, rate limits, every endpoint and the web-route appendix.' },
     { src: 'DUSK_TESTING.md', out: 'dusk-testing.html', label: 'Dusk Testing', blurb: 'The role/module browser-test hierarchy, bootstrap, and the debugging playbook.' },
+    { src: 'FLUTTER_MOBILE_APP.md', out: 'flutter-mobile.html', label: 'Flutter Mobile App', blurb: 'Architecture spec for the companion Flutter client: Clean Architecture, BLoC, Dio, offline-first sync and FCM.' },
+    { src: 'mobile_app_ide_instructions.md', out: 'mobile-ide-instructions.html', label: 'Mobile IDE Instructions', blurb: 'Master build spec for an IDE agent: stack, RBAC matrix, folder tree, offline sync, FCM, disposal rules and a worked feature example.' },
     { src: 'DYNAMISM_ROADMAP.md', out: 'dynamism-roadmap.html', label: 'Dynamism Roadmap', blurb: 'Where the platform is dynamic today, and the hooks for form-builder fields and dashboard widgets.' },
 ];
 
@@ -47,6 +49,9 @@ const DOC_LINK_MAP = {
     'software_architecture.md': 'architecture.html',
     'software.md': 'architecture.html',
     'dusk_testing.md': 'dusk-testing.html',
+    'flutter_mobile_app.md': 'flutter-mobile.html',
+    'flutter.md': 'flutter-mobile.html',
+    'mobile_app_ide_instructions.md': 'mobile-ide-instructions.html',
 };
 
 /* ------------------------------------------------------------------ *

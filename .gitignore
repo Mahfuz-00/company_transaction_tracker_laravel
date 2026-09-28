@@ -29,6 +29,23 @@
 /database/*.sqlite-journal
 /database/*.sqlite-wal
 /database/*.sqlite-shm
+# ---------------------------------------------------------------------------
+# LOCAL-ONLY MOCK / DEMO DATA.
+#
+# MockDataSeeder creates five institutions' worth of realistic sample data
+# (members, deposits, meals, expenses, subsidies, vendors, menu votes, claims).
+# It is deliberately NOT tracked by git: keeping the file out of the repository
+# makes it IMPOSSIBLE to deploy the sample dataset to production, rather than
+# merely discouraged. A `--demo` flag on the committed DatabaseSeeder would ship
+# the fixture data (names, phone numbers, fake ledgers) with the source, and a
+# single `php artisan db:seed` on a live system could then create it.
+#
+# Run it locally with:
+#     php artisan db:seed --class=MockDataSeeder
+# Remove it again with:
+#     php artisan db:clear-dummy --force
+# ---------------------------------------------------------------------------
+/database/seeders/MockDataSeeder.php
 # Command Code: share the deliberate stack agents, but NOT machine-local config
 # or the auto-learned taste preferences.
 /.commandcode/settings.json

@@ -17,6 +17,19 @@ import { useEffect, useState } from 'react';
  * The shell is wrapped in ThemeProvider, so flipping the theme (or the global
  * ThemeToggle beside the bell) recolours the shell and every page inside it in
  * one paint.
+ *
+ * LAYOUT CONTRACT (the thing this shell exists to guarantee)
+ *   The structure is strictly `[ LEFT: Sidebar ] [ RIGHT: Body ]`.
+ *
+ *   The sidebar is its own full-height scroll container (h-screen, sticky left).
+ *   The body column sits beside it and owns the fixed top bar, which is
+ *   `sticky top-0` WITHIN THAT COLUMN — so the bar spans only the body's width
+ *   and can never overlap, stretch over, or sit on top of the sidebar.
+ *
+ *   Because the bar is sticky (in normal flow) rather than `fixed`, no spacer is
+ *   required to stop content hiding beneath it: a previous version used a
+ *   `fixed inset-x-0` bar plus an `h-14` spacer, and the fixed element spanned
+ *   the whole viewport, painting across the sidebar's brand header.
  */
 export default function AuthenticatedLayout({ header, children }) {
     const { auth, institution, tenant } = usePage().props;
@@ -61,22 +74,21 @@ export default function AuthenticatedLayout({ header, children }) {
                     <Sidebar user={user} onNavigate={() => setDrawerOpen(false)} />
                 </div>
 
-                {/* Main column */}
-                <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
-                    {/* FIXED TOP BAR - pinned to the viewport for every screen size.
+                {/* Main column — owns the top bar and the page content. */}
+                <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
+                    {/* FIXED TOP BAR — sticky WITHIN this column, so it spans the
+                        body's width only and never covers the sidebar.
                         Left: the Section > Module > Sub-Module > Title hierarchy.
                         Right: theme, notifications, profile menu. */}
                     <TopBar onMenuClick={() => setDrawerOpen((open) => !open)} />
 
-                    {/* Spacer: the bar is `fixed`, so it is out of flow and the
-                        content must be pushed down by the bar's own height.
-                        h-14 matches the bar's py-2.5 + content height, so nothing
-                        is ever hidden underneath it. */}
-                    <div className="h-14 flex-shrink-0" aria-hidden="true" />
-
-                    {/* Fluid content column: capped for readability, widening on
-                        large monitors and TV-sized displays (2xl / 3xl). */}
-                    <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 2xl:max-w-[1760px] 3xl:max-w-[1920px]">
+                    {/* The ONLY scroll container for page content. The top bar is
+                        sticky above it and the sidebar scrolls independently, so
+                        the three never fight for scroll position. */}
+                    <div className="min-h-0 flex-1 overflow-y-auto">
+                        {/* Fluid content column: capped for readability, widening on
+                            large monitors and TV-sized displays (2xl / 3xl). */}
+                        <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 2xl:max-w-[1760px] 3xl:max-w-[1920px]">
                         {/* Switched-view banner: only shown when a Software Super
                             Admin is inside another institution's workspace, so
                             they can always see WHICH tenant they are in and get
@@ -121,6 +133,7 @@ export default function AuthenticatedLayout({ header, children }) {
                         <main key={typeof window !== 'undefined' ? window.location.pathname : 'page'} className="animate-page-in">
                             {children}
                         </main>
+                        </div>
                     </div>
                 </div>
             </div>

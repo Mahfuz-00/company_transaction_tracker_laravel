@@ -5,7 +5,8 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "docs:build": "node scripts/build-docs.mjs"
+        "docs:build": "node scripts/build-docs.mjs",
+        "lint:nav-icons": "node scripts/check-nav-icons.mjs"
     },
     "devDependencies": {
         "@headlessui/react": "^2.0.0",

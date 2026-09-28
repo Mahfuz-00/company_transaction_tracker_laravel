@@ -344,8 +344,11 @@ class ClaimController extends Controller
      *  - Meal Manager            : ONLY a claim raised by a member assigned to
      *    them. A manager cannot touch another manager's member, even in the same
      *    institution.
+     *
+     * PUBLIC so the mobile API enforces the IDENTICAL rule. The web and the app
+     * must never disagree about who may approve a claim - this is money-moving.
      */
-    protected function canReview(Request $request, Claim $claim): bool
+    public function canReview(Request $request, Claim $claim): bool
     {
         $user = $request->user();
 
@@ -366,8 +369,12 @@ class ClaimController extends Controller
     /**
      * Serialise a claim for the UI. `$review` adds reviewer detail for the
      * manager queue.
+     *
+     * PUBLIC so the mobile API can reuse it: the claim payload must be identical
+     * on the web and in the app, and duplicating this mapping in a second
+     * controller is exactly how the two drift apart.
      */
-    protected function present(Claim $claim, bool $review = false): array
+    public function present(Claim $claim, bool $review = false): array
     {
         $payload = [
             'id' => $claim->id,
