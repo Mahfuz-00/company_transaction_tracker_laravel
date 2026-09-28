@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Auth\SocialAuthController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
@@ -33,6 +34,19 @@ Route::middleware('guest')->group(function () {
 
     Route::post('reset-password', [NewPasswordController::class, 'store'])
         ->name('password.store');
+
+    /*
+     * SSO / OAUTH (Google Workspace + Microsoft Entra).
+     *
+     * A guest starts at /auth/{provider}/redirect, which bounces them to the
+     * provider; the provider returns them to /auth/{provider}/callback. Both sit
+     * behind `guest` (a signed-in user has no reason to re-authenticate), and
+     * `{provider}` is validated against the supported list in the controller.
+     */
+    Route::get('auth/{provider}/redirect', [SocialAuthController::class, 'redirect'])
+        ->name('oauth.redirect');
+    Route::get('auth/{provider}/callback', [SocialAuthController::class, 'callback'])
+        ->name('oauth.callback');
 });
 
 Route::middleware('auth')->group(function () {

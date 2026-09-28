@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { HelpBadge, PageHint } from '@/Components/Help/HelpHint';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { Head, Link } from '@inertiajs/react';
@@ -35,7 +36,7 @@ ChartJS.register(
  * Metric card
  * ------------------------------------------------------------------ */
 
-function MetricCard({ label, value, hint, tone = 'slate', icon }) {
+function MetricCard({ label, value, hint, help = null, helpTitle = null, tone = 'slate', icon }) {
     const tones = {
         slate: 'text-slate-900',
         indigo: 'text-indigo-600',
@@ -48,8 +49,11 @@ function MetricCard({ label, value, hint, tone = 'slate', icon }) {
         <div className="rounded-2xl border-slate-200 bg-white p-5 shadow-sm transition-all hover:shadow-md">
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                         {label}
+                        {/* Persistent explanation of what this figure MEANS, so a
+                            user who has finished onboarding can still look it up. */}
+                        {help && <HelpBadge title={helpTitle || label} label={`What is ${label}?`}>{help}</HelpBadge>}
                     </p>
                     <p className={`mt-1.5 truncate text-2xl font-extrabold ${tones[tone] || tones.slate}`}>
                         {value}
@@ -278,10 +282,10 @@ export default function Dashboard({
         <AuthenticatedLayout
             header={
                 <div>
-                    <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                        Meal &amp; Expense Overview
-                    </h2>
-                    <p className="mt-0.5 text-xs font-medium text-slate-500">
+                    {/* The PAGE TITLE now lives in the fixed top bar (see
+                        Utils/pageMeta.js), so it is not repeated here. What remains
+                        is the descriptive line that gives the page its context. */}
+                    <p className="text-xs font-medium text-slate-500">
                         Shared pool, meal counts, and spending at a glance — {metrics.month_label}
                     </p>
                 </div>
@@ -290,6 +294,18 @@ export default function Dashboard({
             <Head title="Dashboard" />
 
             <div className="space-y-6">
+                {/* Persistent orientation aid: what this screen is and how to
+                    rediscover the tour. Survives the first-login modal. */}
+                <PageHint
+                    title="Your workspace at a glance"
+                    guideHref={route('profile.edit')}
+                >
+                    The shared meal pool, today's and this month's meal counts, member
+                    balances and the recent ledger. Every figure is scoped to your
+                    institution. Hover the ? badge on any card for a plain-language
+                    explanation.
+                </PageHint>
+
                 {/* Data reconciliation notice */}
                 {reconciliation.has_drift && (
                     <div className="flex items-start gap-3 rounded-xl border-sky-200 bg-sky-50 p-4">
@@ -335,6 +351,7 @@ export default function Dashboard({
                         value={money(Math.abs(metrics.pool_balance ?? 0), false)}
                         tone={poolHealthy ? 'emerald' : 'rose'}
                         hint={`${money(metrics.total_deposits ?? 0)} in · ${money(metrics.total_expenses ?? 0)} out`}
+                        help="Everything ever collected from members, minus everything ever spent on meals and expenses. A positive figure means the mess is holding credit; a negative one is a shortfall the institution must cover."
                         icon="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
                     />
                     <MetricCard
@@ -342,6 +359,7 @@ export default function Dashboard({
                         value={metrics.month_meals ?? 0}
                         tone="indigo"
                         hint={`${metrics.week_meals ?? 0} this week · ${metrics.today_meals ?? 0} today`}
+                        help="The total number of individual meals served this month, counting every breakfast, lunch and dinner. One member eating all three meals in a day counts as three."
                         icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
                     />
                     <MetricCard
@@ -349,6 +367,7 @@ export default function Dashboard({
                         value={money(metrics.month_expenses ?? 0, false)}
                         tone="rose"
                         hint={`Collected ${money(metrics.month_deposits ?? 0)}`}
+                        help="All expenses recorded this month - groceries, vendor bills and kitchen costs. Compare it with what was collected to see whether the month is running a surplus or a deficit."
                         icon="M5 10l7-7m0 0l7 7m-7-7v18"
                     />
                     <MetricCard
@@ -356,6 +375,7 @@ export default function Dashboard({
                         value={metrics.active_students ?? 0}
                         tone="slate"
                         hint={`${metrics.total_students ?? 0} on the roster`}
+                        help={`Members currently marked active. Inactive members keep their history, but are excluded from meal planning and are not expected to be eating.`}
                         icon="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-6.93 4 4 0 004 6.93z"
                     />
                 </div>
@@ -367,18 +387,21 @@ export default function Dashboard({
                         value={money(metrics.month_meal_cost ?? 0, false)}
                         tone="indigo"
                         hint={`${metrics.month_meals ?? 0} meals × ${money(metrics.cost_per_meal ?? 0, false)}`}
+                        help="This month's meals multiplied by the current per-meal rate. The rate is derived from your actual recorded expenses divided by meals served - so it moves as you log costs."
                     />
                     <MetricCard
                         label={`${memberWord} With Dues`}
                         value={metrics.students_with_dues ?? 0}
                         tone={(metrics.students_with_dues ?? 0) > 0 ? 'rose' : 'emerald'}
                         hint="Owe money to the mess"
+                        help="Members whose meal cost currently exceeds what they have deposited. Chasing these balances keeps the pool funded."
                     />
                     <MetricCard
                         label="Total Outstanding"
                         value={money(metrics.total_dues ?? 0, false)}
                         tone={(metrics.total_dues ?? 0) > 0 ? 'rose' : 'emerald'}
                         hint="To be collected"
+                        help="The sum of every negative member balance - money the mess is owed in total. Record a deposit against a member to reduce it."
                     />
                 </div>
 

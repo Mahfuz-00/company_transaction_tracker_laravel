@@ -133,6 +133,11 @@ class UserController extends Controller
                 'id' => $institution->id,
                 'name' => $institution->name,
             ] : null,
+            // CONTEXT SCOPE: true when an SSA is managing a switched-into tenant,
+            // so the UI hides operator credentials and labels the target workspace.
+            'impersonating' => $user->isSuperAdmin()
+                && Institution::sessionTenantId() !== null
+                && Institution::sessionTenantId() !== $user->institution_id,
             'filters' => [
                 'search' => $search,
                 'role' => $role,
@@ -294,6 +299,19 @@ class UserController extends Controller
             return back()->with('error', 'That user belongs to another institution.');
         }
 
+        /*
+         * CONTEXT-SCOPE GUARD (impersonation leak).
+         *
+         * When an SSA is switched into a workspace, this management view belongs
+         * to THAT workspace. Refuse a write against a user in a different tenant,
+         * so an operator can never cross-contaminate one workspace's admin from
+         * inside another (and can never touch their own operator account by
+         * accident from a tenant view).
+         */
+        if (! $this->canActInInstitution($request, $user->institution_id)) {
+            return back()->with('error', 'That user belongs to a different workspace than the one you are managing.');
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
@@ -374,6 +392,10 @@ class UserController extends Controller
             return back()->with('error', 'That user belongs to another institution.');
         }
 
+        if (! $this->canActInInstitution($request, $user->institution_id)) {
+            return back()->with('error', 'That user belongs to a different workspace than the one you are managing.');
+        }
+
         if ($user->id === Auth::id()) {
             return back()->with('error', 'You cannot deactivate your own account.');
         }
@@ -396,6 +418,10 @@ class UserController extends Controller
             return back()->with('error', 'That user belongs to another institution.');
         }
 
+        if (! $this->canActInInstitution($request, $user->institution_id)) {
+            return back()->with('error', 'That user belongs to a different workspace than the one you are managing.');
+        }
+
         $user->update(['status' => 'active']);
 
         return back()->with('success', "User \"{$user->name}\" activated.");
@@ -408,6 +434,10 @@ class UserController extends Controller
     {
         if (! $this->canManageUser($request, $user)) {
             return back()->with('error', 'That user belongs to another institution.');
+        }
+
+        if (! $this->canActInInstitution($request, $user->institution_id)) {
+            return back()->with('error', 'That user belongs to a different workspace than the one you are managing.');
         }
 
         if ($user->id === Auth::id()) {
@@ -470,6 +500,36 @@ class UserController extends Controller
 
         return $user->institution_id !== null
             && (int) $actor->institution_id === (int) $user->institution_id;
+    }
+
+    /**
+     * CONTEXT-SCOPE GUARD: may the acting user touch a user in this workspace?
+     *
+     * This is the server-side half of the impersonation fix. An SSA who has
+     * switched INTO a workspace is operating on THAT workspace's data - they must
+     * not silently write against a different tenant (or against their own
+     * operator account) from a management view. An Institution Admin is always
+     * pinned to their own institution, so they can never reach across tenants.
+     */
+    protected function canActInInstitution(Request $request, ?int $institutionId): bool
+    {
+        $actor = $request->user();
+
+        // Institution Admin (or any bound user): only their own workspace.
+        if (! $actor->isSuperAdmin()) {
+            return $institutionId !== null
+                && (int) $actor->institution_id === (int) $institutionId;
+        }
+
+        // The SSA acting inside a switched tenant may only write to that tenant.
+        $active = \App\Models\Institution::current()?->id;
+
+        if ($active === null) {
+            // Platform view: the SSA may act globally (e.g. on platform accounts).
+            return true;
+        }
+
+        return $institutionId !== null && (int) $active === (int) $institutionId;
     }
 
     /**

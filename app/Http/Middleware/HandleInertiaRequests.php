@@ -124,6 +124,35 @@ class HandleInertiaRequests extends Middleware
                 'can_switch' => (bool) $request->user()?->isSuperAdmin(),
             ],
 
+            /*
+             * MANAGEMENT CONTEXT (context-scope guard).
+             *
+             * The reported leak: an SSA who switches INTO a workspace and then
+             * opens that institution's admin / profile / management sections saw
+             * their OWN name, email and institution pre-filled in the target
+             * workspace's forms - because those forms read the shared `auth.user`
+             * prop, which is ALWAYS the signed-in operator.
+             *
+             * This block tells the UI, unambiguously, whose identity the shared
+             * `auth.user` represents, and whether the current view is a management
+             * view of ANOTHER workspace. Components that must show the TARGET
+             * workspace's data (never the operator's) key off `acting_for_tenant`
+             * and stop rendering operator credentials into tenant-scoped forms.
+             */
+            'viewingAs' => fn () => [
+                // The signed-in operator is the SSA and has switched into a tenant
+                // that is NOT their own institution.
+                'is_impersonating' => $request->user()?->isSuperAdmin() === true
+                    && Institution::sessionTenantId() !== null
+                    && Institution::sessionTenantId() !== $request->user()?->institution_id,
+                // The identity the shared `auth.user` actually belongs to.
+                'operator_id' => $request->user()?->id,
+                'operator_name' => $request->user()?->name,
+                // The workspace being managed (null on the platform view).
+                'target_institution_id' => $this->institution()?->id,
+                'target_institution_name' => $this->institution()?->name,
+            ],
+
             // Institution identity + resolved terminology, so any component can
             // render "Employees" instead of "Students" without its own lookup.
             'institution' => fn () => $this->institution()
@@ -153,6 +182,55 @@ class HandleInertiaRequests extends Middleware
             'currency' => fn () => $this->institution()
                 ? $this->institution()->currencySettings()
                 : Institution::DEFAULT_CURRENCY_SETTINGS,
+
+            /*
+             * FIRST-TIME ONBOARDING.
+             *
+             * `show` is true only until the account has completed (or dismissed)
+             * the guide, so the modal appears exactly once per user. The guide
+             * content is ROLE-SPECIFIC (SSA / Institution Admin / Meal Manager /
+             * Member) and shipped in the same payload, so the modal renders on the
+             * first paint with no extra request.
+             */
+            'onboarding' => fn () => [
+                'show' => (bool) ($user && $user->shouldSeeOnboarding()),
+                'role' => $user?->onboardingRole(),
+                'guide' => $user ? \App\Support\OnboardingGuide::for($user) : null,
+            ],
+
+            /*
+             * SSO / OAUTH PROVIDERS.
+             *
+             * The login screen renders a button per ENTRY HERE - and the list only
+             * contains providers that are actually configured (client id + secret),
+             * so a deployment without Google/Microsoft credentials shows no dead
+             * buttons.
+             */
+            'oauth' => fn () => collect(\App\Support\OAuthProviders::available())
+                ->map(fn (string $provider) => [
+                    'provider' => $provider,
+                    'label' => \App\Support\OAuthProviders::meta($provider)['label'],
+                    'short' => \App\Support\OAuthProviders::meta($provider)['short'],
+                    'icon' => \App\Support\OAuthProviders::meta($provider)['icon'],
+                    'redirect_url' => route('oauth.redirect', ['provider' => $provider]),
+                ])
+                ->values()
+                ->all(),
+
+            /*
+             * The signed-in user's linked external identities, so the Profile
+             * Manager can show what is connected and offer an unlink action.
+             */
+            'socialAccounts' => fn () => $user
+                ? $user->socialAccounts()->get()->map(fn ($link) => [
+                    'id' => $link->id,
+                    'provider' => $link->provider,
+                    'label' => \App\Models\SocialAccount::label($link->provider),
+                    'email' => $link->email,
+                    'tenant_id' => $link->tenant_id,
+                    'linked_at' => $link->created_at?->format('j M Y'),
+                ])->all()
+                : [],
         ]);
     }
 }

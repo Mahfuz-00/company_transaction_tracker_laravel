@@ -1,5 +1,6 @@
 import React from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { PageHint } from '@/Components/Help/HelpHint';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, router } from '@inertiajs/react';
@@ -48,6 +49,7 @@ function StatusChip({ status, label }) {
 
 export default function Dashboard({
     hasMemberRecord = true,
+    institutionName = null,
     member = {},
     summary = {},
     history = [],
@@ -77,7 +79,6 @@ export default function Dashboard({
             </AuthenticatedLayout>
         );
     }
-
     const owed = Boolean(summary.is_due);
 
     return (
@@ -85,11 +86,20 @@ export default function Dashboard({
             header={
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                            Welcome, {member.name}
-                        </h2>
-                        <p className="mt-0.5 text-xs font-medium text-slate-500">
-                            Your personal meals, {t('deposits', 'deposits').toLowerCase()} and balance — {summary.month_label}
+                        {/* The page TITLE lives in the fixed top bar now; this line
+                            is the personalised greeting, which is content. */}
+                        <p className="text-xs font-medium text-slate-500">
+                            Welcome back, {member.name} — your personal meals,{' '}
+                            {t('deposits', 'deposits').toLowerCase()} and balance for {summary.month_label}
+                        </p>
+                        {/* Active-status confirmation: the account is linked to a
+                            roster record and belongs to a live workspace. */}
+                        <p
+                            data-testid="member-link-status"
+                            className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600"
+                        >
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                            Account linked{institutionName ? ` · ${institutionName}` : ''}
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -120,6 +130,20 @@ export default function Dashboard({
             <Head title="My Dashboard" />
 
             <div className="space-y-6">
+                {/* Persistent orientation aid for members: what the page shows and
+                    where to go next, without needing the first-login tour again. */}
+                <PageHint
+                    title="Your personal meal account"
+                    guideHref={route('profile.edit')}
+                >
+                    Everything on this page belongs to you alone: your balance, your
+                    meals, your deposits. No one else's figures appear here. {' '}
+                    <strong className="font-semibold text-slate-700">
+                        Your dashboard and analytics never show the institution's pooled
+                        totals.
+                    </strong>
+                </PageHint>
+
                 {/* Balance hero */}
                 <div
                     className={`rounded-2xl border p-6 shadow-sm ${owed ? 'border-rose-200 bg-rose-50/60' : 'border-emerald-200 bg-emerald-50/60'}`}

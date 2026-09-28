@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useForm } from '@inertiajs/react';
+import PasswordInput from '@/Components/PasswordInput';
 import { formatRoleName } from '@/Utils/roleFormatters';
 import { roleBadgeClasses } from '@/Utils/userFormatters';
 
@@ -71,14 +72,23 @@ export default function UserFormModal({
                 roles: (editing.roles || []).map((r) => r.name),
                 creation_mode: 'password',
             });
-            // Default the target institution (global mode) to the first available
-            // one, or the active scope, so a valid value is always preselected.
+            /*
+             * TARGET-INSTITUTION CONTEXT.
+             *
+             * When editing an existing user, the target institution must be the
+             * USER'S OWN institution - never the SSA's currently-active (switched)
+             * workspace, and never a stale default. Preferring the edited user's
+             * institution prevents an operator's context from bleeding into a
+             * different workspace's management view.
+             */
             setInstitutionId(
-                defaultInstitutionId
-                    ? String(defaultInstitutionId)
-                    : globalScope && institutions.length
-                        ? String(institutions[0].id)
-                        : ''
+                editing.institution_id
+                    ? String(editing.institution_id)
+                    : defaultInstitutionId
+                        ? String(defaultInstitutionId)
+                        : globalScope && institutions.length
+                            ? String(institutions[0].id)
+                            : ''
             );
         } else {
             reset();
@@ -270,7 +280,7 @@ export default function UserFormModal({
                                             {isEditing ? 'New Password' : 'Temporary Password'}
                                             {isEditing && <span className="font-normal text-gray-400"> (leave blank to keep)</span>}
                                         </label>
-                                        <input
+                                        <PasswordInput
                                             type="password"
                                             value={data.password}
                                             onChange={(e) => setData('password', e.target.value)}
@@ -283,7 +293,7 @@ export default function UserFormModal({
 
                                     <div>
                                         <label className="mb-1.5 block text-sm font-semibold text-gray-700">Confirm Password</label>
-                                        <input
+                                        <PasswordInput
                                             type="password"
                                             value={data.password_confirmation}
                                             onChange={(e) => setData('password_confirmation', e.target.value)}

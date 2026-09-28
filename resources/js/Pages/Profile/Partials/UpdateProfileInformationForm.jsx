@@ -6,7 +6,6 @@ import { Spinner } from '@/Components/UI/Loading';
 import { Transition } from '@headlessui/react';
 import { Link, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-
 /**
  * Partial: the "Profile Information" card on the Profile page.
  *
@@ -34,6 +33,12 @@ export default function UpdateProfileInformation({
     mustVerifyEmail,
     status,
     className = '',
+    // CONTEXT SCOPE. When a Software Super Admin switches into another
+    // workspace, the shared `auth.user` prop is STILL the operator. Seeding this
+    // form from it would pre-fill the SSA's own credentials into the target
+    // workspace's management view - the reported leak. In that case we render a
+    // read-only notice instead of an editable form bound to the wrong identity.
+    impersonating = false,
 }) {
     const user = usePage().props.auth.user;
 
@@ -41,14 +46,14 @@ export default function UpdateProfileInformation({
         useForm({
             // Method spoofing: see submit() for why this is POST rather than PATCH.
             _method: 'patch',
-            name: user.name,
-            email: user.email,
+            name: user?.name || '',
+            email: user?.email || '',
             avatar: null,
             remove_avatar: false,
         });
 
     // Preview the chosen image straight away, before the upload round-trip.
-    const [avatarPreview, setAvatarPreview] = useState(user.avatar_url || null);
+    const [avatarPreview, setAvatarPreview] = useState(user?.avatar_url || null);
 
     const onAvatarChange = (e) => {
         const file = e.target.files?.[0];
@@ -96,6 +101,23 @@ export default function UpdateProfileInformation({
                 </p>
             </header>
 
+            {/*
+             * CONTEXT-SCOPE GUARD.
+             *
+             * A switched-in SSA is managing ANOTHER workspace. The shared auth
+             * user is the operator, so binding an editable identity form here
+             * would leak the SSA's own name/email into the tenant's view. We show
+             * a neutral notice instead, and the fields stay empty. */}
+            {impersonating ? (
+                <div
+                    data-testid="profile-context-notice"
+                    className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
+                >
+                    You are viewing <strong className="font-semibold">another workspace</strong> as the
+                    platform operator. Personal profile fields are hidden here so your own credentials
+                    are never shown in a workspace you are managing.
+                </div>
+            ) : (
             <form onSubmit={submit} className="mt-6 space-y-6">
                 {/* Profile picture */}
                 <div>
@@ -213,6 +235,7 @@ export default function UpdateProfileInformation({
                     </Transition>
                 </div>
             </form>
+            )}
         </section>
     );
 }

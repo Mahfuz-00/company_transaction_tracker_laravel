@@ -1,11 +1,12 @@
 import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
+import PasswordInput from '@/Components/PasswordInput';
 import PrimaryButton from '@/Components/PrimaryButton';
+import SsoButtons from '@/Components/SsoButtons';
 import TextInput from '@/Components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
-
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { useMemo } from 'react';
 /* Strength meter — purely presentational guidance, real rules are enforced server-side. */
 function getPasswordStrength(password) {
     if (!password) return { score: 0, label: '', tone: '' };
@@ -48,6 +49,9 @@ function getPasswordStrength(password) {
  *     only — the authoritative rules still run on the server.
  */
 export default function Register({ inviteCode = '', institutionName = null, roles = [] }) {
+    // SSO providers the server has configured (empty when none are set up).
+    const { oauth = [] } = usePage().props;
+
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
         email: '',
@@ -59,10 +63,7 @@ export default function Register({ inviteCode = '', institutionName = null, role
         role: roles[0] || 'Member',
     });
 
-    const [showPassword, setShowPassword] = useState(false);
-
     const strength = useMemo(() => getPasswordStrength(data.password), [data.password]);
-
     const passwordMismatch =
         data.password_confirmation.length > 0 && data.password !== data.password_confirmation;
 
@@ -172,26 +173,18 @@ export default function Register({ inviteCode = '', institutionName = null, role
                     <InputLabel htmlFor="password" value="Password" />
 
                     <div className="relative mt-1">
-                        <TextInput
+                        {/* Shared PasswordInput: the eye toggle is consistent with
+                            every other password box in the app. */}
+                        <PasswordInput
                             id="password"
-                            type={showPassword ? 'text' : 'password'}
                             name="password"
                             value={data.password}
-                            className="block w-full pr-12"
+                            className="block w-full"
                             autoComplete="new-password"
                             placeholder="At least 8 characters"
                             onChange={(e) => setData('password', e.target.value)}
                             required
                         />
-
-                        <button
-                            type="button"
-                            onClick={() => setShowPassword((visible) => !visible)}
-                            aria-label={showPassword ? 'Hide password' : 'Show password'}
-                            className="absolute inset-y-0 right-0 flex items-center px-3 text-xs font-semibold text-slate-500 transition-colors hover:text-slate-800"
-                        >
-                            {showPassword ? 'Hide' : 'Show'}
-                        </button>
                     </div>
 
                     {/* Strength meter */}
@@ -229,9 +222,8 @@ export default function Register({ inviteCode = '', institutionName = null, role
                         value="Confirm Password"
                     />
 
-                    <TextInput
+                    <PasswordInput
                         id="password_confirmation"
-                        type={showPassword ? 'text' : 'password'}
                         name="password_confirmation"
                         value={data.password_confirmation}
                         className="mt-1 block w-full"
@@ -280,6 +272,22 @@ export default function Register({ inviteCode = '', institutionName = null, role
                     </Link>
                 </p>
             </form>
+
+            {/*
+             * SSO SIGN-UP.
+             *
+             * The invite code the user already typed above is carried into the
+             * OAuth redirect, so the provider round-trip resolves to the SAME
+             * workspace the form would have used. Buttons stay disabled until the
+             * code is present - without it an external identity has nowhere to land.
+             */}
+            <SsoButtons
+                providers={oauth}
+                requireInviteCode
+                inviteCode={data.invite_code}
+                subtitle="Or sign up with"
+                note="Your invite code above is used to place you in the right workspace."
+            />
         </GuestLayout>
     );
 }

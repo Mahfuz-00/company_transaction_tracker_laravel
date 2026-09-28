@@ -38,6 +38,24 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
     const test = useForm({ test_email: '' });
     const [showPassword, setShowPassword] = useState(false);
 
+    /* ------------------------------------------------------------------ *
+     * LIVE CONNECTION CHECK STATE
+     *
+     * `checking` disables the button while the ping is in flight;
+     * `checkResult` holds { ok, message } so we can render an inline banner.
+     * ------------------------------------------------------------------ */
+    const [checking, setChecking] = useState(false);
+    const [checkResult, setCheckResult] = useState(null);
+
+    // Setup completeness, mirrored from the server (MailSettings::forDisplay).
+    // `configured` = the relay has everything it needs; `active` = configured AND
+    // switched on. Used to decide which helper text to show.
+    const isConfigured = settings.configured ?? Boolean(
+        settings.host && settings.port && settings.from_address &&
+        (settings.username ? settings.has_password : true)
+    );
+    const isActive = data.enabled && isConfigured;
+
     const submit = (event) => {
         event.preventDefault();
         put(route('ssa.smtp.update'), { preserveScroll: true, onSuccess: () => setData('password', '') });
@@ -46,6 +64,41 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
     const sendTest = (event) => {
         event.preventDefault();
         test.post(route('ssa.smtp.test'), { preserveScroll: true });
+    };
+
+    /**
+     * Ping the relay with the CURRENT form values (saved or not). Posts to the
+     * JSON check endpoint and renders the verdict inline - no page reload.
+     */
+    const runConnectionCheck = async () => {
+        setChecking(true);
+        setCheckResult(null);
+
+        try {
+            const response = await fetch(route('ssa.smtp.check'), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({
+                    host: data.host,
+                    port: data.port,
+                    username: data.username,
+                    password: data.password,
+                    encryption: data.encryption,
+                }),
+            });
+
+            const payload = await response.json();
+            setCheckResult({ ok: Boolean(payload.ok), message: payload.message });
+        } catch (error) {
+            setCheckResult({ ok: false, message: 'The connection check could not be completed. Please try again.' });
+        } finally {
+            setChecking(false);
+        }
     };
 
     return (
@@ -104,10 +157,31 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                 </label>
                             </div>
 
+                            {/* Helper text is STATE-AWARE: the amber "falls back to
+                                the environment mailer" warning is shown ONLY when
+                                SMTP is not fully set up and active. Once the relay
+                                is configured AND enabled it disappears, replaced by
+                                a quiet green confirmation. */}
                             {!data.enabled && (
                                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
                                     SMTP is disabled - the platform falls back to the mailer configured in the environment.
                                     Enable it to be prompted for the required connection fields.
+                                </div>
+                            )}
+
+                            {data.enabled && !isConfigured && (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
+                                    SMTP is enabled but not fully configured yet. Complete the host, port,
+                                    username/password and from-address, then run a connection check.
+                                </div>
+                            )}
+
+                            {isActive && (
+                                <div
+                                    data-testid="smtp-active-note"
+                                    className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800"
+                                >
+                                    SMTP is active - all platform email is delivered through this relay.
                                 </div>
                             )}
 
@@ -217,7 +291,20 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                                {/* LIVE CONNECTION CHECK: verifies the relay accepts
+                                    these credentials, without saving or sending. */}
+                                <button
+                                    type="button"
+                                    onClick={runConnectionCheck}
+                                    disabled={checking || !data.host}
+                                    data-testid="smtp-check-button"
+                                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                    {checking && <Spinner className="h-4 w-4" />}
+                                    {checking ? 'Checking...' : 'Check connection'}
+                                </button>
+
                                 {recentlySuccessful && (
                                     <span className="text-xs font-semibold text-emerald-600">Saved.</span>
                                 )}
@@ -230,6 +317,19 @@ export default function SmtpSettings({ settings = {}, effectiveDriver = 'log' })
                                     {processing ? 'Saving...' : 'Save Settings'}
                                 </button>
                             </div>
+
+                            {/* Inline result of the live connection check. */}
+                            {checkResult && (
+                                <div
+                                    role="status"
+                                    data-testid="smtp-check-result"
+                                    className={`rounded-xl border p-3 text-xs font-medium ${checkResult.ok
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                        : 'border-rose-200 bg-rose-50 text-rose-800'}`}
+                                >
+                                    {checkResult.message}
+                                </div>
+                            )}
                         </Card>
                     </form>
 

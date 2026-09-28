@@ -65,11 +65,40 @@ class LoginRequest extends FormRequest
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'email' => trans('auth.failed'),
+                'email' => $this->failedMessage(),
             ]);
         }
 
         RateLimiter::clear($this->throttleKey());
+    }
+
+    /**
+     * The message shown when authentication fails.
+     *
+     * WHY IT IS NOT ALWAYS `trans('auth.failed')`
+     * --------------------------------------------
+     * The platform owner account has NO public password-reset route (a reset link
+     * would be a takeover vector for the most privileged account). When that
+     * account cannot sign in - typically because its credential was never seeded,
+     * or was seeded from a bootstrap value that has since changed - a generic
+     * "These credentials do not match our records" gives the operator nothing to
+     * act on. We detect that one case and point at the audited CLI path instead.
+     *
+     * The message is DELIBERATELY the same for a wrong password and a missing
+     * account (no user enumeration), and it never reveals whether a password is
+     * set - it only tells an operator who already knows the account exists.
+     */
+    protected function failedMessage(): string
+    {
+        $email = strtolower(trim((string) $this->string('email')));
+
+        if ($email === strtolower(\Database\Seeders\SoftwareSuperAdminSeeder::EMAIL)) {
+            return 'Those credentials did not match the platform owner account. '
+                . 'If the bootstrap password was changed or never seeded, run: '
+                . 'php artisan ssa:reset-password ' . \Database\Seeders\SoftwareSuperAdminSeeder::EMAIL;
+        }
+
+        return trans('auth.failed');
     }
 
     /**

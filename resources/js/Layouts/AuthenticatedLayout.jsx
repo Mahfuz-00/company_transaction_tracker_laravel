@@ -1,7 +1,6 @@
 import Sidebar from '@/Components/Sidebar';
 import ThemeProvider from '@/Components/ThemeProvider';
-import ThemeToggle from '@/Components/ThemeToggle';
-import NotificationBell from '@/Components/NotificationBell';
+import TopBar from '@/Components/TopBar';
 import { Link, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
@@ -64,26 +63,16 @@ export default function AuthenticatedLayout({ header, children }) {
 
                 {/* Main column */}
                 <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden">
-                    {/* Mobile top bar with drawer trigger */}
-                    <div
-                        className="sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-3 backdrop-blur lg:hidden"
-                        style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-color)' }}
-                    >
-                        <button
-                            type="button"
-                            onClick={() => setDrawerOpen((open) => !open)}
-                            aria-label="Open navigation"
-                            aria-expanded={drawerOpen}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border-slate-200 text-slate-600 transition-colors hover:bg-slate-50"
-                        >
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
-                        <span className="truncate text-sm font-bold text-slate-800">
-                            {institution?.name || 'Meal Manager'}
-                        </span>
-                    </div>
+                    {/* FIXED TOP BAR - pinned to the viewport for every screen size.
+                        Left: the Section > Module > Sub-Module > Title hierarchy.
+                        Right: theme, notifications, profile menu. */}
+                    <TopBar onMenuClick={() => setDrawerOpen((open) => !open)} />
+
+                    {/* Spacer: the bar is `fixed`, so it is out of flow and the
+                        content must be pushed down by the bar's own height.
+                        h-14 matches the bar's py-2.5 + content height, so nothing
+                        is ever hidden underneath it. */}
+                    <div className="h-14 flex-shrink-0" aria-hidden="true" />
 
                     {/* Fluid content column: capped for readability, widening on
                         large monitors and TV-sized displays (2xl / 3xl). */}
@@ -113,22 +102,18 @@ export default function AuthenticatedLayout({ header, children }) {
                             </div>
                         )}
 
-                        {/* Header row: page title on the left; the theme switch and
-                            notification bell pinned right, so both are reachable
-                            from every page and every screen size. */}
-                        <div className="mb-4 flex items-start justify-between gap-4">
-                            <div className="min-w-0 flex-1">
-                                {header && (
-                                    <header>
-                                        <div className="max-w-full">{header}</div>
-                                    </header>
-                                )}
-                            </div>
-                            <div className="flex flex-shrink-0 items-center gap-2">
-                                <ThemeToggle />
-                                <NotificationBell />
-                            </div>
-                        </div>
+                        {/* The page's ACTION BAR.
+
+                            The page TITLE now lives in the fixed top bar, so pages
+                            should no longer repeat it here. A page may still pass a
+                            `header` for its descriptive line and action buttons (e.g.
+                            "New Member") - those are content, not navigation, and
+                            belong with the content. */}
+                        {header && (
+                            <header className="mb-4">
+                                <div className="max-w-full">{header}</div>
+                            </header>
+                        )}
 
                         {/* Keyed by the current route so a page swap
                             animates in smoothly without the shell (sidebar,

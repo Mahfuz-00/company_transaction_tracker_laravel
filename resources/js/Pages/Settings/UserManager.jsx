@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import useCan from '@/Utils/can';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
 import UserFormModal from './UserFormModal';
@@ -95,9 +95,17 @@ export default function UserManager({
     // selector when creating a user.
     globalScope = false,
     institutions = [],
+    // TRUE when the SSA has switched into ANOTHER workspace: the view is managing
+    // that tenant, so operator credentials must never appear in its forms.
+    impersonating = false,
 }) {
     const { can } = useCan();
     const { confirm } = useFeedback();
+
+    const page = usePage();
+    const viewingAs = page.props.viewingAs || {};
+    // Prefer the explicit prop, falling back to the shared context.
+    const isManagingTenant = impersonating || Boolean(viewingAs.is_impersonating);
 
     const [modalOpen, setModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
@@ -184,6 +192,27 @@ export default function UserManager({
     return (
         <SettingsLayout title="Settings">
             <Head title="User Manager" />
+
+            {/* Context-scope banner: makes it explicit WHOSE workspace is being
+                managed, so an SSA can never mistake the target tenant's data for
+                their own. */}
+            {isManagingTenant && (
+                <div
+                    data-testid="management-context-banner"
+                    className="mb-4 flex items-center gap-2 rounded-lg border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+                >
+                    <svg className="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>
+                        Managing accounts for{' '}
+                        <strong className="font-semibold">
+                            {viewingAs.target_institution_name || scopeInstitution?.name || 'this workspace'}
+                        </strong>
+                        . Your own operator account is not shown or editable here.
+                    </span>
+                </div>
+            )}
 
             {/* Scope banner: global directory for the SSA, workspace scope for an admin. */}
             {globalScope ? (

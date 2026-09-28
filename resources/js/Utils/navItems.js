@@ -81,6 +81,25 @@ export const NAV_SECTIONS = [
                 rolesOnly: true,
             },
             {
+                // Member-initiated top-ups. A payment is PENDING until a manager
+                // verifies it, so this cannot credit the balance on its own.
+                label: 'Make a Payment',
+                route: 'member.payments',
+                match: 'member.payments',
+                icon: 'cash',
+                roles: ['Member'],
+                rolesOnly: true,
+            },
+            {
+                // Vote on the menus the kitchen is considering. One vote per menu.
+                label: 'Meal Voting',
+                route: 'member.menus',
+                match: 'member.menus',
+                icon: 'utensils',
+                roles: ['Member'],
+                rolesOnly: true,
+            },
+            {
                 // Own claim submissions + status tracking.
                 label: 'My Claims',
                 route: 'claims.index',
@@ -135,6 +154,22 @@ export const NAV_SECTIONS = [
                 label: 'Trial & Subscriptions',
                 route: 'settings.trials.index',
                 match: 'settings.trials.*',
+                icon: 'bank',
+            },
+            {
+                // The verification queue for institution subscription payments:
+                // approving one extends that workspace's paid-up period.
+                label: 'Subscription Payments',
+                route: 'ssa.subscription-payments.index',
+                match: 'ssa.subscription-payments.*',
+                icon: 'cash',
+            },
+            {
+                // FX rate snapshots: what makes cross-currency platform revenue
+                // reporting meaningful.
+                label: 'Currency & FX Rates',
+                route: 'ssa.currencies.index',
+                match: 'ssa.currencies.*',
                 icon: 'bank',
             },
             {
@@ -273,6 +308,73 @@ export const NAV_SECTIONS = [
                 permission: 'meals.reports',
             },
             {
+                // Dynamic reports builder: compose and SAVE queries over the
+                // finance engine instead of living with fixed report screens.
+                label: 'Report Builder',
+                route: 'meals.report-builder.index',
+                match: 'meals.report-builder.*',
+                icon: 'analytics',
+                permission: 'meals.reports',
+            },
+            {
+                // AI forecasting (RAG): tomorrow's headcount, cost per meal and
+                // expected expense, with the evidence behind the estimate.
+                label: 'AI Forecasting',
+                route: 'meals.forecasting.index',
+                match: 'meals.forecasting.*',
+                icon: 'chart',
+                permission: 'meals.reports',
+            },
+            {
+                // Anomaly monitor: duplicate deposits, meal spikes, negative
+                // balances and unusual expenses awaiting review.
+                label: 'Anomaly Monitor',
+                route: 'meals.anomalies.index',
+                match: 'meals.anomalies.*',
+                icon: 'shield',
+                permission: 'meals.reports',
+            },
+            {
+                // Meal menu proposals + member voting, with admin/manager approval.
+                label: 'Meal Menus & Voting',
+                route: 'meals.menus.index',
+                match: 'meals.menus.*',
+                icon: 'utensils',
+                permission: 'meals.reports',
+            },
+            {
+                // Weekly menu planning + the procurement forecast it drives.
+                label: 'Menu & Procurement',
+                route: 'meals.menu-cycle.index',
+                match: 'meals.menu-cycle.*',
+                icon: 'utensils',
+                permission: 'meals.reports',
+            },
+            {
+                // Purchase orders, goods receipts and the 3-way invoice match.
+                label: 'Purchase Orders',
+                route: 'meals.purchase-orders.index',
+                match: 'meals.purchase-orders.*',
+                icon: 'receipt',
+                permission: 'meals.expense',
+            },
+            {
+                // Member-submitted payments awaiting a manager's verification.
+                label: 'Payment Verification',
+                route: 'meals.member-payments.index',
+                match: 'meals.member-payments.*',
+                icon: 'cash',
+                permission: 'meals.deposit',
+            },
+            {
+                // Bulk CSV import with a dry-run preview before anything is written.
+                label: 'Bulk Import',
+                route: 'meals.import.index',
+                match: 'meals.import.*',
+                icon: 'upload',
+                permission: 'students.manage',
+            },
+            {
                 // Manager-only: review the claims members have raised.
                 label: 'Claim Review',
                 route: 'claims.review',
@@ -338,6 +440,18 @@ export const NAV_SECTIONS = [
         rolesOnly: true,
         tenantScoped: true,
         items: [
+            {
+                // The institution's platform subscription: the plan, what is owed,
+                // and a payment form. Only an Institution Admin may submit one, and
+                // it stays PENDING until the platform owner verifies it.
+                label: 'Subscription & Billing',
+                route: 'settings.subscription.show',
+                match: 'settings.subscription.*',
+                icon: 'bank',
+                permission: 'institution.view',
+                roles: ['Institution Admin'],
+                rolesOnly: true,
+            },
             {
                 label: 'Settings',
                 icon: 'settings',
