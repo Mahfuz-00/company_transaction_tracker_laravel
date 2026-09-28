@@ -8,11 +8,18 @@ import React from 'react';
  *   1. Render a button per provider the server has configured (client id + secret).
  *      An unconfigured provider shows nothing rather than a dead button.
  *   2. THE INVITE-CODE GATE. When `requireInviteCode` is set, the buttons stay
- *      disabled until a code is entered - so the user is routed into the right
- *      workspace BEFORE the OAuth round-trip begins. The code is appended to our
- *      own `/auth/{provider}/redirect` URL; the server validates it and fails fast
- *      on an unknown code, rather than sending the user through the provider and
- *      back for nothing.
+ *      disabled until the code has been CONFIRMED. There are two modes:
+ *        - `inviteCodeValidated={true}` (preferred): the caller has already
+ *          verified the code against the server (POST
+ *          /register/validate-invite-code) — the real gate.
+ *        - `inviteCodeValidated={undefined}`: no server check was performed, so
+ *          the component falls back to a MINIMUM-LENGTH heuristic purely to keep
+ *          the login page usable. Prefer the validated mode wherever a server
+ *          round-trip is available.
+ *      Either way the code is appended to our own `/auth/{provider}/redirect`
+ *      URL, so the user is routed into the right workspace BEFORE the OAuth
+ *      round-trip begins — the server validates it there and fails fast on an
+ *      unknown code rather than sending the user through the provider for nothing.
  *
  * The button links to OUR redirect endpoint (never straight to the provider),
  * because that is where the CSRF `state` is minted and stored.
@@ -22,6 +29,7 @@ import React from 'react';
  * @param {string} [props.subtitle]         - small line above the buttons
  * @param {boolean} [props.requireInviteCode] - gate the buttons behind an invite code
  * @param {string} [props.inviteCode]       - the code entered so far
+ * @param {boolean} [props.inviteCodeValidated] - the code was confirmed server-side
  * @param {string} [props.note]             - optional helper line
  */
 export default function SsoButtons({
@@ -29,11 +37,25 @@ export default function SsoButtons({
     subtitle = null,
     requireInviteCode = false,
     inviteCode = '',
+    inviteCodeValidated,
     note = null,
 }) {
     if (!providers || providers.length === 0) return null;
 
-    const codeReady = !requireInviteCode || inviteCode.trim().length >= 4;
+    /*
+     * THE GATE.
+     *
+     * When the caller supplies a `inviteCodeValidated` boolean, that SERVER
+     * VERDICT is the gate — the local length is irrelevant (a confirmed code is
+     * confirmed, however short). Only when no server check exists at all do we
+     * fall back to the length heuristic, so the login page (which has no
+     * validation round-trip) still behaves sensibly.
+     */
+    const codeReady = !requireInviteCode
+        ? true
+        : inviteCodeValidated !== undefined
+            ? Boolean(inviteCodeValidated)
+            : inviteCode.trim().length >= 4;
 
     /** Append the invite code so the server can pin the workspace. */
     const hrefFor = (entry) => {
@@ -64,14 +86,15 @@ export default function SsoButtons({
                 <p className="mt-3 text-center text-[11px] leading-relaxed text-slate-500">{note}</p>
             )}
 
-            {/* The gate explanation: shown only while the code is missing. */}
+            {/* The gate explanation: shown only while the code is not yet confirmed. */}
             {requireInviteCode && !codeReady && (
                 <p
                     data-testid="sso-invite-hint"
                     className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[11px] font-medium text-amber-800"
                 >
-                    Enter your institution invite code above first - it routes your sign-in to the
-                    right workspace.
+                    {inviteCodeValidated !== undefined
+                        ? 'Enter a valid institution invite code above to unlock these options - it routes your sign-in to the right workspace.'
+                        : 'Enter your institution invite code above first - it routes your sign-in to the right workspace.'}
                 </p>
             )}
 

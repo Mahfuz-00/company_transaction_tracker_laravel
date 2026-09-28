@@ -53,18 +53,64 @@ export default function Sidebar({ user, onNavigate }) {
     const { auth, tenant } = usePage().props;
 
     /*
-     * BRAND HEADER CONTEXT.
+     * BRAND HEADER CONTEXT - the tenant-vs-global decision, in ONE place.
      *
-     * A Software Super Admin operates GLOBALLY, not inside one workspace, so the
-     * sidebar must NOT show a tenant institution name (which wrongly implied the
-     * SSA "belonged" to whichever workspace happened to be active).
+     * The header must answer exactly one question: "which context am I in right
+     * now?" Getting this wrong is the regression this block exists to prevent -
+     * a previous iteration leaked a tenant institution's name/logo into the
+     * Software Super Admin's GLOBAL view, implying the SSA belonged to whichever
+     * workspace happened to be the default.
      *
-     *   - SSA, not switched in : platform branding ("NomNomytics").
-     *   - SSA, switched into a tenant : that tenant's name (they ARE inside it),
-     *     so it stays clear which workspace they are operating in.
-     *   - Everyone else : their own institution.
+     *   - SOFTWARE SUPER ADMIN, global view (not switched in):
+     *       software name ("NomNomytics") + software subtitle + platform logo.
+     *       No tenant name, no tenant logo - ever.
+     *
+     *   - SOFTWARE SUPER ADMIN, switched INTO a workspace:
+     *       that institution's name + subtitle + logo. They ARE inside it, and it
+     *       must stay obvious which workspace they are operating on.
+     *
+     *   - EVERYONE ELSE (Institution Admin / Meal Manager / Member):
+     *       their own institution's name + subtitle + logo, falling back to the
+     *       software logo when the institution has not uploaded one.
+     *
+     * `tenant.switched` is computed SERVER-SIDE (HandleInertiaRequests) as
+     * "a session tenant is set AND it differs from the user's own institution",
+     * so a tenant user is never mistakenly treated as a switched SSA.
      */
     const showPlatformBrand = isSuperAdmin && !tenant?.switched;
+
+    /*
+     * The resolved brand header. Deriving a single object (rather than repeating
+     * ternaries in the JSX) keeps the name/subtitle/logo triple guaranteed
+     * CONSISTENT: it is impossible for the header to show an institution's name
+     * next to the software subtitle, or vice versa.
+     */
+    const brand = showPlatformBrand
+        ? {
+            name: controlCenter,
+            subtitle: adminSubtitle,
+            // The platform lockup. `logoUrl` may legitimately be null (no platform
+            // logo uploaded), in which case the JSX below renders the built-in
+            // ApplicationLogo mark - so the header is NEVER blank.
+            logoUrl: logoUrl || null,
+        }
+        : {
+            name: institution?.name || controlCenter,
+            subtitle: institution?.subtitle || institution?.type_label || 'Shared meals, tracked',
+            /*
+             * LOGO FALLBACK RULE (the regression this guards).
+             *
+             * A tenant institution that has NOT uploaded a logo must fall back to
+             * the SOFTWARE logo - not to nothing, and not to another tenant's
+             * mark. Resolving the fallback HERE (rather than only in the JSX)
+             * means `brand.logoUrl` is always the correct image for the context,
+             * and the JSX needs no second guess about which logo to show.
+             *
+             * If neither exists, `logoUrl` stays null and the built-in
+             * ApplicationLogo mark renders instead.
+             */
+            logoUrl: institution?.logo_url || logoUrl || null,
+        };
 
     // True when a Software Super Admin is inside a switched tenant session:
     // that is the ONLY case in which the tenant Meal Management modules appear
@@ -143,13 +189,41 @@ export default function Sidebar({ user, onNavigate }) {
         : 'U';
 
     return (
-        <aside className="flex h-screen w-72 max-w-80 flex-shrink-0 sticky top-0 left-0 flex flex-col justify-between px-3 py-4 bg-white border-r border-slate-200/80 shadow-xs z-30 overflow-hidden">
-            {/* ---- Compact sticky brand header ---- */}
-            <div className="sticky top-0 z-10 flex-shrink-0 border-b border-slate-100 bg-white px-2 pb-3 pt-2">
+        <aside
+            /*
+             * FULL-HEIGHT DOCKED SIDEBAR.
+             *
+             * `h-screen` + `sticky top-0` is deliberate: the sidebar is its own
+             * scroll container that stays put while the BODY column scrolls
+             * independently beside it. `h-screen` (not `h-full`) is required
+             * because the flex parent is `min-h-screen` and can grow — `h-full`
+             * would resolve against a growing container and stretch the rail.
+             *
+             * The top bar is NOT rendered here and does not overlap this element:
+             * it lives inside the body column (see TopBar.jsx), so the brand
+             * header below owns the full height of the rail, top to bottom.
+             */
+            className="sticky left-0 top-0 z-30 flex h-screen w-72 max-w-80 flex-shrink-0 flex-col justify-between overflow-hidden border-r border-slate-200/80 bg-white px-3 py-4 shadow-xs"
+        >
+            {/* ---- Compact sticky brand header ----
+                 Context-aware: the platform lockup for an SSA in the global view,
+                 the institution lockup everywhere else (see `brand` above). The
+                 logo falls back to the shared ApplicationLogo whenever neither a
+                 platform logo nor an institution logo exists, so the header is
+                 never blank. */}
+            <div
+                className="sticky top-0 z-10 flex-shrink-0 border-b border-slate-100 bg-white px-2 pb-3 pt-2"
+                data-testid="sidebar-brand"
+                data-brand-context={showPlatformBrand ? 'platform' : 'institution'}
+            >
                 <div className="flex items-center gap-3 px-1">
-                    {showPlatformBrand && logoUrl ? (
-                        <img src={logoUrl} alt={controlCenter} className="h-8 w-8 flex-shrink-0 rounded-lg object-contain" />
-                    ) : showPlatformBrand || !institution?.logo_url ? (
+                    {brand.logoUrl ? (
+                        <img
+                            src={brand.logoUrl}
+                            alt={brand.name}
+                            className="h-8 w-8 flex-shrink-0 rounded-lg object-contain"
+                        />
+                    ) : (
                         <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white">
                             {showPlatformBrand ? (
                                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -159,21 +233,13 @@ export default function Sidebar({ user, onNavigate }) {
                                 <ApplicationLogo className="h-5 w-5 object-contain" />
                             )}
                         </span>
-                    ) : (
-                        <img
-                            src={institution.logo_url}
-                            alt={institution.name}
-                            className="h-8 w-8 flex-shrink-0 rounded-lg object-contain"
-                        />
                     )}
                     <div className="min-w-0">
                         <h1 className="truncate text-sm font-bold leading-tight text-slate-900">
-                            {showPlatformBrand ? controlCenter : (institution?.name || controlCenter)}
+                            {brand.name}
                         </h1>
                         <p className="truncate text-[11px] font-medium text-slate-400">
-                            {showPlatformBrand
-                                ? adminSubtitle
-                                : (institution?.subtitle || institution?.type_label || 'Shared meals, tracked')}
+                            {brand.subtitle}
                         </p>
                     </div>
                 </div>

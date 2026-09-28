@@ -5,7 +5,7 @@ import PasswordInput from '@/Components/PasswordInput';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SsoButtons from '@/Components/SsoButtons';
 import TextInput from '@/Components/TextInput';
-import GuestLayout from '@/Layouts/GuestLayout';
+import AuthSplitLayout from '@/Layouts/AuthSplitLayout';
 import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
@@ -16,6 +16,11 @@ import { useState } from 'react';
  * Inertia page component. The user enters email + password and POSTs to
  * `route('login')`; Laravel authenticates and redirects to the intended page
  * (or the dashboard), and Inertia swaps the view without a reload.
+ *
+ * LAYOUT
+ *   The page renders inside AuthSplitLayout: a marketing/brand panel on the
+ *   left (desktop only) and this authentication form on the right. On mobile the
+ *   left panel collapses and the form owns the whole screen.
  *
  * PROPS (the standard Laravel Breeze contract)
  *   - `status`           : a flash message (e.g. after a password reset), shown
@@ -64,23 +69,43 @@ export default function Login({ status, canResetPassword }) {
         });
     };
 
+    // One shared input treatment, so every field on the screen matches.
+    const inputClass =
+        'mt-1 block w-full rounded-xl border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400';
+
     return (
-        <GuestLayout
+        <AuthSplitLayout
             heading="Welcome back"
             subheading={`Sign in to manage your ${t('institution', 'institution').toLowerCase()} meals, deposits, and expenses.`}
+            /*
+             * SSO IS A SEPARATE SLOT (`sso`), NOT PART OF `children`.
+             *
+             * AuthSplitLayout renders `children` first and the `sso` slot
+             * strictly below it, so the provider buttons can never end up above
+             * the credential form. See the SSO placement contract in
+             * AuthSplitLayout's docblock.
+             */
+            sso={
+                <SsoButtons
+                    providers={oauth}
+                    requireInviteCode={ssoNeedsCode}
+                    inviteCode={inviteCode}
+                    subtitle="Or sign in with"
+                />
+            }
+            footer={
+                <p className="text-center text-sm text-slate-500">
+                    Don&apos;t have an account?{' '}
+                    <Link
+                        href={route('register')}
+                        className="font-semibold text-indigo-600 transition-colors hover:text-indigo-700"
+                    >
+                        Create one
+                    </Link>
+                </p>
+            }
         >
             <Head title="Log in" />
-
-            {/* Secure Access Floating Badge */}
-            <div className="mb-6 text-center">
-                <span className="inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50/80 px-3.5 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm shadow-indigo-500/5">
-                    <span className="relative flex h-2 w-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-60" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500" />
-                    </span>
-                    Secure Access
-                </span>
-            </div>
 
             {status && (
                 <div className="mb-6 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm font-semibold text-emerald-700">
@@ -118,7 +143,7 @@ export default function Login({ status, canResetPassword }) {
                             id="invite_code"
                             name="invite_code"
                             value={inviteCode}
-                            className="mt-1 block w-full rounded-xl border-slate-200 bg-white/60 px-4 py-3 text-sm uppercase tracking-widest text-slate-800 shadow-sm transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
+                            className={`${inputClass} uppercase tracking-widest`}
                             autoComplete="off"
                             placeholder="e.g. AB12CD34"
                             data-testid="login-invite-code"
@@ -139,7 +164,7 @@ export default function Login({ status, canResetPassword }) {
                         type="email"
                         name="email"
                         value={data.email}
-                        className="mt-1 block w-full rounded-xl border-slate-200 bg-white/60 px-4 py-3 text-sm text-slate-800 shadow-sm transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
+                        className={inputClass}
                         autoComplete="username"
                         isFocused={true}
                         placeholder="you@institution.com"
@@ -166,7 +191,7 @@ export default function Login({ status, canResetPassword }) {
                         id="password"
                         name="password"
                         value={data.password}
-                        className="mt-1 block w-full rounded-xl border-slate-200 bg-white/60 px-4 py-3 text-sm text-slate-800 shadow-sm transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 placeholder:text-slate-400"
+                        className={inputClass}
                         autoComplete="current-password"
                         placeholder="••••••••"
                         onChange={(e) => setData('password', e.target.value)}
@@ -210,16 +235,6 @@ export default function Login({ status, canResetPassword }) {
                     </PrimaryButton>
                 </div>
             </form>
-
-            {/* Institutional SSO: only the providers this deployment has configured.
-                The invite code gates the buttons, so an unknown external identity
-                is always routed to a specific workspace. */}
-            <SsoButtons
-                providers={oauth}
-                requireInviteCode={ssoNeedsCode}
-                inviteCode={inviteCode}
-                subtitle="Or sign in with"
-            />
-        </GuestLayout>
+        </AuthSplitLayout>
     );
 }

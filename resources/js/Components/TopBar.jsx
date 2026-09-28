@@ -13,9 +13,22 @@ import { resolvePageMeta } from '@/Utils/pageMeta';
  *   Right : theme toggle, notification bell, and the user profile dropdown
  *           (profile, settings, replay tour, log out).
  *
- * "FIXED" means it stays pinned to the top of the viewport while the page
- * content scrolls beneath it: `sticky top-0` on the bar itself, with a high
- * z-index so dropdowns and the mobile drawer pass underneath it correctly.
+ * "FIXED" — AND WHAT THAT MEANS FOR THE SIDEBAR
+ *   The bar stays pinned while the page content scrolls beneath it. It is
+ *   achieved with `sticky top-0` WITHIN THE BODY COLUMN, not with
+ *   `fixed inset-x-0`.
+ *
+ *   That distinction is the whole point. `fixed inset-x-0 top-0` pins the bar to
+ *   the VIEWPORT and stretches it across the full screen width — including the
+ *   area occupied by the docked sidebar — so it visually sat ON TOP OF the
+ *   sidebar's brand header. The layout must be `[Left: Sidebar] [Right: Body]`,
+ *   with the top bar belonging to the BODY ONLY.
+ *
+ *   Because this component renders inside the body column (see
+ *   AuthenticatedLayout's main column), a plain `sticky top-0` naturally:
+ *     - spans exactly the body column's width (never the sidebar's), and
+ *     - sticks to the top of the scrolling column without any `left-*` offset
+ *       math that would drift the moment the sidebar width changed.
  *
  * The bar is rendered for BOTH desktop and mobile. On small screens the
  * breadcrumb collapses to just the page title and the profile dropdown shrinks
@@ -68,14 +81,25 @@ export default function TopBar({ title: titleOverride = null, onMenuClick = null
     return (
         <div
             data-testid="fixed-top-bar"
-            // PERMANENTLY FIXED: `fixed` + `top-0` + `left-0` pins the bar to the
-            // viewport for EVERY dashboard, so it can never scroll out of view.
-            // The sidebar offsets it on desktop (`lg:left-64`), matching the docked
-            // sidebar's width, so the two never overlap.
-            className="fixed inset-x-0 top-0 z-40 border-b backdrop-blur-md"
+            /*
+             * STICKY, WITHIN THE BODY COLUMN ONLY.
+             *
+             * `sticky top-0` pins the bar to the top of its scrolling container
+             * (the body column) — NOT to the viewport. It therefore spans exactly
+             * the body's width and NEVER overlaps the sidebar.
+             *
+             * This deliberately replaces the old `fixed inset-x-0 top-0`, which
+             * was viewport-wide and sat on top of the docked sidebar. Because the
+             * element is sticky rather than fixed it remains in normal flow, so
+             * no spacer div is needed to keep content from hiding underneath it.
+             *
+             * `z-30` keeps it above page content but BELOW the mobile drawer
+             * (z-40 backdrop / z-50 panel), so the drawer correctly covers it.
+             */
+            className="sticky top-0 z-30 flex-shrink-0 border-b backdrop-blur-md"
             style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-color)' }}
         >
-            <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8 2xl:max-w-[1760px] 3xl:max-w-[1920px]">
+            <div className="flex w-full items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
                 {/* Mobile-only drawer trigger */}
                 <button
                     type="button"

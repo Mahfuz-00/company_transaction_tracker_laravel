@@ -10,7 +10,8 @@ use Illuminate\Database\Seeder;
  * This runs ONLY the structurally-required seeders:
  *   - roles & permissions (the RBAC backbone),
  *   - the currency catalogue,
- *   - the default institution.
+ *   - the default institution,
+ *   - the permanent platform owner (Software Super Admin).
  *
  * It deliberately does NOT create:
  *   - dummy users or a hardcoded admin account,
@@ -22,6 +23,26 @@ use Illuminate\Database\Seeder;
  * existing dummy data from an already-seeded database, run:
  *
  *     php artisan db:clear-dummy
+ *
+ * --------------------------------------------------------------------------
+ * SAFETY CONTRACT - READ BEFORE ADDING A SEEDER HERE
+ * --------------------------------------------------------------------------
+ * This entry point is run on a LIVE database in several deployment paths
+ * (`composer setup`, `php artisan db:seed`, a container boot). Every seeder
+ * listed below is therefore bound by two rules:
+ *
+ *   1. IDEMPOTENT, NON-DESTRUCTIVE. Use `firstOrCreate` / `updateOrCreate`
+ *      keyed on a natural identifier (slug, code, email). Never `truncate`,
+ *      never `delete`, never `insert` a duplicate, and never `migrate:fresh`.
+ *
+ *   2. NEVER TOUCH EXISTING CREDENTIALS. A user row is created ONLY when it is
+ *      missing; an existing row's `password` / `password_changed_at` is left
+ *      exactly as it is. SoftwareSuperAdminSeeder is the reference
+ *      implementation - see its class docblock.
+ *
+ * SAMPLE / DEMO DATA DOES NOT BELONG HERE. It lives in the git-ignored
+ * `MockDataSeeder` (`php artisan db:seed --class=MockDataSeeder`), which is
+ * excluded from version control precisely so it can never run in production.
  */
 class DatabaseSeeder extends Seeder
 {

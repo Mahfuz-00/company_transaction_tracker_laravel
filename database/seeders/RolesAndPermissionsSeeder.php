@@ -5,8 +5,31 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
-use App\Models\User;
 
+/**
+ * THE RBAC BACKBONE - the four core roles and their permission grants.
+ *
+ * SAFETY CONTRACT
+ * ---------------
+ * This seeder may be run against a LIVE database (a redeploy, a manual
+ * `db:seed`), so it is bound by two rules:
+ *
+ *   1. It touches ONLY the `permissions`, `roles` and `role_has_permissions`
+ *      tables. It never writes to `users`, `model_has_roles`, or any
+ *      transactional table - so no account, credential or ledger row can be
+ *      changed by re-running it.
+ *
+ *   2. It NEVER grants a role to a user. In particular it does NOT hand the
+ *      global `Software Super Admin` role to "the first user" - that behaviour
+ *      was removed because it silently promoted a random account (whichever one
+ *      happened to have the lowest id) to platform owner on every seed run. The
+ *      only account that may hold the global role is the permanent owner, and
+ *      it is provisioned by SoftwareSuperAdminSeeder.
+ *
+ * `syncPermissions` is used (not `givePermissionTo`) so a permission REMOVED
+ * from the definitions above is also revoked here, keeping roles exactly in
+ * sync with this file.
+ */
 class RolesAndPermissionsSeeder extends Seeder
 {
     public function run()
@@ -187,12 +210,28 @@ class RolesAndPermissionsSeeder extends Seeder
         // Members can view their own data and raise claims, nothing more.
         $member->syncPermissions(['meals.view', 'transactions.view', 'claims.view', 'claims.submit', 'notifications.view']);
 
-        // Assign the top role to the first seed user (if exists).
-        $user = User::first();
-        if ($user) {
-            if (! $user->hasRole($super->name)) {
-                $user->assignRole($super->name);
-            }
-        }
+        /*
+         * DELIBERATELY NO "assign the top role to the first user" STEP.
+         *
+         * This seeder previously ended with:
+         *
+         *     $user = User::first();
+         *     if ($user) { $user->assignRole('Software Super Admin'); }
+         *
+         * That is the root cause of the reported credential/data loss. On any
+         * database where the platform owner was not literally the LOWEST-id user
+         * (an invited member, a test account, an importer row created first), a
+         * routine `php artisan db:seed` silently GRANTED THE GLOBAL CROSS-TENANT
+         * ROLE to a random account. That account could then log in as the
+         * platform operator, and the operator's own credentials appeared to have
+         * been "wiped or reset" because the wrong account now answered to the
+         * role.
+         *
+         * The ONLY account that may hold the global role is the permanent
+         * platform owner, provisioned explicitly and idempotently by
+         * SoftwareSuperAdminSeeder (which runs last in DatabaseSeeder and never
+         * overwrites an existing password). Assigning the role by "first user"
+         * position is never correct, so the step is removed rather than guarded.
+         */
     }
 }

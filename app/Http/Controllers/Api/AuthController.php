@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Mobile authentication + the client's identity/context endpoint.
@@ -33,6 +34,15 @@ use Illuminate\Validation\Rules\Password;
  */
 class AuthController extends Controller
 {
+    /**
+     * The message an SSA receives when they attempt to use the mobile app.
+     *
+     * Shared by login() and me() so the refusal reads identically wherever it is
+     * enforced - the client surfaces this string verbatim (see
+     * docs/FLUTTER_MOBILE_APP.md §1.1).
+     */
+    protected const SSA_MOBILE_REFUSAL = 'Platform administrators must use the web console.';
+
     /** Exchange credentials for a bearer token. */
     public function login(Request $request)
     {
@@ -56,6 +66,21 @@ class AuthController extends Controller
             return response()->json(['message' => 'This account is inactive.'], 403);
         }
 
+        /*
+         * SOFTWARE SUPER ADMIN EXCLUSION (layer 1 of 3).
+         *
+         * The mobile client is a TENANT field tool; an SSA is a GLOBAL operator
+         * whose token has no tenant scope (TenantManager::resolveTenantId()
+         * returns null for them), so a token issued here would expose EVERY
+         * institution's data. We therefore refuse to mint one at all.
+         *
+         * The check runs AFTER the credential check so a wrong password on an
+         * SSA account still returns the neutral 422 (no account enumeration).
+         */
+        if ($user->isSuperAdmin()) {
+            return response()->json(['message' => self::SSA_MOBILE_REFUSAL], 403);
+        }
+
         $token = $user->createToken($data['device_name'] ?? 'mobile')->plainTextToken;
 
         $user->update(['last_login_at' => now()]);
@@ -69,7 +94,15 @@ class AuthController extends Controller
         ]);
     }
 
-    /** Self-registration. New accounts get the Member role. */
+    /**
+     * Self-registration. New accounts get the Member role.
+     *
+     * The account is mapped to its institution through the INVITE CODE, exactly
+     * as the web sign-up form does: the code is the tenant-mapping key, resolved
+     * BEFORE anything is written so a bad code fails cleanly instead of producing
+     * an orphaned account. Relying on `Institution::current()` was wrong for a
+     * public, unauthenticated call - "current" is a guess with no tenant scope.
+     */
     public function register(Request $request)
     {
         $data = $request->validate([
@@ -77,12 +110,27 @@ class AuthController extends Controller
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'confirmed', Password::defaults()],
             'device_name' => ['nullable', 'string', 'max:120'],
+            // The tenant-mapping key - required, and must resolve to an institution.
+            'invite_code' => ['required', 'string', 'max:24'],
         ]);
 
-        $institution = Institution::current();
+        $institution = Institution::findByInviteCode($data['invite_code']);
+
+        if (! $institution) {
+            throw ValidationException::withMessages([
+                'invite_code' => 'That invitation code is not valid. Ask your institution admin for the correct code.',
+            ]);
+        }
+
+        if (! $institution->is_active) {
+            throw ValidationException::withMessages([
+                'invite_code' => 'That institution is not currently accepting new members.',
+            ]);
+        }
 
         $user = User::create([
-            'institution_id' => $institution?->id,
+            // THE mapping: bound to the institution from the very first write.
+            'institution_id' => $institution->id,
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
@@ -107,7 +155,21 @@ class AuthController extends Controller
     /** The currently authenticated user. */
     public function me(Request $request)
     {
-        return response()->json(['data' => $this->userPayload($request->user())]);
+        $user = $request->user();
+
+        /*
+         * SOFTWARE SUPER ADMIN EXCLUSION (layer 2 of 3).
+         *
+         * A token minted BEFORE the login guard existed (or by another client)
+         * must not become a working mobile session, so we re-assert the rule on
+         * every identity read. The client treats a 403 here as "clear the token
+         * and return to login", never as a transient failure.
+         */
+        if ($user->isSuperAdmin()) {
+            return response()->json(['message' => self::SSA_MOBILE_REFUSAL], 403);
+        }
+
+        return response()->json(['data' => $this->userPayload($user)]);
     }
 
     /** Revoke the calling token. */

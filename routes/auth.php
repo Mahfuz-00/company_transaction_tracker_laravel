@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\InviteCodeCheckController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\SocialAuthController;
 use App\Http\Controllers\Auth\VerifyEmailController;
@@ -17,6 +18,23 @@ Route::middleware('guest')->group(function () {
         ->name('register');
 
     Route::post('register', [RegisteredUserController::class, 'store']);
+
+    /*
+     * LIVE INVITE-CODE VALIDATION.
+     *
+     * The registration screen must not merely require the field to be
+     * non-empty - it must CONFIRM the code resolves to a real, active
+     * institution BEFORE it unlocks the SSO/OAuth buttons. This endpoint is that
+     * confirmation.
+     *
+     * It is public (a guest by definition), so it is throttled to slow code
+     * guessing, and it deliberately returns ONLY the institution's display NAME
+     * - never its id, settings or any tenant data - so it cannot be used to
+     * enumerate a workspace.
+     */
+    Route::post('register/validate-invite-code', InviteCodeCheckController::class)
+        ->middleware('throttle:12,1')
+        ->name('register.invite-code.check');
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');

@@ -343,6 +343,9 @@ $middleware->alias([
     'role_or_permission'=> \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
     'password.changed'  => \App\Http\Middleware\EnsurePasswordIsChanged::class,
     'tenant'            => \App\Http\Middleware\ResolveTenant::class,
+    // Mobile-only: the SSA is a GLOBAL operator with no tenant scope, so the
+    // API refuses them on the whole authenticated group (Section 7.8).
+    'mobile.not-ssa'    => \App\Http\Middleware\EnsureNotSoftwareSuperAdmin::class,
 ]);
 ```
 
@@ -954,22 +957,48 @@ model serialization.
 
 ### 7.6 Endpoints
 
-| Method | Path | Handler |
-|---|---|---|
-| POST | `/api/auth/register` | `AuthController@register` (throttle:api-login) |
-| POST | `/api/auth/login` | `AuthController@login` (throttle:api-login) |
-| GET | `/api/meta` | `AuthController@meta` — currency, terminology, enum lists |
-| GET | `/api/auth/me` | `AuthController@me` |
-| POST | `/api/auth/logout` | `AuthController@logout` |
-| POST | `/api/auth/devices` | `AuthController@registerDevice` |
-| PATCH | `/api/auth/profile` | `AuthController@updateProfile` |
-| GET | `/api/dashboard` | `DashboardApiController@index` |
-| GET | `/api/members`, `/members/{member}` | `MemberApiController` |
-| POST/PATCH/DELETE | `/api/members…` | `MemberApiController` |
-| GET/POST | `/api/deposits` (+ `/deposits/export`) | `DepositApiController` |
-| GET/POST | `/api/meals`, `/meals/day` | `MealApiController` |
-| GET/POST | `/api/subsidies` (+ `/subsidies/sources`) | `SubsidyApiController` |
-| GET | `/api/reports/meal`, `/reports/analytics`, `/reports/forecast`, `/reports/per-meal-rate` | `ReportApiController` |
+The API provides **full web parity for the three tenant roles**. The complete,
+permission-annotated list lives in [`docs/API.md` §6](./API.md); this is the
+controller map.
+
+| Method | Path (prefix `/api`) | Handler | Gate |
+|---|---|---|---|
+| POST | `/auth/register` | `AuthController@register` (throttle:api-login) | public |
+| POST | `/auth/login` | `AuthController@login` (throttle:api-login) | public |
+| GET | `/meta` | `AuthController@meta` | public |
+| GET | `/auth/me` | `AuthController@me` | — |
+| POST | `/auth/logout` | `AuthController@logout` | — |
+| POST | `/auth/devices` | `AuthController@registerDevice` | — |
+| PATCH | `/auth/profile` | `AuthController@updateProfile` | — |
+| PUT | `/auth/password` | `SelfApiController@updatePassword` | — |
+| GET | `/me/dashboard`, `/me/meals`, `/me/deposits`, `/me/analytics` | `MemberSelfApiController` | — |
+| PUT | `/me/theme` | `SelfApiController@updateTheme` | — |
+| GET/POST/DELETE | `/notifications…` | `SelfApiController` | `notifications.announce` (broadcast only) |
+| POST | `/notifications/announce` | `SelfApiController@announce` | `notifications.announce` |
+| GET | `/dashboard` | `DashboardApiController@index` | — |
+| GET/POST/PATCH/DELETE | `/members…` | `MemberApiController` | `students.view` / `students.manage` |
+| GET/POST | `/deposits` (+ `/deposits/export`) | `DepositApiController` | `meals.deposit` |
+| GET/POST | `/expenses` | `ReferenceApiController` | `meals.expense` |
+| GET/POST | `/meals`, `/meals/day` | `MealApiController` | `meals.view` / `meals.entry` |
+| GET/POST | `/subsidies` (+ `/subsidies/sources`) | `SubsidyApiController` | `subsidies.view` / `subsidies.manage` |
+| GET/POST | `/vendors` | `ReferenceApiController` | `vendors.view` / `vendors.manage` |
+| GET/POST | `/departments` | `ReferenceApiController` | `departments.view` / `departments.manage` |
+| GET/POST | `/claims` | `ClaimApiController` | — (own) |
+| GET/PATCH | `/claims/review`, `/claims/{id}/approve`, `/claims/{id}/reject` | `ClaimApiController` | `claims.review` |
+| GET/POST | `/me/payments` | `MemberPaymentApiController` | — (own) |
+| GET/PATCH | `/member-payments…` | `MemberPaymentApiController` | `meals.deposit` |
+| GET/POST/PATCH | `/menus`, `/menus/{menu}/vote`, `/menus/{menu}/status` | `MenuApiController` | `meals.reports` (manage only) |
+| GET/PUT | `/settings/institution` | `ReferenceApiController` | `institution.view` / `institution.manage` |
+| GET | `/settings/subsidy-sources` | `ReferenceApiController` | `subsidies.view` |
+| GET | `/reports/meal`, `/reports/analytics`, `/reports/forecast`, `/reports/per-meal-rate` | `ReportApiController` | `meals.reports` / `transactions.view` |
+
+**Delegation, not duplication.** `ClaimApiController` and
+`MemberPaymentApiController` extend their **web** controllers and reuse
+`canReview()` / `present()` / the money-moving `approve()` / `reject()` bodies.
+Approving a claim or verifying a payment writes ledger rows inside a database
+transaction; reimplementing that for mobile would create a second, independently
+drifting implementation of the platform's most delicate writes — the classic
+source of "the app and the website disagree about my balance".
 
 ### 7.7 Conventions
 
@@ -981,6 +1010,64 @@ model serialization.
   `YYYY-MM`.
 - Page sizes are capped (`min((int) $request->query('per_page', 25), 100)`).
 - Full reference: [`docs/API.md`](./API.md).
+
+### 7.8 Mobile access control — role parity with the web
+
+The API enforces the **same permission matrix as the web**, at the route level, so
+a role that cannot reach a module in the browser cannot reach it over `/api`
+either. Nothing is re-implemented per client: the `permission:*` middleware reads
+the identical Spatie permission set the `web` routes use.
+
+| Capability | Institution Admin | Meal Manager | Member |
+|---|:--:|:--:|:--:|
+| Own dashboard / meals / deposits / analytics | yes | yes | yes |
+| Staff roster (`students.view`) | yes | yes | no |
+| Manage members (`students.manage`) | yes | yes | no |
+| Record meals (`meals.entry`) | yes | yes | no |
+| Deposits / refunds (`meals.deposit`) | yes | yes | no |
+| Expenses (`meals.expense`) | yes | yes | no |
+| Vendors / departments | yes | yes | no |
+| Subsidies — view / manage | yes / yes | yes / **no** | no |
+| Reports & forecast (`meals.reports`) | yes | yes | no |
+| Claims — raise own / **review** | yes / yes | yes / yes | yes / **no** |
+| Payment verification (`meals.deposit`) | yes | yes | no |
+| Menus — read / manage (`meals.reports`) | yes / yes | yes / yes | yes / **no** |
+| Notifications — own | yes | yes | yes |
+| Broadcast (`notifications.announce`) | yes | **no** | no |
+| Institution settings — view / manage | yes / yes | yes / **no** | no |
+| Theme (own) / change password | yes | yes | yes |
+
+The matrix is asserted by `tests/Feature/Api/Auth/ApiAccessControlTest.php`, which
+drives each role through the real HTTP boundary — so a future re-scoping of a
+permission cannot silently diverge between the two clients.
+
+#### The Software Super Admin is excluded in three layers
+
+The SSA is a **global** role: `TenantManager::resolveTenantId()` returns `null` for
+it, so tenant-owned queries would run **without** an institution filter and an SSA
+token would read every workspace. Defence in depth:
+
+1. **Mint guard.** `AuthController::login()` returns `403`
+   `"Platform administrators must use the web console."` and creates **no** token.
+   The check runs *after* the credential check so a wrong password on an SSA
+   account still returns the neutral `422` (no account enumeration).
+2. **Identity guard.** `AuthController::me()` returns the same `403`, so a token
+   minted before this rule cannot be reused.
+3. **Group guard.** `EnsureNotSoftwareSuperAdmin` (`mobile.not-ssa`) wraps the
+   **entire** authenticated API group in `routes/api.php`, so every protected
+   endpoint refuses an SSA token regardless of how it was obtained.
+
+#### Tenant isolation at the write path
+
+Two independent layers, unchanged by the API expansion:
+
+- **Automatic query scoping** — tenant-owned models use the
+  `BelongsToInstitution` global scope, so a controller cannot forget to scope.
+- **Tenant-scoped validation** — `ApiFormRequest::tenantExists()` restricts every
+  foreign-key `exists` rule to the active institution (see the class docblock for
+  the hole it closed). The new controllers follow the same rule: `vendor_id`,
+  `student_id`, `department_id` and `manager_id` are all scoped, so a foreign id is
+a clean `422` rather than a cross-tenant write.
 
 ---
 
