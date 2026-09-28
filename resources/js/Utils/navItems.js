@@ -199,6 +199,14 @@ export const NAV_SECTIONS = [
                 match: 'ssa.broadcasts.*',
                 icon: 'megaphone',
             },
+            {
+                // Defect reports filed by ANY tenant role, triaged in one queue.
+                // SSA-only: this is the one inbox that spans every workspace.
+                label: 'Bug Reports',
+                route: 'ssa.bug-reports.index',
+                match: 'ssa.bug-reports.*',
+                icon: 'bug',
+            },
         ],
     },
     {
@@ -252,18 +260,18 @@ export const NAV_SECTIONS = [
                 permission: 'students.view',
             },
             {
-                label: 'Subsidies',
-                route: 'meals.subsidies.index',
-                match: 'meals.subsidies.*',
-                icon: 'handCoins',
-                permission: 'subsidies.view',
-            },
-            {
                 label: 'Departments',
                 termKey: 'departments',
                 route: 'meals.departments.index',
                 icon: 'sitemap',
                 permission: 'departments.view',
+            },
+             {
+                label: 'Subsidies',
+                route: 'meals.subsidies.index',
+                match: 'meals.subsidies.*',
+                icon: 'handCoins',
+                permission: 'subsidies.view',
             },
             {
                 label: 'Deposits',

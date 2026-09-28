@@ -38,11 +38,38 @@ return [
             'database' => env('DB_DATABASE', database_path('database.sqlite')),
             'prefix' => '',
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
-            'busy_timeout' => null,
-            'journal_mode' => null,
-            'synchronous' => null,
+
+            /*
+             * CONCURRENCY SETTINGS - REQUIRED FOR THE DUSK SUITE (AND SAFE PRODUCTION-WISE)
+             * ----------------------------------------------------------------------------
+             * Dusk drives a real browser against a SEPARATE `php artisan serve` process.
+             * Both that process and the test runner open their own SQLite connection and
+             * both WRITE, which is the textbook recipe for "database is locked":
+             *
+             *     SQLSTATE[HY000]: General error: 5 database is locked
+             *     SQL: insert into "institutions" ...
+             *
+             * The symptom is subtle: an ordinary feature (approving an enquiry, which
+             * provisions an institution) fails with a 500 on ONE test, while the rest of
+             * the suite passes. It reads like an application bug and is actually a
+             * database-configuration one.
+             *
+             * These pragmas must be declared HERE, not applied per-connection in the test
+             * bootstrap, because the serve process builds its connection from this config
+             * and never runs the test bootstrap - so pragmas set there did not apply to
+             * the half of the pair that was causing the lock.
+             *
+             *   journal_mode=WAL   readers never block the writer (and vice versa),
+             *                      which is what makes two processes viable on SQLite.
+             *   busy_timeout=30000 rather than failing instantly, wait up to 30s for a
+             *                      competing write to release.
+             *   synchronous=NORMAL the safe pairing with WAL: durable across app crashes,
+             *                      and far faster than FULL.
+             */
+            'busy_timeout' => env('DB_BUSY_TIMEOUT', 30000),
+            'journal_mode' => env('DB_JOURNAL_MODE', 'WAL'),
+            'synchronous' => env('DB_SYNCHRONOUS', 'NORMAL'),
             'transaction_mode' => 'DEFERRED',
-            'busy_timeout' => 30000, // 30 seconds wait time for locked database
         ],
 
         'mysql' => [

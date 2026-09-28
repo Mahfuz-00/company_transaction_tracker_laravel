@@ -679,27 +679,120 @@ return round(min($reservePool, $shortfall), 2);  // never more than the shortfal
 A member's own money is **always** consumed first; reserve subsidy only tops up
 the remainder.
 
-### 5.5 The forecast — `forecast($lookback = 3)`
+### 5.5 Forecasting — the AI / RAG engine (`App\Support\Forecaster`)
 
-Deliberately simple and explainable (not a black box). `FORECAST_LOOKBACK_MONTHS = 3`.
+> **This section replaces the old "recency-weighted average" note.**
+> `FinanceCalculator::forecast()` has been **removed**, along with the
+> "3-Month Predictive Forecast" panel it powered on the Analytics pages. All
+> forecasting now lives in the AI Forecasting module, so there is exactly ONE
+> forecasting system across the web console and the mobile API.
 
-1. **Collect** the last N months via `monthSnapshot()`.
-2. **Weight** them on a linear ramp — `weightedAverage()`: oldest = weight 1,
-   newest = weight N (newest counts 3× on a 3-point series). A growing mess is
-   projected on its recent trend.
-3. **Growth rate** = `growthRate()`: `((last − first) / first) / (n − 1)`,
-   **clamped to ±35%** so one unusual month cannot blow the projection up. A zero
-   baseline returns 0 (flat).
-4. **Project** next month: `weightedMeals × (1 + mealGrowth)`,
-   `weightedExpense × (1 + expenseGrowth)`; the projected rate is
-   `projectedExpense / projectedMeals` (falling back to the current rate if meals
-   are zero).
-5. **Subsidy required** = `projectedCost × target_subsidy_ratio`
-   (`target_subsidy_ratio` is a `%`, default `20` → the "80/20 rule").
+#### 5.5.1 How a prediction is produced
 
-It also returns a 3-month `horizon` and an `assumptions` block (method, ratios,
-`has_history`). Everything is `round()`ed and clamped on purpose: a forecast that
-produces `−4,000,000` because of a zero-baseline month is worse than no forecast.
+There are two axes: **meal count** and **meal price** (cost per meal). Both come
+from the same retrieval pipeline — there is no separate model for price.
+
+**Step 1 — Embed.** Each historical day is converted into a fixed-length
+numeric **feature vector** (`Forecaster::featureVector()`, 8 dimensions):
+
+| # | Feature | Why it is in the vector |
+|---|---|---|
+| 0 | day-of-week (normalised) | Weekday and weekend mess attendance differ sharply |
+| 1 | is-weekend flag | Fri/Sat in Bangladesh |
+| 2 | month position | Seasonality (academic terms, holidays) |
+| 3 | active roster size (normalised) | A bigger roster eats more |
+| 4 | trailing 7-day mean meals | "What is happening right now" |
+| 5 | trailing 30-day mean meals | The medium-term level |
+| 6 | trailing 7-day mean cost per meal | **This is the price signal** |
+| 7 | trailing 7-day deposit activity | Whether members are funding it |
+
+Every value is scaled to roughly `0..1`, so no single dimension dominates the
+similarity score. The vectors and the realised outcome of each day (`meals`,
+`headcount`, `cost_per_meal`) are stored in `forecast_embeddings`.
+
+**Step 2 — Retrieve (the RAG step).** For a target date the engine embeds that
+future day's context, then finds the **K = 12 most similar past days** by cosine
+similarity. This is retrieval-augmented generation in its classic form: the
+"knowledge base" is the platform's own ledger history rather than a document
+corpus, and the retrieved evidence is returned to the caller as `evidence` so an
+operator can inspect exactly which days drove the number.
+
+**Step 3 — Weight.** The retrieved outcomes are averaged, weighted by similarity
+— a near-identical day counts far more than a loose one.
+
+**Step 4 — Blend with the local trend.**
+
+```
+meals = (retrieved × 0.70) + (trailing 7-day mean × 0.30)
+```
+
+Retrieval captures seasonality and weekday pattern; the recent mean captures
+"right now".
+
+**Step 5 — Adjust and clamp.** A day-of-week factor learned from the
+institution's own history is applied, and the result is capped at the physical
+maximum (`active members × 3 meals`) — a forecast can never exceed what the
+roster could actually eat.
+
+#### 5.5.2 Vector database, RAG, and cross-institution benchmarks
+
+**Is a vector database used?** Yes — `forecast_embeddings` is the vector store.
+Each row is one historical day with its 8-dimensional embedding and the outcome
+that followed. Retrieval is a cosine-similarity nearest-neighbour search over
+that table, scoped to the institution's own rows.
+
+**Is it "centrally trained"?** There is **no model training step**, and this is
+deliberate. The engine is *retrieval-based*, not gradient-trained: there are no
+weights to fit and therefore nothing to drift, and every number can be traced
+to the specific days that produced it. "Learning" happens by embedding more
+history, not by adjusting parameters.
+
+**How do institutions share a country benchmark?** Through
+`forecast_benchmarks`, which holds **country-level aggregate datapoints**
+(`country_code` + `metric` + `period_month` + `value`). Institutions in the same
+country read the same benchmark rows. Aggregates are recorded centrally by the
+Software Super Admin, not by institution admins — so a workspace cannot
+misreport its own benchmark.
+
+#### 5.5.3 Thin history — the < 3 month rule
+
+```php
+$minMonths = config('services.forecasting.min_history_months', 3);
+
+if ($monthsOfHistory < $minMonths) {
+    return $this->benchmarkForecast($target, $monthsOfHistory);
+}
+```
+
+With **fewer than three months** of history there is nothing meaningful to
+retrieve, so the engine:
+
+1. falls back to **country-specific aggregate benchmarks** (e.g. Bangladesh
+dormitory figures) retrieved for the institution's `country_code`,
+2. reports `basis: 'benchmark'` and names the source,
+3. and the UI labels it differently from a data-driven estimate — because the two
+deserve different trust.
+
+**There is no manual override.** An institution admin cannot type in a
+predicted figure. If the roster is empty and no benchmark exists, the arithmetic
+yields **0** and the UI shows a clean 0 with an explanatory basis, rather than a
+plausible-looking invented number.
+
+#### 5.5.4 The monthly money projection
+
+`Forecaster::monthlyProjection($months = 3)` — the logic migrated from the
+deleted Analytics panel:
+
+- day-level meals/cost come from the **same retrieval engine** as the daily
+  forecast, so the two can never disagree;
+- the **subsidy/member split** is kept as it was, because it is the institution's
+own **business rule** (`target_subsidy_ratio`, the "80/20 rule"), not a
+  prediction — there is nothing to learn and no reason to change it;
+- `basis` is propagated **per row**, so a benchmark-driven month stays visibly
+  different from a data-driven one inside the same table;
+- a month with **0 predicted meals costs 0** — no substitution, no stale average;
+- if **any** month in the horizon is benchmark-based, the headline basis degrades
+to `benchmark` so the summary never over-claims.
 
 ### 5.6 Month-scoping helpers
 
@@ -855,6 +948,65 @@ variables but **not** the live React theme context — `useTheme()` fell back to
 defaults there. The landing page (`Welcome.jsx`) receives the global variables
 from the pre-mount paint and shares the same `wa-*` entrance animations, so
 landing and auth look like one continuous product.
+
+---
+
+## 6.1 Multi-language (i18n)
+
+### 6.1.1 Adding a language is a two-file change
+
+```
+1. config/locales.php          -> add the entry to `supported`
+2. lang/<code>/app.php         -> copy lang/en/app.php and translate
+```
+
+Nothing else. The switcher, the server-side `trans()` calls, the Inertia prop and
+the React provider all read those two places.
+
+### 6.1.2 What ships today
+
+| Code | Label | Notes |
+|---|---|---|
+| `en` | English | The reference locale — the key set every other file mirrors. |
+| `bn` | বাংলা | Bengali. Mirrors `en` key-for-key. |
+
+Future languages are pre-scaffolded as comments in `config/locales.php`
+(`ar`, `hi`, `es`, `id`). An RTL language sets `'rtl' => true` and the React
+provider flips `document.documentElement.dir` automatically.
+
+### 6.1.3 Resolution order — `App\Support\LocaleManager`
+
+1. **The signed-in user's `users.locale`** — a saved choice beats a browser hint.
+2. **The session** — set when a guest picks a language from the switcher.
+3. **`Accept-Language`** — a first-visit convenience (`bn-BD,bn;q=0.9` matches `bn`
+   on the primary subtag, q-values respected).
+4. **`config('locales.default')`**.
+
+An unsupported code anywhere in that chain is **skipped, not applied**, so a
+stale `users.locale` left behind by a language we later dropped cannot break
+rendering.
+
+### 6.1.4 Where it is wired
+
+| Layer | Piece | Why |
+|---|---|---|
+| Middleware | `SetLocale` | Prepended to the `web` group so it runs **before** anything that produces user-facing text — validation messages, flash strings and especially the Inertia props. |
+| Controller | `LanguageController` | `POST /language` (authenticated → persists to `users.locale`), `GET /language/{code}` (guest → session only). No permission gate: language is a personal preference, like the theme. |
+| Inertia | `locale` shared prop | `current`, `fallback`, `rtl`, `supported` (each language named in its own script), and `messages` — the flattened catalogue, so React needs no second request. |
+| React | `LocaleProvider` + `useTranslation()` | Reads the shared prop and exposes `t('auth.sign_in')` with `:placeholder` interpolation matching Laravel's own syntax. |
+| UI | `LanguageSwitcher` | Top bar (compact) and the guest auth screens. Chooses the guest or authenticated route from a `user-authenticated` meta tag. |
+
+### 6.1.5 A note on why the provider takes a prop
+
+`LocaleProvider` deliberately does **not** call Inertia's `usePage()`. It renders
+as a **sibling** of `<App>` — wrapping the onboarding guide and the global loading
+indicator, which sit outside Inertia's page component — and `usePage()` there
+throws *"usePage must be used within the Inertia component"*, crashing the entire
+React tree into a blank page. `app.jsx` reads `initialPage.props.locale` once and
+passes it down instead, which makes the provider a plain context component with
+no framework dependency.
+
+The same reasoning applies to `OnboardingProvider`.
 
 ---
 

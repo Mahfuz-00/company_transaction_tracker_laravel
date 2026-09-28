@@ -182,7 +182,15 @@ class AnalyticsService
             'months' => $this->monthOptions(),
             'monthSnapshot' => $monthSnapshot,
             'subsidyTracking' => $this->subsidyTracking($month),
-            'forecast' => $finance->forecast(),
+            /*
+             * NO `forecast` KEY.
+             *
+             * The three-month predictive forecast was removed from the analytics
+             * pages and migrated into the dedicated AI Forecasting module (see
+             * App\Support\Forecaster::monthlyProjection). Analytics now reports what
+             * HAPPENED; a forecast is served only by the forecasting module, so the
+             * two can never present different numbers for the same month.
+             */
             'activeFilters' => [
                 'period' => $activePeriod,
                 'month' => $month,

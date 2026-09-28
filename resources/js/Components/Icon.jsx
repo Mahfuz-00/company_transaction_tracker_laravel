@@ -300,6 +300,20 @@ const ICONS = {
         ],
     },
 
+    /**
+     * Bug Reports (SSA triage inbox) - a beetle/warning mark.
+     *
+     * Distinct from `alert` (the Anomaly Monitor's plain warning triangle) on
+     * purpose: a user-reported DEFECT and an automated data ANOMALY are different
+     * work queues, and the sidebar must not make them look like one module.
+     */
+    bug: {
+        paths: [
+            'M12 20a6 6 0 006-6v-2H6v2a6 6 0 006 6z',
+            'M12 12V8M9 4l1.5 2M15 4l-1.5 2M6 12H3M18 12h3M6 15l-2.5 1.5M18 15l2.5 1.5M6 9L3.5 7.5M18 9l2.5-1.5',
+        ],
+    },
+
     /** Subsidies / Subsidy Sources - a hand holding a coin. */
     handCoins: {
         paths: [

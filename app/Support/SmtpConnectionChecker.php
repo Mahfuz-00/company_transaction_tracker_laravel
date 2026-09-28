@@ -67,10 +67,31 @@ class SmtpConnectionChecker
         $encryption = static::normaliseEncryption($config['encryption'] ?? 'tls');
 
         /*
+         * SHAPE VALIDATION RUNS FIRST - BEFORE THE "live check disabled" SHORT-CIRCUIT.
+         *
+         * The order matters and was previously wrong. The disabled-check branch used
+         * to return `ok: true` immediately, which meant a request with a BLANK HOST
+         * reported success whenever the suite (or any environment) had
+         * SMTP_LIVE_CHECK=false. The UI would then show a green "connected" banner
+         * for a configuration that could not possibly connect - the exact
+         * false-confidence the check endpoint exists to prevent.
+         *
+         * Whether we can open a socket is a separate question from whether the
+         * configuration is even complete. A missing host or an out-of-range port is
+         * a SHAPE failure, and it must be reported as one in every environment.
+         */
+        if ($host === '') {
+            return static::result(false, 'No SMTP host was provided.', $host, $port, $encryption);
+        }
+
+        if ($port < 1 || $port > 65535) {
+            return static::result(false, 'The port must be between 1 and 65535.', $host, $port, $encryption);
+        }
+
+        /*
          * When the live check is disabled (the automated test suite), report a
-         * successful "verified" result without opening a socket. The save path
-         * still validates the SHAPE of the config, so a half-filled relay is
-         * rejected as before - only the network probe is skipped.
+         * successful "verified" result without opening a socket. The shape guards
+         * above have already run, so a half-filled relay is still rejected.
          */
         if (! static::enabled()) {
             return static::result(
@@ -80,15 +101,6 @@ class SmtpConnectionChecker
                 $port,
                 $encryption
             );
-        }
-
-        // A host and a sane port are the minimum for any connection attempt.
-        if ($host === '') {
-            return static::result(false, 'No SMTP host was provided.', $host, $port, $encryption);
-        }
-
-        if ($port < 1 || $port > 65535) {
-            return static::result(false, 'The port must be between 1 and 65535.', $host, $port, $encryption);
         }
 
         // A blank password means "keep the stored secret" in the form. To test a

@@ -83,16 +83,29 @@ class MailSettings
     public static function forDisplay(): array
     {
         $settings = static::all();
-        $settings['has_password'] = filled($settings['password']);
-        $settings['password'] = '';
 
-        // SETUP COMPLETENESS, so the UI can decide which helper/warning text to
-        // show WITHOUT re-deriving the rules. `configured` means the relay has
-        // everything it needs to deliver mail; `active` means it is also switched
-        // on. The SMTP form uses these to hide the "SMTP is disabled - falls back"
-        // warning once setup is complete and enabled.
+        /*
+         * COMPUTE COMPLETENESS BEFORE REDACTING THE SECRET.
+         *
+         * The password must be stripped before this array reaches the browser -
+         * but `isConfigured()` needs to know whether a secret EXISTS to decide if
+         * a username can authenticate.
+         *
+         * The previous order was:
+         *     $settings['password'] = '';                       // redact
+         *     $settings['configured'] = isConfigured($settings); // now sees ''
+         * which made `configured` PERMANENTLY FALSE for any relay that uses a
+         * username - i.e. every real provider, including the Brevo default. The
+         * UI then kept showing "SMTP is disabled - falls back to the environment
+         * mailer" even after a save that had just been verified against the relay,
+         * so the operator could not tell a working configuration from a broken one.
+         */
+        $settings['has_password'] = filled($settings['password']);
         $settings['configured'] = static::isConfigured($settings);
         $settings['active'] = (bool) $settings['enabled'] && $settings['configured'];
+
+        // NOW redact. `configured`/`active` are already settled.
+        $settings['password'] = '';
 
         return $settings;
     }

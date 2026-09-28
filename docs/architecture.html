@@ -418,17 +418,59 @@ $reservePool = static::query()-&gt;active()-&gt;where('apply_mode', 'credit_behi
 
 return round(min($reservePool, $shortfall), 2);  // never more than the shortfall</code></pre>
 <p>A member's own money is <strong>always</strong> consumed first; reserve subsidy only tops up the remainder.</p>
-<h3 id="55-the-forecast--forecastlookback--3">5.5 The forecast — <code>forecast($lookback = 3)</code></h3>
-<p>Deliberately simple and explainable (not a black box). <code>FORECAST_LOOKBACK_MONTHS = 3</code>.</p>
-<ol><li><strong>Collect</strong> the last N months via <code>monthSnapshot()</code>.</li><li><strong>Weight</strong> them on a linear ramp — <code>weightedAverage()</code>: oldest = weight 1,</li></ol>
-<p>   newest = weight N (newest counts 3× on a 3-point series). A growing mess is    projected on its recent trend.</p>
-<ol><li><strong>Growth rate</strong> = <code>growthRate()</code>: <code>((last − first) / first) / (n − 1)</code>,</li></ol>
-<p>   <strong>clamped to ±35%</strong> so one unusual month cannot blow the projection up. A zero    baseline returns 0 (flat).</p>
-<ol><li><strong>Project</strong> next month: <code>weightedMeals × (1 + mealGrowth)</code>,</li></ol>
-<p>   <code>weightedExpense × (1 + expenseGrowth)</code>; the projected rate is    <code>projectedExpense / projectedMeals</code> (falling back to the current rate if meals    are zero).</p>
-<ol><li><strong>Subsidy required</strong> = <code>projectedCost × target_subsidy_ratio</code></li></ol>
-<p>   (<code>target_subsidy_ratio</code> is a <code>%</code>, default <code>20</code> → the &quot;80/20 rule&quot;).</p>
-<p>It also returns a 3-month <code>horizon</code> and an <code>assumptions</code> block (method, ratios, <code>has_history</code>). Everything is <code>round()</code>ed and clamped on purpose: a forecast that produces <code>−4,000,000</code> because of a zero-baseline month is worse than no forecast.</p>
+<h3 id="55-forecasting--the-ai--rag-engine-appsupportforecaster">5.5 Forecasting — the AI / RAG engine (<code>App\Support\Forecaster</code>)</h3>
+<blockquote><p><strong>This section replaces the old &quot;recency-weighted average&quot; note.</strong> <code>FinanceCalculator::forecast()</code> has been <strong>removed</strong>, along with the &quot;3-Month Predictive Forecast&quot; panel it powered on the Analytics pages. All forecasting now lives in the AI Forecasting module, so there is exactly ONE forecasting system across the web console and the mobile API.</p></blockquote>
+<h4 id="551-how-a-prediction-is-produced">5.5.1 How a prediction is produced</h4>
+<p>There are two axes: <strong>meal count</strong> and <strong>meal price</strong> (cost per meal). Both come from the same retrieval pipeline — there is no separate model for price.</p>
+<p><strong>Step 1 — Embed.</strong> Each historical day is converted into a fixed-length numeric <strong>feature vector</strong> (<code>Forecaster::featureVector()</code>, 8 dimensions):</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Feature</th><th>Why it is in the vector</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>day-of-week (normalised)</td><td>Weekday and weekend mess attendance differ sharply</td></tr>
+<tr><td>1</td><td>is-weekend flag</td><td>Fri/Sat in Bangladesh</td></tr>
+<tr><td>2</td><td>month position</td><td>Seasonality (academic terms, holidays)</td></tr>
+<tr><td>3</td><td>active roster size (normalised)</td><td>A bigger roster eats more</td></tr>
+<tr><td>4</td><td>trailing 7-day mean meals</td><td>&quot;What is happening right now&quot;</td></tr>
+<tr><td>5</td><td>trailing 30-day mean meals</td><td>The medium-term level</td></tr>
+<tr><td>6</td><td>trailing 7-day mean cost per meal</td><td><strong>This is the price signal</strong></td></tr>
+<tr><td>7</td><td>trailing 7-day deposit activity</td><td>Whether members are funding it</td></tr>
+</tbody>
+</table>
+</div>
+<p>Every value is scaled to roughly <code>0..1</code>, so no single dimension dominates the similarity score. The vectors and the realised outcome of each day (<code>meals</code>, <code>headcount</code>, <code>cost_per_meal</code>) are stored in <code>forecast_embeddings</code>.</p>
+<p><strong>Step 2 — Retrieve (the RAG step).</strong> For a target date the engine embeds that future day's context, then finds the <strong>K = 12 most similar past days</strong> by cosine similarity. This is retrieval-augmented generation in its classic form: the &quot;knowledge base&quot; is the platform's own ledger history rather than a document corpus, and the retrieved evidence is returned to the caller as <code>evidence</code> so an operator can inspect exactly which days drove the number.</p>
+<p><strong>Step 3 — Weight.</strong> The retrieved outcomes are averaged, weighted by similarity — a near-identical day counts far more than a loose one.</p>
+<p><strong>Step 4 — Blend with the local trend.</strong></p>
+<pre class="code"><code>meals = (retrieved × 0.70) + (trailing 7-day mean × 0.30)</code></pre>
+<p>Retrieval captures seasonality and weekday pattern; the recent mean captures &quot;right now&quot;.</p>
+<p><strong>Step 5 — Adjust and clamp.</strong> A day-of-week factor learned from the institution's own history is applied, and the result is capped at the physical maximum (<code>active members × 3 meals</code>) — a forecast can never exceed what the roster could actually eat.</p>
+<h4 id="552-vector-database-rag-and-cross-institution-benchmarks">5.5.2 Vector database, RAG, and cross-institution benchmarks</h4>
+<p><strong>Is a vector database used?</strong> Yes — <code>forecast_embeddings</code> is the vector store. Each row is one historical day with its 8-dimensional embedding and the outcome that followed. Retrieval is a cosine-similarity nearest-neighbour search over that table, scoped to the institution's own rows.</p>
+<p><strong>Is it &quot;centrally trained&quot;?</strong> There is <strong>no model training step</strong>, and this is deliberate. The engine is <em>retrieval-based</em>, not gradient-trained: there are no weights to fit and therefore nothing to drift, and every number can be traced to the specific days that produced it. &quot;Learning&quot; happens by embedding more history, not by adjusting parameters.</p>
+<p><strong>How do institutions share a country benchmark?</strong> Through <code>forecast_benchmarks</code>, which holds <strong>country-level aggregate datapoints</strong> (<code>country_code</code> + <code>metric</code> + <code>period_month</code> + <code>value</code>). Institutions in the same country read the same benchmark rows. Aggregates are recorded centrally by the Software Super Admin, not by institution admins — so a workspace cannot misreport its own benchmark.</p>
+<h4 id="553-thin-history--the--3-month-rule">5.5.3 Thin history — the &lt; 3 month rule</h4>
+<pre class="code"><code class="language-php">$minMonths = config('services.forecasting.min_history_months', 3);
+
+if ($monthsOfHistory &lt; $minMonths) {
+    return $this-&gt;benchmarkForecast($target, $monthsOfHistory);
+}</code></pre>
+<p>With <strong>fewer than three months</strong> of history there is nothing meaningful to retrieve, so the engine:</p>
+<ol><li>falls back to <strong>country-specific aggregate benchmarks</strong> (e.g. Bangladesh</li></ol>
+<p>dormitory figures) retrieved for the institution's <code>country_code</code>,</p>
+<ol><li>reports <code>basis: 'benchmark'</code> and names the source,</li><li>and the UI labels it differently from a data-driven estimate — because the two</li></ol>
+<p>deserve different trust.</p>
+<p><strong>There is no manual override.</strong> An institution admin cannot type in a predicted figure. If the roster is empty and no benchmark exists, the arithmetic yields <strong>0</strong> and the UI shows a clean 0 with an explanatory basis, rather than a plausible-looking invented number.</p>
+<h4 id="554-the-monthly-money-projection">5.5.4 The monthly money projection</h4>
+<p><code>Forecaster::monthlyProjection($months = 3)</code> — the logic migrated from the deleted Analytics panel:</p>
+<ul><li>day-level meals/cost come from the <strong>same retrieval engine</strong> as the daily</li></ul>
+<p>  forecast, so the two can never disagree;</p>
+<ul><li>the <strong>subsidy/member split</strong> is kept as it was, because it is the institution's</li></ul>
+<p>own <strong>business rule</strong> (<code>target_subsidy_ratio</code>, the &quot;80/20 rule&quot;), not a   prediction — there is nothing to learn and no reason to change it;</p>
+<ul><li><code>basis</code> is propagated <strong>per row</strong>, so a benchmark-driven month stays visibly</li></ul>
+<p>  different from a data-driven one inside the same table;</p>
+<ul><li>a month with <strong>0 predicted meals costs 0</strong> — no substitution, no stale average;</li><li>if <strong>any</strong> month in the horizon is benchmark-based, the headline basis degrades</li></ul>
+<p>to <code>benchmark</code> so the summary never over-claims.</p>
 <h3 id="56-month-scoping-helpers">5.6 Month-scoping helpers</h3>
 <pre class="code"><code class="language-php">FinanceCalculator::monthBounds('2026-09');   // [firstDay, lastDay] Carbon
 FinanceCalculator::resolveMonth($input);     // validates /^\d{4}-\d{2}$/ else current month</code></pre>
@@ -514,6 +556,44 @@ export function resolveInitialTheme(props = {}) {
 <p><code>resolveAndApply</code> calls <code>applyThemeTokens(resolveInitialTheme(props), { persist })</code>; <code>persist</code> is true only when the <strong>account</strong> supplied a theme. <code>ThemeProvider</code> wraps the app in <code>AuthenticatedLayout</code>, <code>GuestLayout</code> and (transitively) every page, and exposes <code>useTheme()</code> → <code>{ theme, applyPreview, resetPreview }</code> to the <code>Settings/ThemeCustomizer</code> page.</p>
 <h3 id="66-how-the-theme-reaches-guest--landing-pages">6.6 How the theme reaches guest / landing pages</h3>
 <p><code>GuestLayout</code> explicitly wraps its children in <code>ThemeProvider</code>. Before this, only <code>AuthenticatedLayout</code> mounted it, so login/register/reset screens got the CSS variables but <strong>not</strong> the live React theme context — <code>useTheme()</code> fell back to defaults there. The landing page (<code>Welcome.jsx</code>) receives the global variables from the pre-mount paint and shares the same <code>wa-*</code> entrance animations, so landing and auth look like one continuous product.</p>
+<hr>
+<h2 id="61-multi-language-i18n">6.1 Multi-language (i18n)</h2>
+<h3 id="611-adding-a-language-is-a-two-file-change">6.1.1 Adding a language is a two-file change</h3>
+<pre class="code"><code>1. config/locales.php          -&gt; add the entry to `supported`
+2. lang/&lt;code&gt;/app.php         -&gt; copy lang/en/app.php and translate</code></pre>
+<p>Nothing else. The switcher, the server-side <code>trans()</code> calls, the Inertia prop and the React provider all read those two places.</p>
+<h3 id="612-what-ships-today">6.1.2 What ships today</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Code</th><th>Label</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>en</code></td><td>English</td><td>The reference locale — the key set every other file mirrors.</td></tr>
+<tr><td><code>bn</code></td><td>বাংলা</td><td>Bengali. Mirrors <code>en</code> key-for-key.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Future languages are pre-scaffolded as comments in <code>config/locales.php</code> (<code>ar</code>, <code>hi</code>, <code>es</code>, <code>id</code>). An RTL language sets <code>'rtl' =&gt; true</code> and the React provider flips <code>document.documentElement.dir</code> automatically.</p>
+<h3 id="613-resolution-order--appsupportlocalemanager">6.1.3 Resolution order — <code>App\Support\LocaleManager</code></h3>
+<ol><li><strong>The signed-in user's <code>users.locale</code></strong> — a saved choice beats a browser hint.</li><li><strong>The session</strong> — set when a guest picks a language from the switcher.</li><li><strong><code>Accept-Language</code></strong> — a first-visit convenience (<code>bn-BD,bn;q=0.9</code> matches <code>bn</code></li></ol>
+<p>   on the primary subtag, q-values respected).</p>
+<ol><li><strong><code>config('locales.default')</code></strong>.</li></ol>
+<p>An unsupported code anywhere in that chain is <strong>skipped, not applied</strong>, so a stale <code>users.locale</code> left behind by a language we later dropped cannot break rendering.</p>
+<h3 id="614-where-it-is-wired">6.1.4 Where it is wired</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Layer</th><th>Piece</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Middleware</td><td><code>SetLocale</code></td><td>Prepended to the <code>web</code> group so it runs <strong>before</strong> anything that produces user-facing text — validation messages, flash strings and especially the Inertia props.</td></tr>
+<tr><td>Controller</td><td><code>LanguageController</code></td><td><code>POST /language</code> (authenticated → persists to <code>users.locale</code>), <code>GET /language/{code}</code> (guest → session only). No permission gate: language is a personal preference, like the theme.</td></tr>
+<tr><td>Inertia</td><td><code>locale</code> shared prop</td><td><code>current</code>, <code>fallback</code>, <code>rtl</code>, <code>supported</code> (each language named in its own script), and <code>messages</code> — the flattened catalogue, so React needs no second request.</td></tr>
+<tr><td>React</td><td><code>LocaleProvider</code> + <code>useTranslation()</code></td><td>Reads the shared prop and exposes <code>t('auth.sign_in')</code> with <code>:placeholder</code> interpolation matching Laravel's own syntax.</td></tr>
+<tr><td>UI</td><td><code>LanguageSwitcher</code></td><td>Top bar (compact) and the guest auth screens. Chooses the guest or authenticated route from a <code>user-authenticated</code> meta tag.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="615-a-note-on-why-the-provider-takes-a-prop">6.1.5 A note on why the provider takes a prop</h3>
+<p><code>LocaleProvider</code> deliberately does <strong>not</strong> call Inertia's <code>usePage()</code>. It renders as a <strong>sibling</strong> of <code>&lt;App&gt;</code> — wrapping the onboarding guide and the global loading indicator, which sit outside Inertia's page component — and <code>usePage()</code> there throws <em>&quot;usePage must be used within the Inertia component&quot;</em>, crashing the entire React tree into a blank page. <code>app.jsx</code> reads <code>initialPage.props.locale</code> once and passes it down instead, which makes the provider a plain context component with no framework dependency.</p>
+<p>The same reasoning applies to <code>OnboardingProvider</code>.</p>
 <hr>
 <h2 id="7-the-mobile-api-layer">7. The mobile API layer</h2>
 <p><code>routes/api.php</code> + <code>app/Http/Controllers/Api/*</code>. Same models and services as the web layer — only the response format differs.</p>

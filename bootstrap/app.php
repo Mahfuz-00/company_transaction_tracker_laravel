@@ -24,6 +24,15 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->web(append: [
+            /*
+             * LOCALE FIRST.
+             *
+             * It must run before anything that produces user-facing text -
+             * validation messages, flash strings, and especially the Inertia props
+             * (which are translated for the front end). Prepending rather than
+             * appending guarantees that ordering.
+             */
+            \App\Http\Middleware\SetLocale::class,
             // Resolves + enforces the active tenant from the session BEFORE the
             // Inertia props are shared, so Institution::current() is correct for
             // every shared prop (terminology, currency, theme).

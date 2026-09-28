@@ -34,8 +34,13 @@ class SwitchTest extends DuskTestCase
         $this->browse(function (Browser $browser) use ($ssa) {
             $browser->loginAs($ssa)
                 ->visit('/settings/institutions')
-                ->waitForText('North South University Dorm', 20)
-                ->press('Access Dashboard')
+                ->waitForText('North South University Dorm', 20);
+
+            // Dismiss the first-login tour: its overlay covers the table and
+            // would intercept the Access Dashboard click.
+            $this->dismissOnboarding($browser);
+
+            $browser->press('Access Dashboard')
                 // switchTo() redirects to meals.students.index with a success flash.
                 ->waitForText('Now viewing "North South University Dorm".', 20)
                 ->assertPathIs('/meals/students');

@@ -4,6 +4,8 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\ClaimController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MemberDashboardController;
+use App\Http\Controllers\BugReportController;
+use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PasswordSetupController;
@@ -55,6 +57,20 @@ Route::get('/', function () {
 Route::post('/contact', [\App\Http\Controllers\LandingController::class, 'contact'])
     ->middleware('throttle:10,1')
     ->name('landing.contact');
+
+/*
+ * LANGUAGE SWITCHING FOR A GUEST.
+ *
+ * The landing page and the auth screens are public, so a visitor must be able to
+ * pick a language before they have an account. This writes the SESSION only
+ * (there is no user row yet); once they sign in, their choice is persisted to
+ * `users.locale` by POST /language.
+ *
+ * A GET, because switching language is not a state-changing action worth a CSRF
+ * round-trip - it is a preference, exactly like following a link.
+ */
+Route::get('/language/{locale}', [\App\Http\Controllers\LanguageController::class, 'setGuest'])
+    ->name('language.guest');
 
 /**
  * Password setup from a signed link (invitation OR reset).
@@ -162,6 +178,30 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.readAll');
     Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
+
+    /*
+     * LANGUAGE SWITCHING.
+     *
+     * No permission gate: choosing a language is a personal preference, like the
+     * theme. The controller validates the code against the shipped catalogue, so
+     * a crafted request cannot write an arbitrary locale onto the user row.
+     */
+    Route::post('/language', [LanguageController::class, 'update'])->name('language.update');
+
+    /*
+     * BUG REPORTS - the FILING side.
+     *
+     * Every tenant role may report a defect (Member, Meal Manager, Institution
+     * Admin). The Software Super Admin is deliberately EXCLUDED: they are the
+     * recipient of these reports, so filing one would be circular. The controller
+     * re-asserts that rule, so it survives any future route reshuffle.
+     *
+     * There is no matching READ route here on purpose - the inbox lives under
+     * /platform (SSA-only), because a defect in one workspace is not another
+     * workspace's business.
+     */
+    Route::post('/bug-reports', [BugReportController::class, 'store'])
+        ->name('bug-reports.store');
 
     // WORKSPACE BROADCASTS (Institution Admin). STRICTLY institution-scoped:
     // the controller pins the target institution from the signed-in user (never
@@ -474,8 +514,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
      *
      * Turn a public demo request into a live institution: approve to provision
      * on a trial (or a plan), or mark contacted / rejected.
-     */
-    Route::get('/platform/enquiries', [LandingEnquiryController::class, 'index'])
+     */    Route::get('/platform/enquiries', [LandingEnquiryController::class, 'index'])
         ->name('ssa.enquiries.index')
         ->middleware('permission:monitoring.view');
     Route::post('/platform/enquiries/{enquiry}/approve', [LandingEnquiryController::class, 'approve'])
@@ -491,6 +530,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/platform/broadcasts', [PlatformBroadcastController::class, 'index'])
         ->name('ssa.broadcasts.index')
         ->middleware('permission:monitoring.view');
+
+    /*
+     * BUG REPORTS - the TRIAGE side (SSA ONLY).
+     *
+     * The queue spans EVERY institution, so it carries the global permission a
+     * tenant role never holds. Both routes are additionally gated on the role,
+     * and the controller is not tenant-scoped for this model (by design - see
+     * App\Models\BugReport).
+     */
+    Route::get('/platform/bug-reports', [BugReportController::class, 'index'])
+        ->name('ssa.bug-reports.index')
+        ->middleware('role:Software Super Admin');
+    Route::patch('/platform/bug-reports/{bugReport}', [BugReportController::class, 'update'])
+        ->name('ssa.bug-reports.update')
+        ->middleware('role:Software Super Admin');
     Route::post('/platform/broadcasts', [PlatformBroadcastController::class, 'store'])
         ->name('ssa.broadcasts.store')
         ->middleware('permission:monitoring.manage');

@@ -104,7 +104,19 @@ class RoleOnboardingTest extends DuskTestCase
     {
         $this->seedRbac();
         $institution = $this->makeInstitution();
-        $member = $this->makeMember($institution, ['name' => 'Fresh Member']);
+
+        /*
+         * OPT IN to the tour: pass `onboarding_completed_at => null`.
+         *
+         * The shared fixture helpers mark accounts as already-onboarded by default,
+         * so the modal does not cover the page in the ~40 browser tests that are not
+         * about onboarding. THIS test is the one that genuinely cares, so it asks
+         * for a first-time user explicitly.
+         */
+        $member = $this->makeMember($institution, [
+            'name' => 'Fresh Member',
+            'onboarding_completed_at' => null,
+        ]);
 
         // A brand-new account has never seen the guide.
         $this->assertTrue($member->shouldSeeOnboarding());
@@ -119,15 +131,18 @@ class RoleOnboardingTest extends DuskTestCase
                 // The member journey's first step.
                 ->assertSee('Your Dashboard')
                 // The role chip names the correct user type.
-                ->assertSee('Member');
-        });
+                ->assertSee('Member');        });
     }
 
     public function test_completing_the_onboarding_persists_the_flag(): void
     {
         $this->seedRbac();
         $institution = $this->makeInstitution();
-        $member = $this->makeMember($institution);
+
+        // A genuinely first-time user: the shared fixture marks accounts as
+        // already-onboarded by default (so the tour does not cover the page in the
+        // ~40 browser tests that are not about onboarding), so this test opts IN.
+        $member = $this->makeMember($institution, ['onboarding_completed_at' => null]);
 
         $this->assertNull($member->onboarding_completed_at);
 
@@ -157,13 +172,15 @@ class RoleOnboardingTest extends DuskTestCase
 
         // Mark it complete, as the modal's "Get started" button would.
         $member->forceFill(['onboarding_completed_at' => now()])->save();
-
         $this->step('Member', 'Onboarding', 'second visit hides the modal', __LINE__);
 
         $this->browse(function (Browser $browser) use ($member) {
             $browser->loginAs($member)
                 ->visit('/my/dashboard')
-                ->waitForText('Welcome, Returning Member', 20)
+                // The greeting is "Welcome back, {name}" (Member/Dashboard.jsx),
+                // NOT "Welcome, {name}" - the older wording predates the page title
+                // moving into the fixed top bar.
+                ->waitForText('Welcome back, Returning Member', 20)
                 ->assertMissing('[data-testid="onboarding-modal"]');
         });
     }

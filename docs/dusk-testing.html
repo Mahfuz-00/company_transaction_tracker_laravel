@@ -137,7 +137,7 @@ class CreateTest extends DuskTestCase
 //  ==== STEP: [InstituteAdmin] → [Members] → [open Add Member modal] | Line ~31 ====</code></pre>
 <p>This is centralised in <code>DuskSupport::step($role, $module, $action, $line)</code>. Pass <code>__LINE__</code> so the output points at the exact line in the test.</p>
 <h3 id="test-count">Test count</h3>
-<p><code>php artisan dusk --list-tests</code> reports <strong>106 tests</strong> across <strong>61 test classes</strong> (Software Super Admin 17 classes, Institute Admin 23, Meal Manager 12, Member 8, Guest 1).</p>
+<p><code>php artisan dusk</code> reports <strong>242 tests</strong> across <strong>61 test classes</strong> (Software Super Admin 17 classes, Institute Admin 23, Meal Manager 12, Member 8, Guest 1), plus the Onboarding, TopBar and Intelligence module suites. The whole suite runs in roughly 3 minutes.</p>
 <hr>
 <h2 id="2-shared-test-support--the-real-helpers">2. Shared test support — the real helpers</h2>
 <p>There is <strong>no</strong> <code>BuildsTenantFixtures</code> trait in this repository. Fixtures and step logging live in <strong><code>Tests\Browser\Support\DuskSupport</code></strong>, and the committed test-database handling lives in <strong><code>Tests\Browser\Support\DuskDatabase</code></strong> (used by <code>Tests\DuskTestCase</code>).</p>
@@ -307,41 +307,60 @@ php artisan dusk:chrome-driver --detect</code></pre>
 <h2 id="7-determinism-notes">7. Determinism notes</h2>
 <ul><li>Each test runs against the <strong>committed</strong> Dusk database; <code>DuskDatabase::truncateDuskTables()</code> clears the domain tables between tests, so state never bleeds across tests (no rollback transaction — a rollback would hide rows from the server process).</li><li>The browser's cookies are cleared in <code>tearDown()</code> (Dusk reuses one browser per class), so each test starts from a clean guest session.</li><li>Fixtures are built with explicit, unique emails/rolls (<code>DuskSupport</code> randomises institution names to satisfy the <code>institutions.slug</code> UNIQUE index) — no reliance on ordering.</li><li>Text waits are case-insensitive where Tailwind <code>uppercase</code> would otherwise break a literal match.</li><li>Assertions on tenant isolation read the database directly (e.g. <code>Student::where('institution_id', ...)</code>) <strong>and</strong> the rendered DOM, covering both the query scope and the UI.</li><li>Time-sensitive assertions avoid hard-coded dates; the trial window is asserted via <code>Institution::isOnTrial()</code> rather than an exact timestamp.</li><li>The <code>phpunit.dusk.xml</code> config raises <code>memory_limit</code> to <code>2G</code> (a full Dusk class boots a Laravel app + browser driver, which can exceed PHP's default 128M).</li></ul>
 <hr>
-<h2 id="8-the-non-dusk-suites-unit--feature">8. The non-Dusk suites (Unit + Feature)</h2>
-<p>The PHPUnit suites are <strong>also</strong> organised by Role/Module, mirroring the Dusk tree. They are separate from Dusk and run under <strong><code>php artisan test</code></strong> (config: <code>phpunit.xml</code>), not <code>php artisan dusk</code>.</p>
+<h2 id="8-the-suite-is-dusk-only-by-policy">8. The suite is Dusk-only (by policy)</h2>
+<p><strong>Every requirement is verified through a real browser.</strong> There is deliberately no Unit or Feature suite: <code>tests/Unit</code> and <code>tests/Feature</code> have been REMOVED, and <code>phpunit.xml</code> now points at <code>tests/Browser</code> so a stray <code>php artisan test</code> runs the browser suite rather than silently reporting &quot;0 tests&quot;.</p>
 <pre class="code"><code>tests/
-├── Unit/
-│   └── Support/MoneyTest.php                 ← pure unit test (no Laravel boot)
-└── Feature/
-    ├── Api/                                   ← NEW: the mobile JSON API suite
-    │   ├── ApiTestCase.php                    ← shared fixtures (RefreshDatabase)
-    │   ├── Auth/{ApiAuthenticationTest, ApiLoginThrottleTest}
-    │   ├── Deposits/DepositApiTest.php
-    │   ├── Members/MemberApiTest.php
-    │   └── Tenancy/ApiTenantIsolationTest.php
-    ├── Guest/
-    │   ├── Auth/{AuthenticationTest, PasswordResetTest, RegistrationTest}
-    │   └── Home/HomePageTest.php
-    ├── InstituteAdmin/
-    │   ├── Departments/DepartmentGuardTest.php
-    │   └── InviteCode/InviteCodeTest.php
-    ├── Member/
-    │   ├── Auth/{EmailVerificationTest, PasswordConfirmationTest, PasswordUpdateTest}
-    │   └── Profile/ProfileTest.php
-    └── SoftwareSuperAdmin/
-        └── Auth/SuperAdminPasswordGuardTest.php</code></pre>
-<ul><li><strong><code>tests/Feature</code></strong> drives the app through the HTTP kernel (<code>$this-&gt;get()</code>, <code>$this-&gt;postJson()</code>, <code>actingAs</code>), using <code>RefreshDatabase</code> on the <code>:memory:</code> SQLite DB pinned by <code>phpunit.xml</code>.</li><li><strong><code>tests/Feature/Api</code></strong> targets the Sanctum-protected JSON API at <code>/api</code> (login/token, roster, deposits, tenant isolation). It shares fixtures via <code>Tests\Feature\Api\ApiTestCase</code> (a <code>*TestCase.php</code>, so PHPUnit does not run it as a test class).</li><li><strong><code>tests/Unit</code></strong> holds framework-free unit tests (currently the server-side <code>App\Support\Money</code> formatter).</li></ul>
-<h3 id="how-the-two-commands-map-to-the-suites">How the two commands map to the suites</h3>
+├── DuskTestCase.php           ← base class (driver, DB, teardown)
+├── Browser/
+│   ├── Support/               ← DuskSupport (fixtures), DuskDatabase (shared DB)
+│   └── {Role}/{Module}/{TestType}/
+└── (no Unit/, no Feature/)</code></pre>
+<h3 id="why-browser-only">Why browser-only</h3>
+<p>A browser test asserts the thing a user actually experiences: the page renders, the control is clickable, the flash message appears. Several real defects in this codebase were invisible to HTTP-level tests and only surfaced in a browser — for example a React provider that crashed the whole tree (blank page, HTTP 200), and an onboarding modal that never rendered while every server-side prop was correct.</p>
+<h3 id="what-this-costs-worth-stating-plainly">What this costs (worth stating plainly)</h3>
+<p>The mobile <strong>JSON API</strong> is no longer covered by an automated test. Dusk drives a browser against the web routes; it cannot exercise <code>/api</code> (bearer-token auth, no cookies, no HTML). The multi-tenant isolation assertions that lived in <code>tests/Feature/Api/Tenancy</code> are gone with it. If API coverage is wanted back, it needs a separate HTTP-level suite — browser tests cannot substitute for it.</p>
+<h3 id="how-the-commands-map">How the commands map</h3>
 <div class="table-wrap">
 <table>
 <thead><tr><th>Command</th><th>Config</th><th>Runs</th></tr></thead>
 <tbody>
-<tr><td><code>php artisan test</code></td><td><code>phpunit.xml</code></td><td><strong>Unit + Feature</strong> (<code>:memory:</code> SQLite, <code>MAIL_MAILER=array</code>, <code>SESSION_DRIVER=array</code>) — <strong>65 tests</strong> (6 Unit, 59 Feature).</td></tr>
-<tr><td><code>php artisan dusk</code></td><td><code>phpunit.dusk.xml</code></td><td><strong>Browser</strong> (<code>./tests/Browser</code>, real server + <code>database/dusk.sqlite</code>) — <strong>106 tests</strong>.</td></tr>
+<tr><td><code>php artisan dusk</code></td><td><code>phpunit.dusk.xml</code></td><td><strong>The browser suite</strong> — 242 tests, 61 classes.</td></tr>
+<tr><td><code>composer test</code></td><td>—</td><td><code>config:clear</code> then <code>php artisan dusk</code>.</td></tr>
 </tbody>
 </table>
 </div>
-<p>The <code>composer test</code> script wraps <code>php artisan test</code> (<code>php artisan config:clear</code> first). The CI workflow runs the style check and the Unit/Feature suites in the <code>tests</code> job, then the Dusk suite in the separate <code>dusk</code> job (see <code>.github/workflows/ci.yml</code>).</p>
+<p>The CI workflow runs the style check, then the Dusk suite in the <code>dusk</code> job (see <code>.github/workflows/ci.yml</code>).</p>
+<hr>
+<h2 id="81-environment-prerequisites-that-silently-break-the-suite">8.1 Environment prerequisites that silently break the suite</h2>
+<p>These three cost hours to diagnose because each fails in a way that does <strong>not</strong> point at its cause. Check them first.</p>
+<h3 id="1-chromedriver-must-match-the-installed-chrome">1. ChromeDriver must match the installed Chrome</h3>
+<pre class="code"><code>session not created: This version of ChromeDriver only supports Chrome version 154
+Current browser version is 153.0.8010.53</code></pre>
+<p>Chrome auto-updates; the bundled driver does not. <strong>Every</strong> browser test fails at session creation, so the suite reports a wall of failures that look like broken features. Install the matching driver:</p>
+<pre class="code"><code class="language-powershell">php artisan dusk:chrome-driver 153     # use your Chrome's major version</code></pre>
+<blockquote><p>On Windows that command can fail at its rename step while still downloading correctly. Verify with <code>vendor\laravel\dusk\bin\chromedriver-win.exe --version</code> and copy the downloaded binary over the old one manually if needed.</p></blockquote>
+<h3 id="2-publichot-must-not-exist">2. <code>public/hot</code> must not exist</h3>
+<p>If <code>public/hot</code> is present, Laravel emits asset URLs pointing at the <strong>Vite dev server</strong> instead of <code>public/build</code>. If Vite is not running (the normal case for a Dusk run), the browser loads no JavaScript at all: the page returns HTTP 200, the DOM is present, <code>bodyChars</code> is 0, and there are <strong>no console errors</strong>.</p>
+<pre class="code"><code class="language-powershell">Remove-Item public\hot -Force   # then confirm: php artisan dusk</code></pre>
+<p>A <code>npm run dev</code> left running in another terminal will recreate it.</p>
+<h3 id="3-sqlite-must-run-in-wal-mode">3. SQLite must run in WAL mode</h3>
+<p>Dusk drives a browser against a <strong>separate <code>php artisan serve</code> process</strong>, so two processes write to the same SQLite file. Without WAL that produces:</p>
+<pre class="code"><code>SQLSTATE[HY000]: General error: 5 database is locked
+SQL: insert into &quot;institutions&quot; ...</code></pre>
+<p>It surfaces as ONE unrelated-looking test failing with a 500 while the rest pass (for example &quot;approve an enquiry&quot;, which provisions an institution). The pragmas are declared in <code>config/database.php</code> so <strong>both</strong> processes receive them — the serve process never runs the test bootstrap, so setting them there is not enough.</p>
+<hr>
+<h2 id="82-fixture-conventions-that-keep-the-suite-honest">8.2 Fixture conventions that keep the suite honest</h2>
+<h3 id="the-first-login-tour-is-dismissed-by-default">The first-login tour is dismissed by default</h3>
+<p><code>DuskSupport::makeTenantUser()</code> / <code>makeSuperAdmin()</code> set <code>onboarding_completed_at</code>, so the guided tour does not open on top of the page in the ~40 browser tests that are not about onboarding. Its overlay is <code>fixed inset-0 z-[100]</code>, and a test that ignores it fails as <code>ElementClickInterceptedException</code> or a 20-second wait for an element that IS rendered — neither of which reads as &quot;the tour is open&quot;.</p>
+<p><code>tests/Browser/Onboarding</code> opts IN by passing <code>['onboarding_completed_at' =&gt; null]</code>.</p>
+<h3 id="guest-routes-need-httpasguest-not-httpas">Guest routes need <code>httpAsGuest()</code>, not <code>httpAs()</code></h3>
+<p><code>httpAs()</code> calls <code>actingAs()</code>. That is correct for an authenticated route and <strong>wrong</strong> for one behind <code>guest</code> — the request is redirected before the controller runs, so a registration test sees a 302 with no validation errors and no created row, which looks like &quot;registration is broken&quot;.</p>
+<pre class="code"><code class="language-php">$this-&gt;httpAsGuest()-&gt;post('/register', [...])-&gt;assertSessionHasErrors('invite_code');</code></pre>
+<h3 id="a-tenant-switch-must-happen-in-the-browser-session">A tenant switch must happen IN the browser session</h3>
+<p>The switch route is <strong>PATCH-only</strong> and session-scoped. Switching via <code>httpAs()</code> mutates the test client's session; the browser then renders the GLOBAL view and the impersonation banner correctly does not appear. Drive it through the UI:</p>
+<pre class="code"><code class="language-php">$browser-&gt;loginAs($ssa)-&gt;visit('/settings/institutions');
+$this-&gt;dismissOnboarding($browser);
+$browser-&gt;press('Access Dashboard')-&gt;waitForText('Now viewing &quot;...&quot;.', 20);</code></pre>
 <hr>
 <h2 id="9-files-current-layout">9. Files (current layout)</h2>
 <pre class="code"><code>tests/

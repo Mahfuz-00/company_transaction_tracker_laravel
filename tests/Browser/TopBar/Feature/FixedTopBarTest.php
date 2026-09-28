@@ -109,6 +109,12 @@ class FixedTopBarTest extends DuskTestCase
         $this->step('InstituteAdmin', 'TopBar', 'right-hand controls are present', __LINE__);
 
         $this->browse(function (Browser $browser) use ($admin) {
+            /*
+             * No onboarding dismissal is needed here: the shared fixture helpers mark
+             * accounts as already-onboarded by default (see DuskSupport::makeTenantUser),
+             * so the guided tour does not cover the page. Only tests/Browser/Onboarding
+             * opts in to the tour.
+             */
             $browser->loginAs($admin)
                 ->visit('/dashboard')
                 ->waitFor('[data-testid="fixed-top-bar"]', 20)

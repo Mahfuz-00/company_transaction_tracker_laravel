@@ -86,13 +86,44 @@ class ImpersonationScopeTest extends DuskTestCase
         ]);
         $target = $this->makeInstitution(['name' => 'Target Workspace']);
 
-        $this->httpAs($ssa)->patch('/settings/institutions/'.$target->slug.'/switch');
-
         $this->step('SoftwareSuperAdmin', 'Impersonation', 'open the profile inside the switch', __LINE__);
 
-        $this->browse(function (Browser $browser) use ($ssa) {
+        /*
+         * THE SWITCH MUST HAPPEN INSIDE THE BROWSER SESSION.
+         *
+         * The tenant switch is stored in the SESSION. Performing it through
+         * `httpAs($ssa)` mutates a DIFFERENT session (the test client's), and the
+         * subsequent `loginAs()` opens a fresh browser session that never received
+         * it - so the browser renders the GLOBAL view and the impersonation notice
+         * correctly does not appear. The test then times out waiting for a notice
+         * that should not be there.
+         *
+         * Visiting the switch URL as the browser (a real navigation, exactly what a
+         * user does when they click "Access Dashboard") puts the browser's own
+         * session into the switched state.
+         */
+        $this->browse(function (Browser $browser) use ($ssa, $target) {
             $browser->loginAs($ssa)
-                ->visit('/profile')
+                ->visit('/settings/institutions');
+
+            /*
+             * PERFORM THE SWITCH WITH A REAL PATCH FROM THE BROWSER.
+             *
+             * The route is PATCH-only (`settings.institutions.switch`), so a GET
+             * `visit()` cannot trigger it - the page simply renders the directory and
+             * the session is never switched. The browser would then show the GLOBAL
+             * view, where the impersonation notice correctly does not appear, and the
+             * test would time out waiting for a notice that should not be there.
+             *
+             * `visit()` cannot issue a PATCH, so the switch is driven the way the UI
+             * drives it: open the registry, click the row's "Access Dashboard" action.
+             */
+            $this->dismissOnboarding($browser);
+
+            $browser->press('Access Dashboard')
+                ->waitForText('Now viewing "'.$target->name.'".', 20);
+
+            $browser->visit('/profile')
                 ->waitFor('[data-testid="profile-context-notice"]', 20)
                 // The guard notice is shown...
                 ->assertVisible('[data-testid="profile-context-notice"]')
@@ -111,13 +142,20 @@ class ImpersonationScopeTest extends DuskTestCase
         // A real admin inside the target workspace, so the directory is populated.
         $this->makeInstitutionAdmin($target, ['email' => 'target-admin@workspace.test']);
 
-        $this->httpAs($ssa)->patch('/settings/institutions/'.$target->slug.'/switch');
-
         $this->step('SoftwareSuperAdmin', 'Impersonation', 'open the user manager inside the switch', __LINE__);
 
-        $this->browse(function (Browser $browser) use ($ssa) {
+        // The switch happens IN THE BROWSER SESSION, via the UI action (the route
+        // is PATCH-only, so a GET visit() cannot trigger it).
+        $this->browse(function (Browser $browser) use ($ssa, $target) {
             $browser->loginAs($ssa)
-                ->visit('/settings/users')
+                ->visit('/settings/institutions');
+
+            $this->dismissOnboarding($browser);
+
+            $browser->press('Access Dashboard')
+                ->waitForText('Now viewing "'.$target->name.'".', 20);
+
+            $browser->visit('/settings/users')
                 ->waitFor('[data-testid="management-context-banner"]', 20)
                 ->assertVisible('[data-testid="management-context-banner"]')
                 ->assertSee('Managed Workspace');
