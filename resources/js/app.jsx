@@ -8,6 +8,7 @@ import GlobalLoadingIndicator from '@/Components/GlobalLoadingIndicator';
 import { FeedbackProvider } from '@/Components/Feedback/FeedbackProvider';
 import OnboardingProvider from '@/Components/Onboarding/OnboardingProvider';
 import { applyThemeTokens, resolveInitialTheme } from '@/Components/ThemeProvider';
+import { LocaleProvider } from '@/i18n/LocaleProvider';
 
 const appName = import.meta.env.VITE_APP_NAME || 'NomNomytics';
 
@@ -48,18 +49,50 @@ createInertiaApp({
 
         const root = createRoot(el);
 
+        /*
+         * The shared `locale` prop is read ONCE here and passed explicitly to
+         * every LocaleProvider instance.
+         *
+         * LocaleProvider deliberately does NOT call Inertia's usePage(): it also
+         * has to wrap components that render BESIDE <App>, outside Inertia's
+         * context, and calling usePage() there threw
+         * "usePage must be used within the Inertia component" - crashing the whole
+         * tree and leaving a blank page on every route.
+         */
+        const locale = props?.initialPage?.props?.locale;
+
+        /*
+         * The onboarding payload is read the same way, and for the same reason.
+         *
+         * OnboardingProvider renders as a SIBLING of <App>, so it is outside
+         * Inertia's context and cannot call usePage(). Passing the payload down as
+         * a prop keeps it a plain React component.
+         *
+         * NOTE: this is read from `initialPage`, so the tour is evaluated on the
+         * FIRST page of the session. That is exactly right - the server decides
+         * `show` from `onboarding_completed_at`, and the modal is dismissible per
+         * session.
+         */
+        const onboarding = props?.initialPage?.props?.onboarding;
+
         root.render(
-            // FeedbackProvider wraps the whole app (not just a layout) so flash
-            // messages and confirmations work identically on every screen,
-            // including the guest pages.
+            /*
+             * FeedbackProvider wraps the whole app (not just a layout) so flash
+             * messages and confirmations work identically on every screen,
+             * including the guest pages.
+             */
             <FeedbackProvider>
-                <App {...props} />
-                {/* Role-specific first-time onboarding. Mounted globally so the
-                    guide appears on whichever dashboard the user first lands on,
-                    without every page needing to render it. */}
-                <OnboardingProvider />
-                {/* One central spinner for every async request. */}
-                <GlobalLoadingIndicator />
+                <LocaleProvider locale={locale}>
+                    <App {...props} />
+
+                    {/* Role-specific first-time onboarding. Mounted globally so the
+                        guide appears on whichever dashboard the user first lands on,
+                        without every page needing to render it. */}
+                    <OnboardingProvider onboarding={onboarding} />
+
+                    {/* One central spinner for every async request. */}
+                    <GlobalLoadingIndicator />
+                </LocaleProvider>
             </FeedbackProvider>
         );
     },

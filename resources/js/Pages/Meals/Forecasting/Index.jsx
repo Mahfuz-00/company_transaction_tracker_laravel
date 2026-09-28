@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageHint, InfoHint } from '@/Components/Help/HelpHint';
 import Field from '@/Components/UI/Field';
 import { Spinner } from '@/Components/UI/Loading';
+import useMoney from '@/Utils/useMoney';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 
 /**
@@ -18,8 +19,9 @@ import { Head, router, useForm, usePage } from '@inertiajs/react';
  *   - `benchmark` : a country-level fallback, clearly labelled as such, used when
  *                   the institution has under the minimum months of history.
  */
-export default function Index({ forecast = {}, tomorrow = {}, basis = {}, days = 7, benchmarks = [], metricOptions = [] }) {
+export default function Index({ forecast = {}, tomorrow = {}, basis = {}, days = 7, benchmarks = [], metricOptions = [], projection = {} }) {
     const { flash } = usePage().props;
+    const money = useMoney();
 
     const [showBenchmarkForm, setShowBenchmarkForm] = useState(false);
 
@@ -121,6 +123,104 @@ export default function Index({ forecast = {}, tomorrow = {}, basis = {}, days =
                     <Metric label="Cost per meal" value={tomorrow.cost_per_meal ?? 0} testid="forecast-cost" />
                     <Metric label="Expected expense" value={tomorrow.expense ?? 0} testid="forecast-expense" tone="text-rose-600" />
                 </div>
+
+                {/*
+                 * ---- The MONTHLY MONEY PROJECTION ----
+                 *
+                 * This is the "3-month predictive forecast" migrated off the
+                 * Analytics pages. It is deliberately rendered HERE and nowhere
+                 * else, so there is one forecasting surface rather than two that
+                 * can disagree about the same month.
+                 *
+                 * Every figure is labelled with its basis, because a
+                 * benchmark-driven month deserves less trust than a data-driven
+                 * one and the user is entitled to tell them apart.
+                 */}
+                {projection?.months?.length > 0 && (
+                    <div
+                        data-testid="monthly-projection"
+                        className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs"
+                    >
+                        <div className="flex flex-col gap-2 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">Monthly Money Projection</h3>
+                                <p className="mt-0.5 text-xs text-slate-500">{projection.assumptions?.method}</p>
+                            </div>
+
+                            <span
+                                data-testid="projection-basis"
+                                className={`inline-flex flex-shrink-0 items-center rounded-full px-3 py-1 text-[11px] font-bold ${
+                                    projection.basis === 'benchmark'
+                                        ? 'bg-amber-50 text-amber-700'
+                                        : 'bg-emerald-50 text-emerald-700'
+                                }`}
+                            >
+                                {projection.basis === 'benchmark'
+                                    ? `${projection.assumptions?.country_code || ''} benchmark`
+                                    : 'Your own history'}
+                            </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full min-w-[36rem] border-collapse text-left">
+                                <thead>
+                                    <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                        <th className="px-5 py-3">Month</th>
+                                        <th className="px-5 py-3 text-right">Meals</th>
+                                        <th className="px-5 py-3 text-right">Cost</th>
+                                        <th className="px-5 py-3 text-right">Per-Meal Rate</th>
+                                        <th className="px-5 py-3 text-right">Subsidy Needed</th>
+                                        <th className="px-5 py-3 text-right">Members Fund</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody className="divide-y divide-slate-100 text-sm">
+                                    {projection.months.map((row) => (
+                                        <tr key={row.month} data-testid="projection-row" className="transition-colors hover:bg-slate-50/60">
+                                            <td className="px-5 py-3 font-semibold text-slate-700">
+                                                {row.label}
+                                                {row.basis === 'benchmark' && (
+                                                    <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-700">
+                                                        benchmark
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-3 text-right text-slate-600">{row.projected_meals}</td>
+                                            <td className="px-5 py-3 text-right text-slate-600">{money(row.projected_cost, false)}</td>
+                                            <td className="px-5 py-3 text-right text-slate-600">{money(row.projected_rate, false)}</td>
+                                            <td className="px-5 py-3 text-right font-bold text-sky-600">{money(row.subsidy_required, false)}</td>
+                                            <td className="px-5 py-3 text-right text-slate-600">{money(row.member_funded, false)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+
+                                <tfoot className="border-t border-slate-200 bg-slate-50/80 text-sm font-bold text-slate-700">
+                                    <tr>
+                                        <td className="px-5 py-3">Total</td>
+                                        <td className="px-5 py-3 text-right">{projection.totals?.projected_meals ?? 0}</td>
+                                        <td className="px-5 py-3 text-right">{money(projection.totals?.projected_cost ?? 0, false)}</td>
+                                        <td className="px-5 py-3 text-right text-slate-400">—</td>
+                                        <td className="px-5 py-3 text-right text-sky-700">{money(projection.totals?.subsidy_required ?? 0, false)}</td>
+                                        <td className="px-5 py-3 text-right">{money(projection.totals?.member_funded ?? 0, false)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+                            <p className="text-[11px] leading-relaxed text-slate-500">
+                                Meals and cost are projected by the same retrieval engine as tomorrow's
+                                forecast. The subsidy/member split applies this institution's own{' '}
+                                <strong className="font-semibold text-slate-700">
+                                    {projection.assumptions?.target_member_ratio}%
+                                    /{projection.assumptions?.target_subsidy_ratio}%
+                                </strong>{' '}
+                                target ratio — it is a business rule, not a prediction. A month with no
+                                projected meals costs 0; nothing is substituted.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     {/* ---- Confidence + notes ---- */}

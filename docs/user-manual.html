@@ -158,6 +158,27 @@ footer.foot { border-top:1px solid var(--border); margin-top:3rem; padding-top:1
 <ul><li>You only ever see <strong>your own</strong> notifications.</li><li><strong>Institution Admins</strong> (and a Super Admin working inside a workspace) get an</li></ul>
 <p>  extra <strong>Post an announcement</strong> box, which broadcasts an in-app message to   everyone in that institution. (Meal Managers and Members can read announcements   but not post them.)</p>
 <p>Typical notifications include: a deposit was recorded for you, your claim was approved or rejected, a member expense claim was approved, and institution announcements.</p>
+<h3 id="36-reporting-a-bug">3.6 Reporting a bug</h3>
+<p>Found something broken? Every role <strong>except the Software Super Admin</strong> has a <strong>Report a bug</strong> button pinned in the sidebar footer, always one click away.</p>
+<p>It opens a short form:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><strong>What went wrong?</strong></td><td>A one-line summary (required)</td></tr>
+<tr><td><strong>Describe the problem</strong></td><td>What you expected vs what happened (required)</td></tr>
+<tr><td><strong>Steps to reproduce</strong></td><td>Optional, but the single most useful thing you can add</td></tr>
+<tr><td><strong>How bad is it?</strong></td><td>Low / Normal / High / Critical</td></tr>
+<tr><td><strong>Screenshot</strong></td><td>Optional image, up to 5 MB — for a layout problem this saves a round-trip</td></tr>
+</tbody>
+</table>
+</div>
+<p>The exact page you were on is captured <strong>automatically</strong>, so you never have to describe where you were.</p>
+<p>On submit:</p>
+<ul><li>the report is filed instantly and every <strong>Software Super Admin</strong> is notified,</li><li>they see it in the <strong>Bug Reports</strong> inbox with your name, role, institution, the</li></ul>
+<p>  page URL, your browser and the screenshot,</p>
+<ul><li>you get a confirmation with a reference number (<code>ref #123</code>).</li></ul>
+<blockquote><p><strong>Why the Super Admin cannot file one.</strong> They are the <em>recipient</em> of bug reports. Reports go <strong>up</strong> the chain — never sideways between institutions, so one workspace never sees another's defect.</p></blockquote>
 <hr>
 <h2 id="4-software-super-admin-guide">4. Software Super Admin guide</h2>
 <p>The Software Super Admin (SSA) is a <strong>platform operator</strong>, not a tenant user. Their navigation is separate from any workspace.</p>
@@ -166,7 +187,7 @@ footer.foot { border-top:1px solid var(--border); margin-top:3rem; padding-top:1
 <table>
 <thead><tr><th>Section</th><th>Items</th></tr></thead>
 <tbody>
-<tr><td><strong>Platform Overview</strong></td><td>Business Dashboard · SaaS Analytics · Institution Directory · Trial &amp; Subscriptions · Pricing &amp; Plans · Security &amp; Audit · Landing Enquiries · Broadcasts</td></tr>
+<tr><td><strong>Platform Overview</strong></td><td>Business Dashboard · SaaS Analytics · Institution Directory · Trial &amp; Subscriptions · Pricing &amp; Plans · Security &amp; Audit · Landing Enquiries · Broadcasts · Bug Reports</td></tr>
 <tr><td><strong>Account</strong></td><td>Profile Manager · User Manager · Theme Customizer</td></tr>
 <tr><td><strong>Platform Settings</strong></td><td>Role Manager · Global Audit Log · Email Log · Pricing &amp; Plans</td></tr>
 </tbody>
@@ -265,6 +286,33 @@ footer.foot { border-top:1px solid var(--border); margin-top:3rem; padding-top:1
 <p>   Warning · Urgent / Outage.</p>
 <ol><li>Send. Every recipient gets an in-app notification, and a <strong>history</strong> row records</li></ol>
 <p>   exactly what was sent, to whom, and when.</p>
+<h3 id="481-bug-reports-the-defect-triage-inbox">4.8.1 Bug Reports (the defect triage inbox)</h3>
+<p><strong>Platform Overview → Bug Reports.</strong> Every defect filed by a tenant user anywhere on the platform, in <strong>one queue</strong>. This is the only screen that deliberately shows content from multiple institutions at once, which is why it is SSA-only.</p>
+<p><strong>You are the recipient, not a filer.</strong> Members, Meal Managers and Institution Admins have the <strong>Report a bug</strong> button; the SSA does not — a report from the person who owns the backlog would be circular.</p>
+<p>The queue is <strong>ordered to be worked through</strong>: critical first, then high, normal, low, and oldest-first within each band. A report that has been waiting longest is the one most likely to have already cost someone a day.</p>
+<p>Each row expands to show:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Field</th><th>Why it is there</th></tr></thead>
+<tbody>
+<tr><td><strong>Description</strong> + <strong>steps to reproduce</strong></td><td>What the user saw, in their words</td></tr>
+<tr><td><strong>Page URL</strong></td><td>The exact screen the defect occurred on</td></tr>
+<tr><td><strong>Reporter</strong> (name, email, role, institution)</td><td>Who to follow up with</td></tr>
+<tr><td><strong>Browser</strong> (user agent)</td><td>Identifies a layout-only or hydration bug</td></tr>
+<tr><td><strong>Screenshot</strong></td><td>The attached image, clickable to open full size</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Actions:</strong></p>
+<ul><li><strong>Acknowledge</strong> — &quot;seen, working on it&quot;. The report stays in the queue; this is</li></ul>
+<p>  explicitly <em>not</em> a resolution, so it never claims one.</p>
+<ul><li><strong>Resolve…</strong> — closes it out with a <strong>resolution note</strong>, and stamps who resolved</li></ul>
+<p>  it and when.</p>
+<ul><li><strong>Dismiss</strong> — for a report that is not actionable (a duplicate, or working as</li></ul>
+<p>  intended).</p>
+<ul><li><strong>Reopen</strong> — returns it to the queue and <strong>clears the stale resolution</strong>, so an</li></ul>
+<p>  old note never misrepresents the current state.</p>
+<blockquote><p>Reports are <strong>never deleted</strong>, only status-changed. A cluster of the same defect in one institution is itself a useful signal.</p></blockquote>
 <h3 id="49-monitoring--analytics">4.9 Monitoring &amp; analytics</h3>
 <p>The <strong>Business Dashboard</strong> (4.1) and <strong>SaaS Analytics</strong> (4.2) together are the platform's monitoring and analytics suite. Everything here is intentionally cross-tenant — that is the SSA's job — and nowhere else in the app lifts tenant isolation.</p>
 <h3 id="410-platform-settings-user-manager-role-manager-email-log">4.10 Platform settings (User Manager, Role Manager, Email Log)</h3>
@@ -577,6 +625,7 @@ footer.foot { border-top:1px solid var(--border); margin-top:3rem; padding-top:1
 <tr><td><strong>Platform:</strong> define pricing tiers</td><td>Platform Overview → Pricing &amp; Plans</td><td>Software Super Admin</td></tr>
 <tr><td><strong>Platform:</strong> track trials</td><td>Platform Overview → Trial &amp; Subscriptions</td><td>Software Super Admin</td></tr>
 <tr><td><strong>Platform:</strong> message everyone</td><td>Platform Overview → Broadcasts</td><td>Software Super Admin</td></tr>
+<tr><td><strong>Platform:</strong> triage bug reports</td><td>Platform Overview → Bug Reports</td><td>Software Super Admin</td></tr>
 <tr><td><strong>Platform:</strong> audit the whole platform</td><td>Platform Overview → Security &amp; Audit</td><td>Software Super Admin</td></tr>
 <tr><td><strong>Platform:</strong> manage role definitions</td><td>Platform Settings → Role Manager</td><td>Software Super Admin</td></tr>
 <tr><td><strong>Platform:</strong> list users across institutions</td><td>Account → User Manager</td><td>Software Super Admin</td></tr>

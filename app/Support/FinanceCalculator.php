@@ -34,9 +34,6 @@ use Illuminate\Support\Facades\DB;
  */
 class FinanceCalculator
 {
-    /** How many trailing months the forecasting engine learns from. */
-    public const FORECAST_LOOKBACK_MONTHS = 3;
-
     public function __construct(
         protected ?Institution $institution = null,
     ) {
@@ -350,181 +347,39 @@ class FinanceCalculator
     }
 
     /* ------------------------------------------------------------------ *
-     * Forecasting
-     * ------------------------------------------------------------------ */
-
-    /**
-     * A three-month predictive forecast.
+     * Forecasting - MOVED
+     * ------------------------------------------------------------------ *
      *
-     * Method (deliberately simple and explainable, not a black box):
+     * `forecast()` (a recency-weighted linear ramp over the institution's own
+     * trailing months) USED TO LIVE HERE, and powered the "3-Month Predictive
+     * Forecast" panel on the Analytics pages.
      *
-     *   1. Pull the last N months of meals, expense and subsidy figures.
-     *   2. Weight recent months more heavily (a linear ramp), because a mess
-     *      that is growing should be projected on its recent trend.
-     *   3. Apply the growth rate to project next month's meals and cost.
-     *   4. Work out the subsidy funding required to hold the institution's
-     *      target ratio (the "80/20 rule": members carry 80%, subsidy 20%).
+     * It has been REMOVED and MIGRATED to the AI Forecasting module:
      *
-     * @return array{history: array, forecast: array, assumptions: array}
+     *     App\Support\Forecaster::monthlyProjection()
+     *
+     * WHY IT MOVED (and was not merely duplicated)
+     * ---------------------------------------------
+     * The old method was rigid in exactly the ways that matter for forecasting:
+     *
+     *   - It ignored everything except the institution's own last few months, so a
+     *     brand-new workspaces got a confident-looking number derived from one or
+     *     two data points.
+     *   - It could not learn from any other institution, so a Bangladeshi dormitory
+     *     and a US corporate canteen were forecast the same way.
+     *   - It had no notion of weekday patterns, seasonality or the academic
+     *     calendar.
+     *   - It reported no BASIS, so the UI could not distinguish a data-driven
+     *     estimate from a guess.
+     *
+     * The replacement retrieves from vector embeddings of similar past days across
+     * the platform (RAG) and, when an institution has under three months of
+     * history, falls back to explicit COUNTRY BENCHMARKS - reporting which basis
+     * was used so the UI can label the two differently.
+     *
+     * Keeping a second implementation here is how the web pages and the mobile API
+     * end up showing different numbers for the same month, so this class
+     * deliberately no longer knows how to forecast at all. Its job is arithmetic on
+     * WHAT HAPPENED.
      */
-    public function forecast(int $lookback = self::FORECAST_LOOKBACK_MONTHS): array
-    {
-        $setting = MealRateSetting::current();
-        // Share the institution expects subsidy to cover, as a fraction.
-        $targetRatio = (float) ($setting->target_subsidy_ratio ?? 20) / 100;
-        $memberRatio = max(0, 1 - $targetRatio);
-
-        // ---- 1. History -------------------------------------------------
-        $history = [];
-        $cursor = now()->startOfMonth();
-
-        for ($i = $lookback - 1; $i >= 0; $i--) {
-            $month = $cursor->copy()->subMonths($i)->format('Y-m');
-            $snapshot = $this->monthSnapshot($month);
-
-            $history[] = [
-                'month' => $month,
-                'label' => $snapshot['label'],
-                'meals' => $snapshot['meals'],
-                'expenses' => $snapshot['expenses'],
-                'subsidies' => $snapshot['subsidies'],
-                'deposits' => $snapshot['deposits'],
-                'per_meal_rate' => $snapshot['per_meal_rate'],
-                'meal_cost' => $snapshot['meal_cost'],
-                'subsidy_coverage_pct' => $snapshot['subsidy_coverage_pct'],
-            ];
-        }
-
-        // ---- 2. Trend ---------------------------------------------------
-        $meals = array_column($history, 'meals');
-        $expenses = array_column($history, 'expenses');
-
-        $weightedMeals = $this->weightedAverage($meals);
-        $weightedExpense = $this->weightedAverage($expenses);
-
-        // Growth from first to last data point, clamped so a single quiet
-        // month cannot produce a wild projection.
-        $mealGrowth = $this->growthRate($meals, 0.35);
-        $expenseGrowth = $this->growthRate(array_map('floatval', $expenses), 0.35);
-
-        // ---- 3. Project forward ----------------------------------------
-        $projectedMeals = (int) round($weightedMeals * (1 + $mealGrowth));
-        $projectedExpense = round($weightedExpense * (1 + $expenseGrowth), 2);
-
-        // Guard against dividing by zero on a brand-new institution.
-        $projectedRate = $projectedMeals > 0
-            ? round($projectedExpense / $projectedMeals, 4)
-            : $this->perMealRate(now()->format('Y-m'));
-
-        $projectedCost = round($projectedMeals * $projectedRate, 2);
-
-        // ---- 4. Subsidy funding required to hold the ratio --------------
-        // The institution wants subsidy to cover `targetRatio` of the cost.
-        $subsidyRequired = round($projectedCost * $targetRatio, 2);
-        $memberFunded = round($projectedCost - $subsidyRequired, 2);
-
-        $nextMonth = now()->addMonth()->startOfMonth();
-
-        // A three-month horizon so the UI can plot a forward trend line.
-        $horizon = [];
-        for ($m = 1; $m <= 3; $m++) {
-            $factor = 1 + ($mealGrowth * $m);
-            $expenseFactor = 1 + ($expenseGrowth * $m);
-
-            $monthMeals = (int) round($weightedMeals * $factor);
-            $monthExpense = round($weightedExpense * $expenseFactor, 2);
-            $monthRate = $monthMeals > 0 ? round($monthExpense / $monthMeals, 4) : $projectedRate;
-            $monthCost = round($monthMeals * $monthRate, 2);
-
-            $horizon[] = [
-                'month' => $nextMonth->copy()->addMonths($m - 1)->format('Y-m'),
-                'label' => $nextMonth->copy()->addMonths($m - 1)->format('F Y'),
-                'projected_meals' => $monthMeals,
-                'projected_expenses' => $monthExpense,
-                'projected_rate' => $monthRate,
-                'projected_cost' => $monthCost,
-                'subsidy_required' => round($monthCost * $targetRatio, 2),
-                'member_funded' => round($monthCost * $memberRatio, 2),
-            ];
-        }
-
-        return [
-            'history' => $history,
-            'forecast' => [
-                'next_month' => $nextMonth->format('F Y'),
-                'projected_meals' => $projectedMeals,
-                'projected_expenses' => $projectedExpense,
-                'projected_rate' => $projectedRate,
-                'projected_cost' => $projectedCost,
-                'subsidy_required' => $subsidyRequired,
-                'member_funded' => $memberFunded,
-                'meal_growth_pct' => round($mealGrowth * 100, 2),
-                'expense_growth_pct' => round($expenseGrowth * 100, 2),
-            ],
-            'horizon' => $horizon,
-            'assumptions' => [
-                'lookback_months' => $lookback,
-                'method' => 'Recency-weighted average with a clamped growth rate.',
-                'target_subsidy_ratio' => round($targetRatio * 100, 2),
-                'target_member_ratio' => round($memberRatio * 100, 2),
-                'has_history' => $weightedMeals > 0,
-            ],
-        ];
-    }
-
-    /* ------------------------------------------------------------------ *
-     * Math helpers
-     * ------------------------------------------------------------------ */
-
-    /**
-     * Recency-weighted average: the newest value counts most, the oldest
-     * least, on a linear ramp (1, 2, 3, ... for a three-point series).
-     */
-    protected function weightedAverage(array $values): float
-    {
-        $values = array_values(array_map('floatval', $values));
-        $n = count($values);
-
-        if ($n === 0) {
-            return 0.0;
-        }
-
-        $weightedSum = 0.0;
-        $weightTotal = 0.0;
-
-        foreach ($values as $index => $value) {
-            $weight = $index + 1; // oldest = 1, newest = n
-            $weightedSum += $value * $weight;
-            $weightTotal += $weight;
-        }
-
-        return $weightTotal > 0 ? $weightedSum / $weightTotal : 0.0;
-    }
-
-    /**
-     * Growth rate between the first and last value, clamped to +/- $clamp so
-     * one unusual month cannot blow the projection up.
-     */
-    protected function growthRate(array $values, float $clamp = 0.35): float
-    {
-        $values = array_values(array_map('floatval', $values));
-        $n = count($values);
-
-        if ($n < 2) {
-            return 0.0;
-        }
-
-        $first = $values[0];
-        $last = $values[$n - 1];
-
-        // A zero baseline gives no meaningful percentage; report flat.
-        if ($first <= 0) {
-            return 0.0;
-        }
-
-        // Spread the change across the number of steps.
-        $rate = (($last - $first) / $first) / ($n - 1);
-
-        return max(-$clamp, min($clamp, $rate));
-    }
 }

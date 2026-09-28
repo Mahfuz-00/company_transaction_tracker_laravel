@@ -272,9 +272,21 @@ class Notifier
     /**
      * Write one notification to each user in the list, best-effort, excluding
      * the actor. Shared by the tenant announcement and the platform broadcast.
+     *
+     * `$url` lets a caller deep-link to the screen the notification is ABOUT
+     * (e.g. the SSA bug-report inbox) instead of the generic notifications page.
+     * It is a PATH, resolved against the app root so a notification created on one
+     * host still routes correctly on another.
      */
-    public static function push(Collection $recipients, string $title, string $body, ?User $actor = null, string $kind = 'announcement'): int
-    {
+    public static function push(
+        Collection $recipients,
+        string $title,
+        string $body,
+        ?User $actor = null,
+        string $kind = 'announcement',
+        ?string $url = null,
+        ?float $amount = null,
+    ): int {
         $count = 0;
 
         foreach ($recipients as $user) {
@@ -284,7 +296,8 @@ class Notifier
 
             try {
                 $user->notify(new AppNotification($kind, $title, $body, [
-                    'url' => route('notifications.index', [], false),
+                    'url' => $url ?? route('notifications.index', [], false),
+                    'amount' => $amount,
                 ]));
                 $count++;
             } catch (\Throwable $e) {
@@ -293,5 +306,51 @@ class Notifier
         }
 
         return $count;
+    }
+
+    /**
+     * Tell every Software Super Admin that a user filed a bug report.
+     *
+     * THE RECIPIENT RULE IS THE POINT: only platform owners. An Institution Admin
+     * must NOT be notified about another workspace's defect, and a tenant user has
+     * no visibility into the platform's defect backlog at all. This is the one
+     * notification in the platform that deliberately crosses tenant boundaries,
+     * which is exactly why it is restricted to the global role.
+     *
+     * @return int the number of owners notified
+     */
+    public static function bugReported(\App\Models\BugReport $report): int
+    {
+        $owners = User::query()
+            ->where('status', 'active')
+            ->whereHas('roles', fn ($q) => $q->where('name', 'Software Super Admin'))
+            ->get();
+
+        if ($owners->isEmpty()) {
+            return 0;
+        }
+
+        // The most urgent reports say so in the title, so the bell alone conveys
+        // the priority without opening the inbox.
+        $prefix = $report->severity === 'critical' ? 'CRITICAL bug report' : 'New bug report';
+
+        $body = sprintf(
+            '%s filed a %s severity report on %s: %s',
+            $report->reporter_name ?? 'A user',
+            $report->severity,
+            $report->page_url,
+            $report->title,
+        );
+
+        return static::push(
+            $owners,
+            $prefix . ': ' . $report->title,
+            $body,
+            null,
+            'bug_report',
+            // Deep-link straight to the SSA inbox rather than the bell's default
+            // page - the owner's next action is to triage it.
+            route('ssa.bug-reports.index', [], false),
+        );
     }
 }

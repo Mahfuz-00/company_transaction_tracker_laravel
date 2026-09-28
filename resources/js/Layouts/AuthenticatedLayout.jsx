@@ -52,7 +52,23 @@ export default function AuthenticatedLayout({ header, children }) {
         <ThemeProvider>
         {/* The shell itself reads the theme tokens, so flipping dark mode recolours
             the page background and default text instantly. */}
-        <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-color)', color: 'var(--text-primary)' }}>
+        <div
+            className="min-h-screen"
+            style={{
+                backgroundColor: 'var(--bg-color)',
+                color: 'var(--text-primary)',
+                /*
+                 * THE SINGLE SOURCE OF TRUTH FOR THE RAIL WIDTH.
+                 *
+                 * Both the docked <Sidebar> and the fixed <TopBar> read this, so
+                 * the bar's left offset can never drift from where the sidebar
+                 * actually ends. Change this one value and both follow.
+                 *
+                 * 18rem = 288px, matching the sidebar's `w-72`.
+                 */
+                '--sidebar-width': '18rem',
+            }}
+        >
             <div className="flex min-h-screen">
                 {/* Docked sidebar (desktop) */}
                 <div className="hidden lg:block lg:flex-shrink-0">
@@ -76,15 +92,26 @@ export default function AuthenticatedLayout({ header, children }) {
 
                 {/* Main column — owns the top bar and the page content. */}
                 <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
-                    {/* FIXED TOP BAR — sticky WITHIN this column, so it spans the
-                        body's width only and never covers the sidebar.
+                    {/* FIXED TOP BAR — `position: fixed`, but offset past the docked
+                        sidebar via `--sidebar-width`, so it pins to the viewport
+                        without ever painting over the rail.
                         Left: the Section > Module > Sub-Module > Title hierarchy.
                         Right: theme, notifications, profile menu. */}
                     <TopBar onMenuClick={() => setDrawerOpen((open) => !open)} />
 
-                    {/* The ONLY scroll container for page content. The top bar is
-                        sticky above it and the sidebar scrolls independently, so
-                        the three never fight for scroll position. */}
+                    {/* SPACER — REQUIRED BY `fixed`.
+
+                        A fixed element is removed from normal flow, so it occupies
+                        no space and the content would render UNDERNEATH it. This
+                        spacer restores exactly the bar's height (h-14 = its
+                        py-2.5 + content), so nothing is ever hidden beneath the
+                        bar. It is `lg:` only because on mobile the rail is a drawer
+                        and the bar still overlays the top of the column. */}
+                    <div className="h-14 flex-shrink-0" aria-hidden="true" />
+
+                    {/* The ONLY scroll container for page content. The sidebar
+                        scrolls independently, so the two never fight for scroll
+                        position. */}
                     <div className="min-h-0 flex-1 overflow-y-auto">
                         {/* Fluid content column: capped for readability, widening on
                             large monitors and TV-sized displays (2xl / 3xl). */}

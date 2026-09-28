@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import NotificationBell from '@/Components/NotificationBell';
 import ProfileDropdown from '@/Components/ProfileDropdown';
+import LanguageSwitcher from '@/Components/LanguageSwitcher';
 import ThemeToggle from '@/Components/ThemeToggle';
 import { resolvePageMeta } from '@/Utils/pageMeta';
 
@@ -82,22 +83,43 @@ export default function TopBar({ title: titleOverride = null, onMenuClick = null
         <div
             data-testid="fixed-top-bar"
             /*
-             * STICKY, WITHIN THE BODY COLUMN ONLY.
+             * FIXED — TO THE VIEWPORT, BUT CONFINED TO THE BODY COLUMN.
              *
-             * `sticky top-0` pins the bar to the top of its scrolling container
-             * (the body column) — NOT to the viewport. It therefore spans exactly
-             * the body's width and NEVER overlaps the sidebar.
+             * Two requirements have to hold at once, and they pull in opposite
+             * directions:
              *
-             * This deliberately replaces the old `fixed inset-x-0 top-0`, which
-             * was viewport-wide and sat on top of the docked sidebar. Because the
-             * element is sticky rather than fixed it remains in normal flow, so
-             * no spacer div is needed to keep content from hiding underneath it.
+             *   1. The bar must be `position: fixed` so it can NEVER scroll out of
+             *      view, no matter how long the page is.
+             *   2. It must sit ONLY over the body, never on top of the docked
+             *      sidebar (`[Left: Sidebar] [Right: Body]`).
+             *
+             * A plain `fixed inset-x-0` satisfies (1) and BREAKS (2): it stretches
+             * the full viewport width, so it paints across the sidebar's brand
+             * header. That was the original defect.
+             *
+             * The fix is to keep `fixed` and constrain the LEFT edge to the
+             * sidebar's width. `inset-inline-start` (logical, so it follows RTL)
+             * offsets the bar past the docked rail on desktop.
+             *
+             * WHY A CSS VARIABLE FOR THE WIDTH
+             *   `--sidebar-width` is published by AuthenticatedLayout from a single
+             *   constant, so the rail and the bar can never disagree about where the
+             *   sidebar ends. Hard-coding `left-72` (18rem) here would silently
+             *   desync the moment the rail is resized.
+             *
+             * On small screens the rail is an off-canvas drawer (not docked), so the
+             * offset is 0 and the bar spans the full width as it should.
              *
              * `z-30` keeps it above page content but BELOW the mobile drawer
              * (z-40 backdrop / z-50 panel), so the drawer correctly covers it.
              */
-            className="sticky top-0 z-30 flex-shrink-0 border-b backdrop-blur-md"
-            style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border-color)' }}
+            className="fixed top-0 inset-x-0 z-30 border-b backdrop-blur-md lg:inset-x-auto lg:end-0"
+            style={{
+                backgroundColor: 'var(--surface)',
+                borderColor: 'var(--border-color)',
+                // Confine the bar to the body column on desktop (drawer on mobile).
+                insetInlineStart: 'var(--sidebar-width, 0px)',
+            }}
         >
             <div className="flex w-full items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
                 {/* Mobile-only drawer trigger */}
@@ -164,8 +186,12 @@ export default function TopBar({ title: titleOverride = null, onMenuClick = null
                     </span>
                 )}
 
-                {/* RIGHT: theme, notifications, profile */}
+                {/* RIGHT: language, theme, notifications, profile */}
                 <div className="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
+                    {/* Language sits FIRST on the right rail: it is the setting a
+                        user is most likely to change immediately and then never
+                        touch again, so it should be findable without hunting. */}
+                    <LanguageSwitcher compact />
                     <ThemeToggle />
                     <NotificationBell />
                     <ProfileDropdown />

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import Icon from '@/Components/Icon';
+import ReportBug from '@/Components/ReportBug';
 import useCan from '@/Utils/can';
 import useTerminology from '@/Utils/useTerminology';
 import usePlatformBranding from '@/Utils/usePlatformBranding';
@@ -130,6 +131,9 @@ export default function Sidebar({ user, onNavigate }) {
         () => buildVisibleNav(NAV_SECTIONS, { can, hasRole, switched }),
         [can, hasRole, switched]
     );
+
+    // The bug-report modal's open state lives here, beside its trigger.
+    const [bugOpen, setBugOpen] = useState(false);
 
     // Which collapsible groups are expanded. Default-open if the user is
     // currently inside that group, so a deep link keeps its parent visible.
@@ -340,6 +344,28 @@ export default function Sidebar({ user, onNavigate }) {
 
           {/* ---- Compact pinned profile footer ---- */}
           <div className="flex-shrink-0 border-t border-slate-100 bg-white px-2 py-2">
+              {/*
+               * REPORT BUG - every role EXCEPT the Software Super Admin.
+               *
+               * The SSA is the RECIPIENT of these reports, so offering them the
+               * button would be circular (and the server refuses it outright).
+               * For everyone else it sits here in the pinned footer, which is
+               * always visible without competing with navigation for attention.
+               */}
+              {!isSuperAdmin && (
+                  <button
+                      type="button"
+                      onClick={() => setBugOpen(true)}
+                      data-testid="report-bug-trigger"
+                      className="mb-1.5 flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-xs font-semibold text-slate-500 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                  >
+                      <svg className="h-3.5 w-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M5.07 19h13.86a2 2 0 001.74-2.99l-6.93-12a2 2 0 00-3.48 0l-6.93 12A2 2 0 005.07 19z" />
+                      </svg>
+                      Report a bug
+                  </button>
+              )}
+
               <div className="flex items-center gap-1.5 rounded-xl bg-slate-50/80 p-1.5">
                   <Link
                       href={route('profile.edit')}
@@ -381,7 +407,11 @@ export default function Sidebar({ user, onNavigate }) {
                       </svg>
                 </Link>
             </div>
-        </div>
-      </aside>
-  );
-}
+                        </div>
+
+                            {/* The bug-report modal itself. Rendered only for non-SSA users, and
+                                only when opened, so the form state is always fresh. */}
+                            {!isSuperAdmin && <ReportBug show={bugOpen} onClose={() => setBugOpen(false)} />}
+                      </aside>
+                  );
+                }

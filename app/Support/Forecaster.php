@@ -7,6 +7,7 @@ use App\Models\ForecastBenchmark;
 use App\Models\ForecastEmbedding;
 use App\Models\Institution;
 use App\Models\MealEntry;
+use App\Models\MealRateSetting;
 use App\Models\Student;
 use App\Models\Subsidy;
 use App\Models\Transaction;
@@ -449,6 +450,112 @@ class Forecaster
             'total_meals' => array_sum(array_column($forecasts, 'meals')),
             'total_expense' => round(array_sum(array_column($forecasts, 'expense')), 2),
             'basis' => $forecasts[0]['basis'] ?? 'benchmark',
+        ];
+    }
+
+    /* ------------------------------------------------------------------ *
+     * MONTHLY MONEY PROJECTION (migrated from the Analytics forecast panel)
+     * ------------------------------------------------------------------ */
+
+    /**
+     * Project the next N MONTHS of meals, cost and the subsidy/member split.
+     *
+     * MIGRATED HERE FROM THE ANALYTICS WIDGET.
+     * ----------------------------------------
+     * The standard Analytics pages used to render a "3-Month Predictive Forecast"
+     * table computed by `FinanceCalculator::forecast()` — a recency-weighted linear
+     * ramp applied to the institution's OWN trailing months, then split by the
+     * institution's target subsidy ratio (the "80/20 rule").
+     *
+     * That was rigid in exactly the way this module exists to fix: it ignored
+     * weather, the academic calendar, weekday patterns and every other institution
+     * on the platform, and it reported a confident-looking number even when the
+     * institution had one month of data. It has therefore been REMOVED from the
+     * analytics views and re-implemented HERE, on top of the retrieval engine, so
+     * there is one forecasting system rather than two that disagree.
+     *
+     * WHAT CHANGED, AND WHAT DELIBERATELY DID NOT
+     *   - The DAY-LEVEL figures (meals, cost per meal, expense) now come from the
+     *     RAG retrieval / country-benchmark path — the same numbers the calendar
+     *     forecast uses, so the two can never contradict each other.
+     *   - The SUBSIDY SPLIT arithmetic is kept as it was: it is a business rule
+     *     (the institution's own target ratio), not a prediction, so there is
+     *     nothing to learn and no reason to change it.
+     *   - `basis` is propagated on EVERY row, so the UI can label a benchmark-driven
+     *     projection differently from a data-driven one.
+     *
+     * @return array{months: array<int, array>, basis: string, assumptions: array}
+     */
+    public function monthlyProjection(int $months = 3): array
+    {
+        $setting     = MealRateSetting::current();
+        $targetRatio = (float) ($setting->target_subsidy_ratio ?? 20) / 100;
+        $memberRatio = max(0.0, 1 - $targetRatio);
+
+        $cursor = now()->startOfMonth();
+        $rows   = [];
+
+        for ($m = 1; $m <= $months; $m++) {
+            $monthStart = $cursor->copy()->addMonths($m);
+
+            // Anchor on mid-month so the day-of-week adjustment is representative
+            // of the month rather than of whatever the 1st happens to fall on.
+            $anchor = $monthStart->copy()->day(15);
+
+            $days = $this->forecastRange($monthStart->daysInMonth, $monthStart);
+
+            // `forecastRange` anchors on the month start; re-anchor the weekday
+            // factor on the mid-month day so a month is not skewed by its first day.
+            $weekdayFactor = $this->weekdayFactor($anchor) ?? 1.0;
+
+            $meals  = (int) round(($days['total_meals'] ?? 0) * $weekdayFactor);
+            $expense = round(($days['total_expense'] ?? 0) * $weekdayFactor, 2);
+
+            // A month with no predicted meals costs nothing. This is the "0 yields 0"
+            // rule: we never substitute a manual figure or a stale average.
+            $rate = $meals > 0 ? round($expense / $meals, 4) : 0.0;
+            $cost = $meals > 0 ? round($meals * $rate, 2) : 0.0;
+
+            $rows[] = [
+                'month'            => $monthStart->format('Y-m'),
+                'label'            => $monthStart->format('F Y'),
+                'projected_meals'  => $meals,
+                'projected_cost'   => $cost,
+                'projected_rate'   => $rate,
+                'subsidy_required' => round($cost * $targetRatio, 2),
+                'member_funded'    => round($cost * $memberRatio, 2),
+                // Carried per row so a benchmark-driven month is visibly different
+                // from a data-driven one, even inside the same table.
+                'basis'            => $days['basis'] ?? 'benchmark',
+            ];
+        }
+
+        $mealsTotal   = array_sum(array_column($rows, 'projected_meals'));
+        $costTotal    = round(array_sum(array_column($rows, 'projected_cost')), 2);
+        $subsidyTotal = round(array_sum(array_column($rows, 'subsidy_required')), 2);
+
+        return [
+            'months'   => $rows,
+            // The WORST basis across the horizon: if any month is benchmark-only,
+            // the headline must not claim to be data-driven.
+            'basis'    => collect($rows)->contains(fn ($r) => $r['basis'] === 'benchmark')
+                ? 'benchmark'
+                : ($rows[0]['basis'] ?? 'benchmark'),
+            'totals'   => [
+                'projected_meals'  => $mealsTotal,
+                'projected_cost'   => $costTotal,
+                'subsidy_required' => $subsidyTotal,
+                'member_funded'    => round($costTotal - $subsidyTotal, 2),
+            ],
+            'assumptions' => [
+                'target_subsidy_ratio' => round($targetRatio * 100, 2),
+                'target_member_ratio'  => round($memberRatio * 100, 2),
+                'country_code'         => $this->countryCode(),
+                'months'               => $months,
+                'method'               => 'Retrieval over similar past days (RAG), falling back to '
+                    . $this->countryCode() . ' country benchmarks when history is thin. '
+                    . 'The subsidy/member split is the institution\'s own target ratio.',
+            ],
         ];
     }
 

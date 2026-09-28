@@ -51,20 +51,29 @@ class ReportApiController extends Controller
                     'total' => $snapshot['subsidies'],
                     'coverage_pct' => $snapshot['subsidy_coverage_pct'],
                 ],
-                'forecast' => $finance->forecast(),
+                // Served by the AI Forecasting engine, NOT the retired analytics
+                // heuristic, so mobile and web present identical numbers.
+                'projection' => (new \App\Support\Forecaster())->monthlyProjection(),
             ],
         ]);
     }
 
-    /** Just the forecast - handy for a dedicated mobile screen. */
+    /**
+     * The monthly money projection.
+     *
+     * MIGRATED: this used to return `FinanceCalculator::forecast()` - the
+     * recency-weighted linear ramp that also powered the (now removed) analytics
+     * widget. It now returns the RAG/benchmark-driven projection from the AI
+     * Forecasting module, so there is ONE forecasting system across web and mobile.
+     */
     public function forecast(Request $request)
     {
-        $lookback = (int) $request->query('months', FinanceCalculator::FORECAST_LOOKBACK_MONTHS);
-        $lookback = max(2, min(12, $lookback));
+        $months = (int) $request->query('months', 3);
+        $months = max(1, min(12, $months));
 
-        $finance = new FinanceCalculator();
-
-        return response()->json(['data' => $finance->forecast($lookback)]);
+        return response()->json([
+            'data' => (new \App\Support\Forecaster())->monthlyProjection($months),
+        ]);
     }
 
     /**

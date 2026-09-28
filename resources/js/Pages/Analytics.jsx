@@ -3,7 +3,6 @@ import { Head, useForm, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import useMoney from '@/Utils/useMoney';
 import MetricCard, { pctChange } from '@/Components/Analytics/MetricCard';
-import ForecastPanel from '@/Components/Analytics/ForecastPanel';
 import SubsidyTrackingPanel from '@/Components/Analytics/SubsidyTrackingPanel';
 import {
     Chart as ChartJS,
@@ -28,7 +27,7 @@ ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, LineElement
  * PURPOSE
  * One page that answers "where did the money go, and how are meals trending?".
  * It renders a filter bar, four cash metric cards, four institution metrics, a
- * subsidy-tracking panel, a three-month forecast, and the visualisations listed
+ * subsidy-tracking panel, and the visualisations listed
  * below. Every figure flows through useMoney(), which applies the admin's global
  * abbreviation threshold (1,234 -> 1.23 K) so the whole page scales uniformly.
  *
@@ -45,7 +44,7 @@ ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, LineElement
  *  - topExpenses: the largest single outgoings (table).
  *  - grouping: 'daily' | 'monthly' - labels the meal-trend x-axis text.
  *  - month / months: the month selector's option list and selected value.
- *  - subsidyTracking / forecast: payloads passed whole into their panels.
+ *  - subsidyTracking: payload passed whole into its panel.
  *
  * CHART MAP (Chart.js via react-chartjs-2)
  *  - Meal Consumption Trend (Bar, stacked): breakfast/lunch/dinner per period,
@@ -84,7 +83,6 @@ export default function Analytics({
     months = [],
     monthSnapshot = {},
     subsidyTracking = {},
-    forecast = {},
 }) {
     // money() routes through the GLOBAL threshold system, so every figure on
     // this page (cards, charts, tables) adapts uniformly (1,234 -> 1.23 K) the
@@ -570,8 +568,20 @@ export default function Analytics({
                     actually recorded this month. */}
                 <SubsidyTrackingPanel tracking={subsidyTracking} money={money} />
 
-                {/* The three-month predictive engine. */}
-                <ForecastPanel forecast={forecast} money={money} />
+                {/*
+                 * THE "3-MONTH PREDICTIVE FORECAST" PANEL USED TO SIT HERE.
+                 *
+                 * It was a recency-weighted linear ramp over the institution's own
+                 * trailing months, split by its target subsidy ratio. It has been
+                 * REMOVED from the analytics views and MIGRATED into the dedicated
+                 * AI Forecasting module (Meals → AI Forecasting), which retrieves
+                 * from similar past days across the platform and falls back to
+                 * country benchmarks when history is thin.
+                 *
+                 * There is deliberately NO replacement widget here. Two forecasting
+                 * systems on two screens is how they end up disagreeing; analytics
+                 * now reports what HAPPENED, and forecasting lives in one place.
+                 */}
 
                 {/* Meal trend + expense breakdown */}
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">

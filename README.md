@@ -13,6 +13,7 @@ A multi-institution **SaaS for tracking shared meal money** — member **deposit
 | Backend | **Laravel 12** (PHP 8.2+) |
 | Frontend | **Inertia.js 2** + **React 18** (no separate SPA server for the web UI) |
 | Styling | **Tailwind CSS** |
+| i18n | **English + Bengali** (server `lang/`, shared to React via Inertia; add a language in 2 files) |
 | Auth — web | Laravel session guards |
 | Auth — mobile API | **Laravel Sanctum 4** (personal access tokens, 30-day lifetime) |
 | Roles & permissions | **spatie/laravel-permission 6** |
@@ -98,8 +99,7 @@ It checks the account exists, holds the global role, has a usable password, is a
 
 | Command | What it runs |
 |---|---|
-| `php artisan test` | **Unit + Feature** (PHPUnit; config `phpunit.xml`, `:memory:` SQLite) |
-| `php artisan dusk` | **Browser** tests (Laravel Dusk; config `phpunit.dusk.xml`) |
+| `php artisan dusk` | **The browser suite** (Laravel Dusk) — 242 tests, 61 classes. The suite is Dusk-only by policy: `tests/Unit` and `tests/Feature` were removed, and `phpunit.xml` points at `tests/Browser`. |
 | `composer run phpcs` | Code style (PHP_CodeSniffer against `phpcs.xml`) |
 | `npm run lint:nav-icons` | Sidebar icon-consistency gate (every module has a distinct, defined icon) |
 | `npm run build` | Production Vite assets |

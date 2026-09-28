@@ -187,6 +187,35 @@ Typical notifications include: a deposit was recorded for you, your claim was
 approved or rejected, a member expense claim was approved, and institution
 announcements.
 
+### 3.6 Reporting a bug
+
+Found something broken? Every role **except the Software Super Admin** has a
+**Report a bug** button pinned in the sidebar footer, always one click away.
+
+It opens a short form:
+
+| Field | Notes |
+|---|---|
+| **What went wrong?** | A one-line summary (required) |
+| **Describe the problem** | What you expected vs what happened (required) |
+| **Steps to reproduce** | Optional, but the single most useful thing you can add |
+| **How bad is it?** | Low / Normal / High / Critical |
+| **Screenshot** | Optional image, up to 5 MB — for a layout problem this saves a round-trip |
+
+The exact page you were on is captured **automatically**, so you never have to
+describe where you were.
+
+On submit:
+
+- the report is filed instantly and every **Software Super Admin** is notified,
+- they see it in the **Bug Reports** inbox with your name, role, institution, the
+  page URL, your browser and the screenshot,
+- you get a confirmation with a reference number (`ref #123`).
+
+> **Why the Super Admin cannot file one.** They are the *recipient* of bug
+> reports. Reports go **up** the chain — never sideways between institutions, so
+> one workspace never sees another's defect.
+
 ---
 
 ## 4. Software Super Admin guide
@@ -198,7 +227,7 @@ Their navigation is separate from any workspace.
 
 | Section | Items |
 |---|---|
-| **Platform Overview** | Business Dashboard · SaaS Analytics · Institution Directory · Trial & Subscriptions · Pricing & Plans · Security & Audit · Landing Enquiries · Broadcasts |
+| **Platform Overview** | Business Dashboard · SaaS Analytics · Institution Directory · Trial & Subscriptions · Pricing & Plans · Security & Audit · Landing Enquiries · Broadcasts · Bug Reports |
 | **Account** | Profile Manager · User Manager · Theme Customizer |
 | **Platform Settings** | Role Manager · Global Audit Log · Email Log · Pricing & Plans |
 
@@ -368,6 +397,44 @@ browser (with the institution filter) for day-to-day "who changed this?" lookups
    Warning · Urgent / Outage.
 4. Send. Every recipient gets an in-app notification, and a **history** row records
    exactly what was sent, to whom, and when.
+
+### 4.8.1 Bug Reports (the defect triage inbox)
+
+**Platform Overview → Bug Reports.** Every defect filed by a tenant user anywhere
+on the platform, in **one queue**. This is the only screen that deliberately shows
+content from multiple institutions at once, which is why it is SSA-only.
+
+**You are the recipient, not a filer.** Members, Meal Managers and Institution
+Admins have the **Report a bug** button; the SSA does not — a report from the
+person who owns the backlog would be circular.
+
+The queue is **ordered to be worked through**: critical first, then high, normal,
+low, and oldest-first within each band. A report that has been waiting longest is
+the one most likely to have already cost someone a day.
+
+Each row expands to show:
+
+| Field | Why it is there |
+|---|---|
+| **Description** + **steps to reproduce** | What the user saw, in their words |
+| **Page URL** | The exact screen the defect occurred on |
+| **Reporter** (name, email, role, institution) | Who to follow up with |
+| **Browser** (user agent) | Identifies a layout-only or hydration bug |
+| **Screenshot** | The attached image, clickable to open full size |
+
+**Actions:**
+
+- **Acknowledge** — "seen, working on it". The report stays in the queue; this is
+  explicitly *not* a resolution, so it never claims one.
+- **Resolve…** — closes it out with a **resolution note**, and stamps who resolved
+  it and when.
+- **Dismiss** — for a report that is not actionable (a duplicate, or working as
+  intended).
+- **Reopen** — returns it to the queue and **clears the stale resolution**, so an
+  old note never misrepresents the current state.
+
+> Reports are **never deleted**, only status-changed. A cluster of the same defect
+> in one institution is itself a useful signal.
 
 ### 4.9 Monitoring & analytics
 
@@ -891,6 +958,7 @@ something beyond your own records, raise a claim or contact your manager.
 | **Platform:** define pricing tiers | Platform Overview → Pricing & Plans | Software Super Admin |
 | **Platform:** track trials | Platform Overview → Trial & Subscriptions | Software Super Admin |
 | **Platform:** message everyone | Platform Overview → Broadcasts | Software Super Admin |
+| **Platform:** triage bug reports | Platform Overview → Bug Reports | Software Super Admin |
 | **Platform:** audit the whole platform | Platform Overview → Security & Audit | Software Super Admin |
 | **Platform:** manage role definitions | Platform Settings → Role Manager | Software Super Admin |
 | **Platform:** list users across institutions | Account → User Manager | Software Super Admin |

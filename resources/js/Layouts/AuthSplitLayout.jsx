@@ -1,4 +1,5 @@
 import ApplicationLogo from '@/Components/ApplicationLogo';
+import LanguageSwitcher from '@/Components/LanguageSwitcher';
 import ThemeProvider from '@/Components/ThemeProvider';
 import usePlatformBranding from '@/Utils/usePlatformBranding';
 import { Link } from '@inertiajs/react';
@@ -152,6 +153,18 @@ export default function AuthSplitLayout({
 
                 {/* ---------------- RIGHT: authentication form ---------------- */}
                 <main className="flex w-full flex-col justify-center px-5 py-10 sm:px-10 lg:w-1/2 lg:px-14 xl:px-20">
+                    {/*
+                     * Language switcher, top-right of the form column.
+                     *
+                     * A guest has no account yet, so this is their ONLY chance to
+                     * read the sign-in screen in their own language. It writes the
+                     * session (see LanguageController::setGuest) and their choice is
+                     * then persisted to their account the moment they sign in.
+                     */}
+                    <div className="mb-4 flex justify-end lg:mb-6">
+                        <LanguageSwitcher />
+                    </div>
+
                     {/* On mobile the panel is hidden, so show a compact lockup above
                         the form instead — the screen must still identify itself. */}
                     <div className="mb-8 flex items-center justify-center gap-3 lg:hidden">

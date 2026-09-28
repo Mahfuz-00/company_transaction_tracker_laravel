@@ -40,6 +40,26 @@ abstract class DuskTestCase extends BaseTestCase
         $this->migrateDuskDatabase();
 
         /*
+         * AUTO-DISMISS THE FIRST-LOGIN TOUR ON EVERY loginAs().
+         *
+         * The guided tour is shown to any user who has never signed in, and its
+         * overlay (`fixed inset-0 z-[100]`) covers the page. Without this, every
+         * browser test that logs in a fresh fixture fails with either
+         * ElementClickInterceptedException or a 20-second wait timeout for an
+         * element that IS rendered - just painted underneath the modal. Both read
+         * like a broken page rather than "the tour is open".
+         *
+         * This wraps Browser::loginAs() itself, so the dismissal happens
+         * automatically for EVERY test - including ones written later. Patching the
+         * ~40 existing call sites would work once and then silently rot.
+         *
+         * A test that needs the tour to REMAIN open (Onboarding/Feature) asserts on
+         * the modal first, then calls dismissOnboarding() explicitly.
+         */
+        $this->registerOnboardingAutoDismiss();
+
+
+        /*
          * FLUSH THE SPATIE PERMISSION CACHE BEFORE EACH TEST.
          *
          * spatie/laravel-permission caches the ROLE -> PERMISSION map for 24 hours

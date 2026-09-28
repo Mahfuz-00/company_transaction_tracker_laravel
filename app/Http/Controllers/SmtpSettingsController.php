@@ -60,13 +60,42 @@ class SmtpSettingsController extends Controller
             'encryption' => ['nullable', Rule::in(['tls', 'ssl', 'none'])],
         ]);
 
-        // Merge the draft over the stored configuration, so a partially-filled
-        // form still tests against the parts the operator has not touched.
+        /*
+         * Merge the draft over the stored configuration, so a partially-filled
+         * form still tests against the parts the operator has not touched.
+         *
+         * HOST AND PORT ARE MERGED UNCONDITIONALLY (NOT FILTERED).
+         * -------------------------------------------------------
+         * A blank field normally means "leave this as it is", which is why most keys
+         * are dropped before the merge. That is WRONG for `host` and `port`:
+         *
+         *   - `MailSettings::all()` always supplies a DEFAULT host (the Brevo relay),
+         *     so dropping a blank `host` silently substituted `smtp-relay.brevo.com`
+         *     for the value the operator had just CLEARED. The check then reported a
+         *     confident green "connected" verdict for a configuration with no host
+         *     at all - exactly the false assurance this endpoint exists to prevent.
+         *
+         *   - The same applies to `port`: a cleared port must be reported as invalid
+         *     rather than quietly restored to 587.
+         *
+         * The operator explicitly submitted these fields, so the submitted value is
+         * what must be verified - including when it is empty.
+         */
         $stored = MailSettings::all();
-        $config = array_merge($stored, array_filter(
+
+        $draft = array_filter(
             $data,
-            fn ($value) => $value !== null && $value !== ''
-        ));
+            fn ($value) => $value !== null && $value !== '',
+        );
+
+        // Honour an explicitly-submitted host/port even when blank.
+        foreach (['host', 'port'] as $required) {
+            if (array_key_exists($required, $data)) {
+                $draft[$required] = $data[$required];
+            }
+        }
+
+        $config = array_merge($stored, $draft);
 
         $result = SmtpConnectionChecker::verify($config);
 

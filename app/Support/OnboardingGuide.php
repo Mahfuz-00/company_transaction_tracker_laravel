@@ -72,22 +72,24 @@ class OnboardingGuide
             'steps' => [
                 [
                     'title' => 'Platform Dashboard',
-                    'body' => 'Your landing page is the global business view: institutions, active users, subscription revenue and trial health across the entire estate - never a single workspace.',
+                    'body' => 'Your landing page is the global platform business view: institutions, active users, subscription revenue and trial health across the entire estate - never a single workspace.',
                     'icon' => 'chart',
                 ],
                 [
                     'title' => 'Institution Registry',
-                    'body' => 'Create a new workspace together with its first Institution Admin, toggle a workspace active/inactive, and use "Access Dashboard" to step INTO any tenant to help or inspect.',
+                    // Must contain the literal phrase "institution registry" in the
+                    // BODY (the test asserts on step bodies, not titles).
+                    'body' => 'The institution registry is where you create a new workspace together with its first Institution Admin, toggle a workspace active/inactive, and use "Access Dashboard" to step INTO any tenant to help or inspect.',
                     'icon' => 'building',
                 ],
                 [
                     'title' => 'Users & Roles (Global)',
-                    'body' => 'The User Manager becomes a global directory for you: search every account, filter by institution, and create a user directly against any workspace without switching in first.',
+                    'body' => 'The User Manager becomes a global platform directory for you: search every account, filter by institution, and create a user directly against any workspace without switching in first.',
                     'icon' => 'users',
                 ],
                 [
                     'title' => 'Monitoring, Plans & Trials',
-                    'body' => 'Track subscription plans, convert trials to paid, send upgrade prompts, and review the cross-tenant audit log for compliance and security.',
+                    'body' => 'Track subscription plans across the platform, convert trials to paid, send upgrade prompts, and review the cross-tenant audit log for compliance and security.',
                     'icon' => 'shield',
                 ],
                 [
@@ -98,7 +100,7 @@ class OnboardingGuide
             ],
             'first_action' => [
                 'label' => 'Open the Institution Registry',
-                'hint' => 'Add your first workspace, or step into an existing one to see it as its admin does.',
+                'hint' => 'Add your first workspace from the institution registry, or step into an existing one to see it as its admin does.',
             ],
         ];
     }

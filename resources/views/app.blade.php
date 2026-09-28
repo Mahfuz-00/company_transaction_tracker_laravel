@@ -8,6 +8,16 @@
              connection check) that bypass Inertia's automatic header. --}}
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
+        {{--
+            Whether this page has a signed-in user.
+
+            The language switcher submits down a DIFFERENT route for a guest
+            (session-only) than for a signed-in user (persisted to `users.locale`),
+            and it needs to know which without prop-drilling through every layout.
+            A meta tag is the cheapest correct answer.
+        --}}
+        <meta name="user-authenticated" content="{{ auth()->check() ? '1' : '0' }}">
+
         <title inertia>{{ config('app.name', 'NomNomytics') }}</title>
 
         {{-- <!-- Fonts -->

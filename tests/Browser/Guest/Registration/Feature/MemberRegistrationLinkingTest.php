@@ -45,7 +45,7 @@ class MemberRegistrationLinkingTest extends DuskTestCase
 
         $this->step('Guest', 'Registration', 'POST /register with a valid invite code', __LINE__);
 
-        $this->httpAs(new User)->post('/register', [
+        $this->httpAsGuest()->post('/register', [
             'name' => 'Nadia Newcomer',
             'email' => 'nadia@newcomer.test',
             'phone' => '+8801700000000',
@@ -93,7 +93,7 @@ class MemberRegistrationLinkingTest extends DuskTestCase
 
         $this->step('Guest', 'Registration', 'POST /register as a Meal Manager', __LINE__);
 
-        $this->httpAs(new User)->post('/register', [
+        $this->httpAsGuest()->post('/register', [
             'name' => 'Marco Manager',
             'email' => 'marco@manager.test',
             'password' => 'password',
@@ -117,7 +117,7 @@ class MemberRegistrationLinkingTest extends DuskTestCase
 
         $institution = $this->makeInstitution();
 
-        $this->httpAs(new User)->post('/register', [
+        $this->httpAsGuest()->post('/register', [
             'name' => 'Linked Member',
             'email' => 'linked@member.test',
             'password' => 'password',
@@ -133,7 +133,11 @@ class MemberRegistrationLinkingTest extends DuskTestCase
         $this->browse(function (Browser $browser) use ($member) {
             $browser->loginAs($member)
                 ->visit('/my/dashboard')
-                ->waitForText('Welcome, Linked Member', 20)
+                // The greeting reads "Welcome back, {name}" (Member/Dashboard.jsx).
+                // This test previously waited for "Welcome, {name}" - the wording
+                // used before the page title moved into the fixed top bar, which is
+                // why it timed out even though the page rendered correctly.
+                ->waitForText('Welcome back, Linked Member', 20)
                 // The fix: the linked status chip is present...
                 ->assertVisible('[data-testid="member-link-status"]')
                 // ...and the "not linked" empty state is NOT.
@@ -147,7 +151,7 @@ class MemberRegistrationLinkingTest extends DuskTestCase
 
         $this->step('Guest', 'Registration', 'POST /register with a bad code', __LINE__);
 
-        $this->httpAs(new User)
+        $this->httpAsGuest()
             ->post('/register', [
                 'name' => 'Orphan User',
                 'email' => 'orphan@nowhere.test',
@@ -170,7 +174,7 @@ class MemberRegistrationLinkingTest extends DuskTestCase
 
         $this->step('Guest', 'Registration', 'signup against an inactive institution is refused', __LINE__);
 
-        $this->httpAs(new User)
+        $this->httpAsGuest()
             ->post('/register', [
                 'name' => 'Blocked User',
                 'email' => 'blocked@inactive.test',

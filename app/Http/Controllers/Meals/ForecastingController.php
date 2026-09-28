@@ -58,6 +58,16 @@ class ForecastingController extends Controller
             'forecast' => $range,
             // The single next-day forecast, with its full evidence trail.
             'tomorrow' => $forecaster->forecast(),
+            /*
+             * THE MONTHLY MONEY PROJECTION.
+             *
+             * This is the "3-month predictive forecast" that used to live on the
+             * Analytics pages, now computed by the SAME retrieval engine as the
+             * daily forecast (see Forecaster::monthlyProjection). Keeping it here
+             * means the platform has ONE forecasting system rather than two that
+             * can disagree about the same month.
+             */
+            'projection' => $forecaster->monthlyProjection(),
             'basis' => [
                 'country' => $forecaster->countryCode(),
                 'history_months' => round($monthsOfHistory, 1),

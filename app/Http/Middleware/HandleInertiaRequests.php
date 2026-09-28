@@ -206,6 +206,28 @@ class HandleInertiaRequests extends Middleware
              * so a deployment without Google/Microsoft credentials shows no dead
              * buttons.
              */
+            /*
+             * LOCALE / i18n.
+             *
+             * The front end needs three things and nothing more:
+             *   - `current`   : which language to render in right now,
+             *   - `supported` : the catalogue for the switcher (each language named
+             *                   in its OWN script, never translated),
+             *   - `rtl`       : whether to flip the document direction.
+             *
+             * This is shared on EVERY response, so no page has to fetch it and a
+             * language change repaints in the same round-trip.
+             */
+            'locale' => fn () => [
+                'current' => app()->getLocale(),
+                'fallback' => config('locales.fallback', 'en'),
+                'rtl' => (bool) (\App\Support\LocaleManager::meta(app()->getLocale())['rtl'] ?? false),
+                'supported' => \App\Support\LocaleManager::catalogue(),
+                // The translated string catalogue for the ACTIVE locale, so the
+                // React side can render translations without a second request.
+                'messages' => \App\Support\LocaleManager::messages(),
+            ],
+
             'oauth' => fn () => collect(\App\Support\OAuthProviders::available())
                 ->map(fn (string $provider) => [
                     'provider' => $provider,

@@ -111,6 +111,127 @@ trait DuskSupport
     }
 
     /**
+     * An UNauthenticated HTTP client for routes behind the `guest` middleware.
+     *
+     * WHY THIS EXISTS (and is separate from httpAs())
+     * ------------------------------------------------
+     * `httpAs()` authenticates via actingAs(). That is correct for an
+     * authenticated route, but it BREAKS any route behind `guest`:
+     *
+     *     POST /register        -> redirect to /dashboard, controller never runs
+     *     POST /register/validate-invite-code
+     *
+     * The symptom is confusing rather than obvious: the test sees a 302 with no
+     * validation errors and no created row, which reads like "registration is
+     * broken" when in fact the request was bounced by middleware before it
+     * arrived.
+     *
+     * This helper therefore disables CSRF (so a test-side POST is not a 419) but
+     * deliberately does NOT call actingAs(), leaving the request a genuine guest -
+     * exactly the state the public signup form is in.
+     *
+     * Usage:  $this->httpAsGuest()->post('/register', [...])->assertSessionHasErrors('invite_code');
+     */
+    protected function httpAsGuest()
+    {
+        $this->withoutMiddleware([
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+            \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+        ]);
+
+        // A same-origin referer so back() resolves to a real page rather than
+        // bouncing through '/' and dropping the flashed session data.
+        $this->withHeader('Referer', config('app.url') . '/register');
+
+        // Explicitly NOT authenticated. Laravel's test client is a guest by
+        // default, but we assert that here so a future change to a shared setUp()
+        // cannot silently authenticate this client and re-break the guest routes.
+        $this->assertGuest();
+
+        return $this;
+    }
+
+    /**
+     * Dismiss the first-login onboarding modal if it is open.
+     *
+     * WHY THIS IS NEEDED ON ALMOST EVERY BROWSER TEST
+     * -----------------------------------------------
+     * The first-login guided tour works (see OnboardingProvider), so it opens on
+     * top of the dashboard for ANY user who has never signed in. Its overlay is
+     * `fixed inset-0 z-[100]`, which correctly intercepts clicks and paints over
+     * the page beneath it.
+     *
+     * A test that forgets this fails in a MISLEADING way: either
+     * `ElementClickInterceptedException` ("the click did not land") or a 20-second
+     * timeout waiting for an element that IS on the page but sits UNDER the modal.
+     * Neither reads as "the tour is open".
+     *
+     * It is registered as a BROWSER MACRO (see registerOnboardingDismissal) so every
+     * `loginAs()` call dismisses the tour automatically. Patching ~40 individual
+     * call sites would work once and then silently rot the next time a test is
+     * added.
+     */
+    protected function dismissOnboarding(Browser $browser): void
+    {
+        /*
+         * `whenAvailable` polls for the selector with a DEFAULT 5-SECOND TIMEOUT and
+         * skips the callback if it never appears. That is wasteful on every test
+         * where the tour is already dismissed by default (see makeTenantUser), and
+         * the wait itself shows up in the log as noise.
+         *
+         * This checks the DOM ONCE via `script` instead: no waiting, no timeout, and
+         * the click only happens when the modal is genuinely on screen. That keeps
+         * the helper cheap enough to call defensively anywhere.
+         */
+        $present = $browser->script(
+            "return document.querySelector('[data-testid=\"onboarding-modal\"]') ? 1 : 0;"
+        )[0] ?? 0;
+
+        if ((int) $present === 1) {
+            $browser->click('[data-testid="onboarding-skip"]');
+        }
+    }
+
+    /**
+     * Wrap Browser::loginAs() so the first-login tour is dismissed automatically.
+     *
+     * WHY A WRAPPER AND NOT A HELPER CALL PER TEST
+     * --------------------------------------------
+     * The tour opens for ANY user who has never signed in. That is nearly every
+     * fixture in this suite, so ~40 tests need the dismissal. Calling a helper at
+     * each of those sites would work today and then silently break the next test
+     * somebody adds - the failure mode being a confusing timeout or an intercepted
+     * click, which does not point at the real cause.
+     *
+     * Wrapping `loginAs` makes the behaviour part of the harness: every test gets
+     * it, forever, without opting in.
+     *
+     * IDEMPOTENT: the guard checks the closure's marker property so a class that
+     * runs many tests does not stack wrappers on top of each other (which would
+     * dismiss repeatedly and slow the suite down).
+     */
+    protected function registerOnboardingAutoDismiss(): void
+    {
+        if (Browser::hasMacro('dismissOnboardingIfOpen')) {
+            return; // Already registered by a previous test in this process.
+        }
+
+        Browser::macro('dismissOnboardingIfOpen', function (): Browser {
+            /** @var Browser $this */
+            // whenAvailable skips the callback when the tour is not open, rather
+            // than throwing the way waitFor does.
+            return $this->whenAvailable('[data-testid="onboarding-modal"]', function (Browser $modal) {
+                $modal->click('[data-testid="onboarding-skip"]');
+            });
+        });
+
+        Browser::macro('loginAsAndDismissTour', function ($user): Browser {
+            /** @var Browser $this */
+            return $this->loginAs($user)->dismissOnboardingIfOpen();
+        });
+    }
+
+    /**
      * Create an institution using ONLY the columns this app defines
      * (database/migrations: create_institutions_table + add_trial_lifecycle +
      * add_multitenancy_and_currency_settings).
@@ -146,6 +267,21 @@ trait DuskSupport
     /**
      * Create a tenant-bound user (Institution Admin / Meal Manager / Member) and
      * grant the given role.
+     *
+     * ONBOARDING IS MARKED COMPLETE BY DEFAULT.
+     * ------------------------------------------
+     * The first-login guided tour opens for any user with a NULL
+     * `onboarding_completed_at`, and its overlay (`fixed inset-0 z-[100]`) covers
+     * the whole page. That is correct product behaviour - but it means EVERY
+     * browser test that logs in a fresh fixture would have its page hidden behind
+     * a modal, failing with either ElementClickInterceptedException or a confusing
+     * 20-second wait timeout for an element that IS rendered.
+     *
+     * So the DEFAULT here is "an existing user who has already seen the tour",
+     * which is what the vast majority of tests actually want. The tour's own tests
+     * (`tests/Browser/Onboarding`) opt IN by passing
+     * `['onboarding_completed_at' => null]` - making the dependency explicit at the
+     * one place that cares about it, instead of a silent global side effect.
      */
     protected function makeTenantUser(Institution $institution, string $role, array $attributes = []): User
     {
@@ -157,6 +293,7 @@ trait DuskSupport
             'status' => 'active',
             'must_change_password' => false,
             'setup_completed_at' => now(),
+            'onboarding_completed_at' => now(),
         ], $attributes));
 
         $user->assignRole($role);
@@ -224,6 +361,9 @@ trait DuskSupport
             'status' => 'active',
             'must_change_password' => false,
             'setup_completed_at' => now(),
+            // See makeTenantUser(): the tour is dismissed by default so it does not
+            // cover the page in tests that are not about onboarding.
+            'onboarding_completed_at' => now(),
         ], $attributes));
 
         $user->assignRole('Software Super Admin');
