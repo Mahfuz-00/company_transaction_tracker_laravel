@@ -53,6 +53,16 @@ class DatabaseSeeder extends Seeder
             CurrenciesTableSeeder::class,
             // Seeds the default institution + its hub vendor baseline only.
             InstitutionSeeder::class,
+            /*
+             * THE SUPPORT ASSISTANT'S DOCUMENTATION CORPUS.
+             *
+             * These are PLATFORM-WIDE answers (institution_id NULL), so they are
+             * baseline data rather than sample data - an assistant with an empty
+             * corpus escalates every question, including ones whose answers are
+             * already documented. Idempotent, so a redeploy updates rather than
+             * duplicates.
+             */
+            AssistantKnowledgeSeeder::class,
             // Runs LAST and is idempotent: guarantees the permanent platform
             // owner (admin@mahfuz.com) always exists, without ever overwriting
             // an existing password or clearing transactional data.

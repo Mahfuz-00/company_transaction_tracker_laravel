@@ -43,6 +43,13 @@ class ThemeController extends Controller
 
         return Inertia::render('Settings/ThemeCustomizer', [
             'theme' => $user->themeSettings(),
+            /*
+             * The GLOBAL hint preference is rendered as a switch on this page because
+             * this is where a user already comes to personalise their own experience.
+             * It is passed explicitly (rather than read from the shared prop) so the
+             * form's initial state and the saved state can never disagree.
+             */
+            'hintsEnabled' => $user->hintsEnabled(),
             // Accent tokens the picker renders as swatches, with their hex.
             'accents' => collect(User::themeAccents())
                 ->map(fn ($meta, $key) => [

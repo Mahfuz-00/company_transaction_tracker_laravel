@@ -56,7 +56,7 @@ trait DuskDatabase
         // WAL + a generous busy timeout prevent "database is locked" races.
         config([
             'database.default' => 'sqlite',
-            'database.connections.sqlite.database' => database_path('dusk.sqlite'),
+            'database.connections.sqlite.database' => database_path('testing.sqlite'),
             'database.connections.sqlite.foreign_key_constraints' => true,
         ]);
 
@@ -189,23 +189,46 @@ trait DuskDatabase
     }
 
     /**
-     * SAFETY GUARD - never reset anything that is not the dedicated Dusk file.
+     * SAFETY GUARD - never reset anything that is not a dedicated TEST database.
      *
-     * The suite WIPES the tables it touches (`truncateDuskTables`) and may
-     * rebuild the schema. That is only ever acceptable against the throwaway
-     * `database/dusk.sqlite`. If the configured SQLite path is anything else - a
-     * real app database, a path typo, a mis-set `DB_DATABASE` - this throws
-     * BEFORE any migration or truncation runs, so live data can never be
-     * destroyed by a test run.
+     * The suite WIPES the tables it touches (`truncateDuskTables`) and may rebuild
+     * the schema. That is only ever acceptable against a throwaway file.
+     *
+     * This guard is the last line of defence for the project's most important
+     * safety rule, so it is written as an ALLOW-LIST of known test filenames rather
+     * than a suffix check. If the path is anything else - a real app database, a
+     * path typo, a mis-set `DB_DATABASE` - it throws BEFORE any migration or
+     * truncation runs, so live data can never be destroyed by a test run.
+     *
+     * Th does NOT include `dusk.sqlite`. That filename was
+     * previously shared with the developer's `.env`, which meant the suite was
+     * truncating the WORKING database on every run (see AGENTS.md).
+     *
+     * @throws \RuntimeException when the configured database is not disposable.
      */
     protected function assertDuskDatabaseIsDisposable(): void
     {
         $database = str_replace('\\', '/', (string) config('database.connections.sqlite.database'));
+        $filename = basename($database);
 
-        if (! str_ends_with($database, 'dusk.sqlite')) {
+        // The only files the suite may ever destroy.
+        $allowed = ['testing.sqlite', ':memory:'];
+
+        if (! in_array($filename, $allowed, true)) {
             throw new \RuntimeException(
-                'Refusing to run Dusk against a non-Dusk database: ' . $database
-                . '. The Dusk suite may only migrate/truncate database/dusk.sqlite.'
+                'REFUSING TO RUN: the test suite may only migrate/truncate a dedicated test '
+                . 'database (' . implode(', ', $allowed) . '), but the configured path is: '
+                . $database . PHP_EOL
+                . 'Fix DB_DATABASE in .env.testing / .env.dusk.local. '
+                . 'See AGENTS.md -> "Database Protection Rule".'
+            );
+        }
+
+        // Belt and braces: a test database must never be the project's app database.
+        if (str_ends_with($database, 'database/database.sqlite')) {
+            throw new \RuntimeException(
+                'REFUSING TO RUN: the suite is pointed at the DEVELOPMENT database. '
+                . 'See AGENTS.md -> "Database Protection Rule".'
             );
         }
     }

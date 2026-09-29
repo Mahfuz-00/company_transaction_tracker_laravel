@@ -11,6 +11,7 @@ import WorkflowAnimation from '@/Components/Landing/WorkflowAnimation';
 import PricingGrid from '@/Components/Landing/PricingGrid';
 import CTASection from '@/Components/Landing/CTASection';
 import LandingFooter from '@/Components/Landing/LandingFooter';
+import SupportAssistant from '@/Components/Assistant/SupportAssistant';
 
 /**
  * Public landing page.
@@ -48,6 +49,20 @@ export default function Welcome({ plans = [], institutionCount = 0 }) {
                 </main>
 
                 <LandingFooter />
+
+                {/*
+                  * THE SUPPORT ASSISTANT — PUBLIC SURFACE.
+                  *
+                  * Mounted here, on the page a visitor reaches BEFORE they have an
+                  * account, because the moment someone wants to know "what does this
+                  * cost?" or "does it handle subsidies?" is the moment they are
+                  * reading this page. Requiring a sign-up to ask would lose the
+                  * question - and probably the visitor.
+                  *
+                  * `surface="landing"` scopes the conversation: a guest thread is
+                  * keyed by a random token the client holds, never a sequential id.
+                  */}
+                <SupportAssistant surface="landing" />
             </div>
         </ThemeProvider>
     );

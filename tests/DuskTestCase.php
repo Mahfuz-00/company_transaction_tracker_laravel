@@ -49,14 +49,18 @@ abstract class DuskTestCase extends BaseTestCase
          * element that IS rendered - just painted underneath the modal. Both read
          * like a broken page rather than "the tour is open".
          *
-         * This wraps Browser::loginAs() itself, so the dismissal happens
-         * automatically for EVERY test - including ones written later. Patching the
-         * ~40 existing call sites would work once and then silently rot.
+         * GUARDED BY method_exists BECAUSE NOT EVERY SUBCLASS USES THE TRAIT.
+         * The macro registration lives in DuskSupport, which most test classes
+         * `use` - but a test that needs no fixtures (e.g. the database-protection
+         * guard) does not. Calling it unconditionally produced
+         * "Call to undefined method ...::registerOnboardingAutoDismiss()" in
+         * setUp(), failing every test in such a class before it ran.
          *
-         * A test that needs the tour to REMAIN open (Onboarding/Feature) asserts on
-         * the modal first, then calls dismissOnboarding() explicitly.
+         * The base class must not require a trait an optional subclass may omit.
          */
-        $this->registerOnboardingAutoDismiss();
+        if (method_exists($this, 'registerOnboardingAutoDismiss')) {
+            $this->registerOnboardingAutoDismiss();
+        }
 
 
         /*

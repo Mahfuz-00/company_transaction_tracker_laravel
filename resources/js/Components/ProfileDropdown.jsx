@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
+import { useTour } from '@/Components/Onboarding/OnboardingProvider';
 
 /**
  * USER PROFILE DROPDOWN (right side of the Fixed Top Bar).
@@ -27,6 +28,9 @@ export default function ProfileDropdown() {
     const { auth, viewingAs } = usePage().props;
     const user = auth?.user;
     const roles = auth?.roles || [];
+
+    // Replays the role-specific guide in place (no navigation, no redirect).
+    const { openTour } = useTour();
 
     const [open, setOpen] = useState(false);
     const containerRef = useRef(null);
@@ -189,7 +193,18 @@ export default function ProfileDropdown() {
                             data-testid="profile-menu-replay-tour"
                             onClick={() => {
                                 setOpen(false);
-                                router.post(route('onboarding.replay'));
+                                /*
+                                 * OPENED IN PLACE, not posted to the server.
+                                 *
+                                 * The previous implementation posted to
+                                 * `/onboarding/replay`, which cleared the completion
+                                 * flag and redirected back - so the menu closed, the
+                                 * page reloaded and the guide never appeared (the
+                                 * modal only reads the guide from the first page of
+                                 * the session). The tour's steps are already in the
+                                 * shared props, so replaying them is a local action.
+                                 */
+                                openTour();
                             }}
                             className="flex w-full items-center gap-2.5 px-4 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
                         >

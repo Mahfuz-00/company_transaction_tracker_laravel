@@ -11,6 +11,7 @@ use App\Models\MealRateSetting;
 use App\Models\Student;
 use App\Models\Subsidy;
 use App\Models\Transaction;
+use App\Support\MealPriceEngine;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -274,16 +275,27 @@ class Forecaster
             return $this->benchmarkForecast($target, $monthsOfHistory);
         }
 
+        /*
+         * ONLY THE MEAL **COUNT** IS RETRIEVED.
+         *
+         * How many people eat on a given day genuinely varies with weekday, season,
+         * term dates and roster size - that is a pattern worth learning from similar
+         * past days, and retrieval is the right tool for it.
+         *
+         * The PRICE is deliberately NOT retrieved (see MealPriceEngine). Averaging
+         * historical cost-per-meal values produced a number that matched no actual
+         * period of the ledger and visibly disagreed with the reports page, which
+         * computes the same figure correctly from the same tables. Price is an
+         * accounting identity, not a forecast, so it is read from the ledger below.
+         */
         $meals = 0.0;
         $headcount = 0.0;
-        $costPerMeal = 0.0;
 
         foreach ($neighbours as $neighbour) {
             $weight = $neighbour['similarity'] / $totalWeight;
 
             $meals += $neighbour['meals'] * $weight;
             $headcount += $neighbour['headcount'] * $weight;
-            $costPerMeal += $neighbour['cost_per_meal'] * $weight;
         }
 
         // Blend with the member's OWN recent trajectory: weekdays differ, and the
@@ -317,7 +329,37 @@ class Forecaster
         }
 
         $mealsInt = max((int) round($meals), 0);
-        $cost = round($costPerMeal, 2);
+
+        /*
+         * PRICE COMES FROM THE LEDGER:  (expenses − subsidies) ÷ meals.
+         *
+         * See MealPriceEngine for why. In short: it is the same number the reports
+         * page shows, it nets off subsidies so the member-funded figure is honest,
+         * and it can be checked by hand from the expense and meal tables.
+         *
+         * When the ledger has no meals (a brand-new institution), the rate is 0.0
+         * and the note below says so - we do NOT fall back to a retrieved average
+         * or a country benchmark, because neither is a price for THIS ledger.
+         */
+        $pricing = MealPriceEngine::forecastRate(null, $target->format('Y-m'));
+        $cost = $pricing['rate'];
+
+        if ($cost <= 0.0) {
+            $notes[] = 'No ledger data yet, so no cost per meal could be derived. '
+                . 'Record expenses and meals and this fills in automatically.';
+        } else {
+            $notes[] = sprintf(
+                'Priced at %.4f per meal from the ledger (%s): (%s − %s) ÷ %d meals.',
+                $cost,
+                $pricing['source_month'] === $target->format('Y-m')
+                    ? 'this month'
+                    : $pricing['source_month'],
+                number_format($pricing['expenses'], 2),
+                number_format($pricing['subsidies'], 2),
+                $pricing['meals'],
+            );
+        }
+
         $expense = round($mealsInt * $cost, 2);
 
         // Subsidy share: derived from recent subsidy coverage, so the member-funded
@@ -331,6 +373,9 @@ class Forecaster
             'meals' => $mealsInt,
             'headcount' => (int) round($headcount),
             'cost_per_meal' => $cost,
+            // How the price was derived, so the UI can label and audit it.
+            'price_basis' => $pricing['basis'],
+            'price_source_month' => $pricing['source_month'],
             'expense' => $expense,
             'subsidy_share' => round($expense * $subsidyShare, 2),
             'member_funded' => round($expense * (1 - $subsidyShare), 2),
@@ -492,6 +537,32 @@ class Forecaster
         $targetRatio = (float) ($setting->target_subsidy_ratio ?? 20) / 100;
         $memberRatio = max(0.0, 1 - $targetRatio);
 
+        /*
+         * ONE PRICE FOR THE WHOLE HORIZON, TAKEN FROM THE LEDGER.
+         *
+         * Every projected month is priced at the SAME auditable rate:
+         *
+         *     (expenses − subsidies) ÷ consumed meals
+         *
+         * computed by MealPriceEngine from the real tables. Two consequences worth
+         * stating plainly:
+         *
+         *   1. The projection agrees with the reports page. Deriving the rate from
+         *      retrieved daily costs (as this method previously did) produced a third
+         *      number that matched neither the ledger nor the daily forecast.
+         *
+         *   2. A projection is COUNTS × PRICE. We model the counts (which genuinely
+         *      vary) and multiply by the price (which does not). That is why there is
+         *      no per-month rate drift below: it would be invented.
+         *
+         * If the ledger has no meals, the whole projection prices at 0 - the "0
+         * yields 0" rule - and `price_basis` says so. We never substitute a country
+         * benchmark price, because a benchmark describes a DIFFERENT institution's
+         * suppliers and subsidies.
+         */
+        $pricing = MealPriceEngine::forecastRate($this->institution);
+        $rate = $pricing['rate'];
+
         $cursor = now()->startOfMonth();
         $rows   = [];
 
@@ -509,11 +580,9 @@ class Forecaster
             $weekdayFactor = $this->weekdayFactor($anchor) ?? 1.0;
 
             $meals  = (int) round(($days['total_meals'] ?? 0) * $weekdayFactor);
-            $expense = round(($days['total_expense'] ?? 0) * $weekdayFactor, 2);
 
             // A month with no predicted meals costs nothing. This is the "0 yields 0"
             // rule: we never substitute a manual figure or a stale average.
-            $rate = $meals > 0 ? round($expense / $meals, 4) : 0.0;
             $cost = $meals > 0 ? round($meals * $rate, 2) : 0.0;
 
             $rows[] = [
@@ -521,12 +590,15 @@ class Forecaster
                 'label'            => $monthStart->format('F Y'),
                 'projected_meals'  => $meals,
                 'projected_cost'   => $cost,
-                'projected_rate'   => $rate,
+                'projected_rate'   => $meals > 0 ? $rate : 0.0,
                 'subsidy_required' => round($cost * $targetRatio, 2),
                 'member_funded'    => round($cost * $memberRatio, 2),
                 // Carried per row so a benchmark-driven month is visibly different
                 // from a data-driven one, even inside the same table.
                 'basis'            => $days['basis'] ?? 'benchmark',
+                // Where the PRICE came from, which is independent of where the
+                // COUNT came from.
+                'price_basis'      => $pricing['basis'],
             ];
         }
 
@@ -552,9 +624,18 @@ class Forecaster
                 'target_member_ratio'  => round($memberRatio * 100, 2),
                 'country_code'         => $this->countryCode(),
                 'months'               => $months,
-                'method'               => 'Retrieval over similar past days (RAG), falling back to '
-                    . $this->countryCode() . ' country benchmarks when history is thin. '
-                    . 'The subsidy/member split is the institution\'s own target ratio.',
+                // The price is the ledger rate and nothing else - surfaced here so
+                // the UI can show the exact figure the projection is built on.
+                'price_rate'           => $rate,
+                'price_basis'          => $pricing['basis'],
+                'price_source_month'   => $pricing['source_month'],
+                'price_expenses'       => $pricing['expenses'],
+                'price_subsidies'      => $pricing['subsidies'],
+                'price_meals'          => $pricing['meals'],
+                'method'               => 'Meal COUNT is retrieved from similar past days (RAG), '
+                    . 'falling back to ' . $this->countryCode() . ' country benchmarks when history is thin. '
+                    . 'Meal PRICE is the ledger rate - (expenses − subsidies) ÷ consumed meals - '
+                    . 'and is never predicted. The subsidy/member split is the institution\'s own target ratio.',
             ],
         ];
     }

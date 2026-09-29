@@ -353,4 +353,84 @@ class Notifier
             route('ssa.bug-reports.index', [], false),
         );
     }
+
+    /**
+     * A support question the assistant could not handle: tell the platform owners.
+     *
+     * WHY THIS MATTERS TO THE LEARNING LOOP
+     * -------------------------------------
+     * An escalation is not just a support ticket - it is the assistant's TRAINING
+     * INPUT. The sooner an operator answers it, the sooner the same question is
+     * handled autonomously. Surfacing it in the bell, deep-linked to the queue, is
+     * what keeps that latency low; an escalation nobody notices teaches nothing.
+     *
+     * @return int the number of owners notified
+     */
+    public static function supportEscalated(\App\Models\AssistantEscalation $escalation): int
+    {
+        $owners = User::query()
+            ->where('status', 'active')
+            ->whereHas('roles', fn ($q) => $q->where('name', 'Software Super Admin'))
+            ->get();
+
+        if ($owners->isEmpty()) {
+            return 0;
+        }
+
+        // A FLAGGED question means the assistant gave a wrong answer, which is more
+        // urgent than one it simply could not answer: someone may be acting on bad
+        // information right now.
+        $prefix = $escalation->reason === 'flagged'
+            ? 'Wrong support answer reported'
+            : 'Unanswered support question';
+
+        $body = sprintf(
+            '%s asked: %s',
+            $escalation->asked_by_name ?? 'A user',
+            \Illuminate\Support\Str::limit($escalation->question, 160),
+        );
+
+        return static::push(
+            $owners,
+            $prefix,
+            $body,
+            null,
+            'support_escalation',
+            // Deep-link straight to the queue: answering it is the next action.
+            route('ssa.assistant.index', [], false),
+        );
+    }
+
+    /**
+     * The platform team answered a question: tell the user who was waiting.
+     *
+     * Closes the loop from the USER's side. Without this, a question asked on the
+     * landing page would appear to vanish into silence - and the user would
+     * reasonably conclude that asking had been pointless.
+     *
+     * @return int the number of users notified
+     */
+    public static function supportAnswered(
+        \App\Models\AssistantEscalation $escalation,
+        \App\Models\AssistantKnowledge $knowledge,
+    ): int {
+        $asker = $escalation->user_id
+            ? User::find($escalation->user_id)
+            : null;
+
+        // A guest has no account to notify; the answer is still learned and stored,
+        // so the next person who asks gets it immediately.
+        if (! $asker) {
+            return 0;
+        }
+
+        return static::push(
+            collect([$asker]),
+            'Your question has been answered',
+            \Illuminate\Support\Str::limit($knowledge->answer, 200),
+            null,
+            'support_answer',
+            null,
+        );
+    }
 }

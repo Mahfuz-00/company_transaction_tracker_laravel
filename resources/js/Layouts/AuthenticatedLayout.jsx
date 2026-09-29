@@ -1,4 +1,5 @@
 import Sidebar from '@/Components/Sidebar';
+import SupportAssistant from '@/Components/Assistant/SupportAssistant';
 import ThemeProvider from '@/Components/ThemeProvider';
 import TopBar from '@/Components/TopBar';
 import { Link, usePage } from '@inertiajs/react';
@@ -164,6 +165,21 @@ export default function AuthenticatedLayout({ header, children }) {
                     </div>
                 </div>
             </div>
+
+            {/*
+              * THE SUPPORT ASSISTANT — DASHBOARD SURFACE.
+              *
+              * Mounted in the SHELL (not on individual pages) so it is available on
+              * every screen a signed-in user reaches, and so the launcher keeps its
+              * position while pages swap underneath it. A question usually arises
+              * while looking at the thing that confused you, so the panel is
+              * deliberately an overlay: the user never leaves the page they were
+              * asking about.
+              *
+              * It renders itself as `fixed` at the bottom-right and reads the shared
+              * `auth` prop to decide whether to load a persisted transcript.
+              */}
+            <SupportAssistant surface="dashboard" />
         </div>
         </ThemeProvider>
     );

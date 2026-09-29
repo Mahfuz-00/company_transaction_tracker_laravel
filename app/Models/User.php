@@ -56,7 +56,8 @@ class User extends Authenticatable
                 && $user->roles()->where('name', 'Software Super Admin')->exists();
 
             if ($passwordDirty && $hadPassword && ($wasSuperAdmin || $user->isSuperAdmin())) {
-                $user->password = $user->getOriginal('password');
+                // $user->password = $user->getOriginal('password');
+                $user->offsetUnset('password');
 
                 report(new \RuntimeException(
                     'Blocked an unauthorised password write to the Software Super Admin account '
@@ -180,6 +181,81 @@ class User extends Authenticatable
     public function themeSettings(): array
     {
         return array_merge(static::DEFAULT_THEME, $this->theme ?? []);
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Personal preferences (the `user_settings` JSON bag)
+     * ------------------------------------------------------------------ */
+
+    /**
+     * The user's preference row.
+     *
+     * WHY A JSON BAG RATHER THAN A COLUMN PER PREFERENCE
+     * --------------------------------------------------
+     * Personal preferences accrete (hints today, digest frequency tomorrow) and
+     * each one is a boolean or a small string. A column per preference would mean
+     * a migration for every UI toggle, whereas this table was created for exactly
+     * this purpose (`2026_09_15_000002_create_user_settings_table`) and was still
+     * unused. Reads are few (the shared Inertia props) and writes are rare (a user
+     * flipping a switch), so the lack of indexability costs nothing.
+     */
+    public function userSettings()
+    {
+        return $this->hasOne(UserSetting::class);
+    }
+
+    /**
+     * Read a personal preference, falling back to a default.
+     *
+     * A missing row, a NULL bag and a missing KEY all resolve to $default, so a
+     * brand-new account behaves exactly like one that has never touched settings.
+     */
+    public function preference(string $key, mixed $default = null): mixed
+    {
+        $settings = $this->userSettings?->settings ?? [];
+
+        return array_key_exists($key, $settings) ? $settings[$key] : $default;
+    }
+
+    /**
+     * Write a personal preference, creating the row on first use.
+     *
+     * The in-memory relation is refreshed afterwards so a read later in the SAME
+     * request sees the new value - otherwise the shared Inertia prop would still
+     * carry the pre-save state and the UI would appear not to have changed until
+     * a manual reload.
+     */
+    public function setPreference(string $key, mixed $value): void
+    {
+        $row = $this->userSettings()->firstOrNew([]);
+
+        $settings = $row->settings ?? [];
+        $settings[$key] = $value;
+
+        $row->user_id = $this->getKey();
+        $row->settings = $settings;
+        $row->save();
+
+        $this->setRelation('userSettings', $row);
+    }
+
+    /**
+     * Should the platform show in-body help hints (`?` badges and popovers) to
+     * this user?
+     *
+     * DEFAULT ON. Guidance is the point of the feature, so an account that has
+     * never expressed a preference gets the help; only an explicit opt-out - a
+     * user who has told us the hints are noise - turns them off.
+     */
+    public function hintsEnabled(): bool
+    {
+        return (bool) $this->preference('hints_enabled', true);
+    }
+
+    /** Turn the global hint preference on or off for this user. */
+    public function setHintsEnabled(bool $enabled): void
+    {
+        $this->setPreference('hints_enabled', $enabled);
     }
 
     /**

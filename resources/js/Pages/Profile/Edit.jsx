@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, usePage } from '@inertiajs/react';
+import { useTour } from '@/Components/Onboarding/OnboardingProvider';
 import DeleteUserForm from './Partials/DeleteUserForm';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
@@ -33,6 +34,10 @@ export default function Edit({ mustVerifyEmail, status, profile = {}, avatarUrl 
     // Operator guardrail: when false, the SSA password form is replaced with the
     // CLI instructions (config/platform.php -> PasswordGuard).
     const { ssaSelfServicePassword } = usePlatformBranding();
+
+    // Re-opens the role-specific guide in place — no navigation, no redirect to
+    // this page (which is what the previous POST-based link did).
+    const { openTour, canOpen: canReplayTour } = useTour();
 
     // CONTEXT SCOPE: true when a Software Super Admin is viewing ANOTHER
     // workspace. The profile fields must not show the operator's own credentials
@@ -93,19 +98,24 @@ export default function Edit({ mustVerifyEmail, status, profile = {}, avatarUrl 
                             ) : (
                                 <span className="text-[11px] italic text-slate-400">No role assigned</span>
                             )}
-                            {/* Replay the role-specific onboarding guide on demand. */}
-                            <Link
-                                href={route('onboarding.replay')}
-                                method="post"
-                                as="button"
+                            {/* Replay the role-specific onboarding guide on demand.
+                                A BUTTON, not a link: the guide is re-opened in place
+                                from the shared props. The old form posted to
+                                /onboarding/replay, which navigated the user away
+                                (landing them back on this profile page) instead of
+                                showing them the tour they asked for. */}
+                            <button
+                                type="button"
+                                onClick={openTour}
                                 data-testid="replay-onboarding"
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100"
+                                disabled={!canReplayTour}
+                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50"
                             >
                                 <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                                 Replay guide
-                            </Link>
+                            </button>
                         </div>
                     </div>
 

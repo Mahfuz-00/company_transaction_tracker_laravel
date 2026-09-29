@@ -207,6 +207,16 @@ export const NAV_SECTIONS = [
                 match: 'ssa.bug-reports.*',
                 icon: 'bug',
             },
+            {
+                // The support assistant's escalation queue — where answering a
+                // question TEACHES the assistant, so it handles that question
+                // autonomously next time. SSA-only and cross-tenant, like the two
+                // queues above it.
+                label: 'Support Assistant',
+                route: 'ssa.assistant.index',
+                match: 'ssa.assistant.*',
+                icon: 'assistant',
+            },
         ],
     },
     {

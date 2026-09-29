@@ -59,7 +59,7 @@ function StepIcon({ name, className = 'h-5 w-5' }) {
     );
 }
 
-export default function OnboardingModal({ guide = null, open = false, onClose = () => { } }) {
+export default function OnboardingModal({ guide = null, open = false, onClose = () => { }, recordCompletion = true }) {
     const [step, setStep] = useState(0);
     const [saving, setSaving] = useState(false);
 
@@ -86,8 +86,26 @@ export default function OnboardingModal({ guide = null, open = false, onClose = 
     const isLast = step === total - 1;
     const current = steps[step];
 
-    /** Record completion server-side, then close locally. */
+    /**
+     * Finish the walkthrough.
+     *
+     * `recordCompletion` distinguishes the two ways this modal is opened:
+     *
+     *   - FIRST LOGIN (true): the server handed us the guide because the account
+     *     has never seen it. Finishing must record that fact, or the tour returns
+     *     on every page load.
+     *   - A DELIBERATE REPLAY (false): the account has ALREADY completed the guide
+     *     and asked to see it again. There is nothing to record, so no request is
+     *     sent - which is what makes "Show me around" an instant, in-place action
+     *     with no redirect instead of a round-trip that navigates away (and used to
+     *     bounce the user to their profile page).
+     */
     const finish = () => {
+        if (!recordCompletion) {
+            onClose();
+            return;
+        }
+
         setSaving(true);
         router.post(route('onboarding.complete'), {}, {
             preserveScroll: true,
