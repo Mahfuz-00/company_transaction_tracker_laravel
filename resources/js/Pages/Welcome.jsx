@@ -2,6 +2,7 @@ import React from 'react';
 import { Head } from '@inertiajs/react';
 
 import ThemeProvider from '@/Components/ThemeProvider';
+import SupportAssistant from '@/Components/Assistant/SupportAssistant';
 import { LandingAnimationStyles } from '@/Components/Landing/LandingPrimitives';
 import LandingHeader from '@/Components/Landing/LandingHeader';
 import HeroSection from '@/Components/Landing/HeroSection';
@@ -11,7 +12,6 @@ import WorkflowAnimation from '@/Components/Landing/WorkflowAnimation';
 import PricingGrid from '@/Components/Landing/PricingGrid';
 import CTASection from '@/Components/Landing/CTASection';
 import LandingFooter from '@/Components/Landing/LandingFooter';
-import SupportAssistant from '@/Components/Assistant/SupportAssistant';
 
 /**
  * Public landing page.

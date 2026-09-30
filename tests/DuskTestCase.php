@@ -39,6 +39,8 @@ abstract class DuskTestCase extends BaseTestCase
 
         $this->migrateDuskDatabase();
 
+        $this->useCompiledAssetsForDusk();
+
         /*
          * AUTO-DISMISS THE FIRST-LOGIN TOUR ON EVERY loginAs().
          *
@@ -85,7 +87,72 @@ abstract class DuskTestCase extends BaseTestCase
          * 419. Disabling ONLY the CSRF middleware keeps every other middleware
          * (auth, role:, permission:) active, so the security assertions still hold.
          */
-        $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class);
+        /*
+         * Several tests ALSO make Laravel HTTP calls directly (actingAs()->post())
+         * to assert server-side effects (a flash message, a 403, a DB write). Those
+         * calls run through the full HTTP kernel, so CSRF would reject them with a
+         * 419. Disabling ONLY the CSRF middleware keeps every other middleware
+         * (auth, role:, permission:) active, so the security assertions still hold.
+         *
+         * BOTH CLASSES ARE NAMED DELIBERATELY. Laravel 11/12 renamed
+         * VerifyCsrfToken to ValidateCsrfToken, and `withoutMiddleware()` matches by
+         * EXACT class name - so disabling only the old one silently let a 419
+         * through in the guest tests that POST directly (assistant.ask), producing
+         * a failure that looks like broken routing. DuskSupport::httpAs() already
+         * disables both; this keeps the base class consistent with it.
+         */
+        $this->withoutMiddleware([
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+            \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+        ]);
+    }
+
+    /**
+     * SERVE THE COMPILED BUILD TO THE BROWSER, NOT THE VITE DEV SERVER.
+     *
+     * WHY THIS IS NECESSARY
+     * ---------------------
+     * Laravel's Vite integration switches to the dev server whenever
+     * `public/hot` exists, reading the URL out of that file. On this machine Vite
+     * binds to IPv6 loopback (`http://[::1]:5173`), which the ChromeDriver-managed
+     * Chrome cannot reach - so the module bundle never loads, React never mounts,
+     * and EVERY browser test fails with a 20-second `waitFor` timeout for text
+     * that is in fact rendered by the component. The failure looks like a broken
+     * page rather than a network problem, which is what makes it so misleading.
+     *
+     * The compiled build in `public/build` is a static, dependency-free bundle
+     * that any browser can load, so pointing the suite at it makes the browser
+     * tests HERMETIC: they no longer depend on a dev server running, on which
+     * port/stack it bound to, or on the machine's IPv6 configuration.
+     *
+     * HOW IT WORKS
+     * ------------
+     * `Vite::useHotFile()` swaps the hot-file path for the duration of the
+     * process. Pointing it at a path that does not exist makes `isRunningHot()`
+     * false (Laravel checks `file_exists`), so the compiled manifest is used
+     * instead. Nothing is written to disk and the developer's real
+     * `public/hot` - and their running Vite server - are left untouched.
+     *
+     * If no build exists yet, the helper says so rather than letting the suite
+     * fail with a confusing blank page: the fix is `npm run build`.
+     */
+    protected function useCompiledAssetsForDusk(): void
+    {
+        $manifest = public_path('build/manifest.json');
+
+        if (! file_exists($manifest)) {
+            fwrite(
+                STDERR,
+                PHP_EOL.'[dusk] No compiled assets found at public/build/manifest.json.'.PHP_EOL
+                .'[dusk] Run `npm run build` (or `npm run dev`) before the browser suite.'.PHP_EOL
+            );
+
+            return;
+        }
+
+        \Illuminate\Support\Facades\Vite::useHotFile(
+            storage_path('framework/dusk-no-hot-file')
+        );
     }
 
     protected function tearDown(): void

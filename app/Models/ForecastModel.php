@@ -73,9 +73,29 @@ class ForecastModel extends Model
         return static::withoutTenantScope()
             ->where('institution_id', $institutionId)
             ->where('model', $model)
-            ->when($month !== null, fn ($q) => $q->where('period_month', $month))
+            // Compare on the CALENDAR DAY, not the raw string: `period_month` is a
+            // DATE column with a `date` cast, so it is stored as a full datetime
+            // (`2026-09-01 00:00:00`) and a bare `where('period_month', '2026-09-01')`
+            // would never match it.
+            ->when($month !== null, fn ($q) => $q->whereDate('period_month', $month))
             ->orderByDesc('period_month')
             ->first();
+    }
+
+    /**
+     * The row for one institution/month/model, compared on the calendar day.
+     *
+     * A named scope rather than a raw `where` so every caller gets the same
+     * date-comparison semantics - the mismatch between a stored date-time and a
+     * bare `Y-m-d` string is exactly what made the monthly training run fail on
+     * its second execution for a month.
+     */
+    public function scopeForMonth($query, ?int $institutionId, string $month, string $model = 'monthly-v1')
+    {
+        return $query
+            ->where('institution_id', $institutionId)
+            ->whereDate('period_month', $month)
+            ->where('model', $model);
     }
 
     /**

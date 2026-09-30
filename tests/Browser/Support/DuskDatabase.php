@@ -285,6 +285,32 @@ trait DuskDatabase
             /* ---- Intelligence modules ---- */
             'anomalies',
             'saved_reports',
+
+            /*
+             * Self-learning support assistant.
+             *
+             * CHILDREN BEFORE PARENTS: messages and escalations both carry a
+             * foreign key into threads/knowledge, so they must go first or the
+             * delete trips the FK constraint.
+             *
+             * These tables MUST be cleared between tests. The assistant suite
+             * seeds the corpus and asserts on exact counts (`times_used`,
+             * `AssistantEscalation::count()`), so rows left over from an earlier
+             * test would make a later one fail or pass depending on run order -
+             * a flake that reads as a genuine bug.
+             */
+            'assistant_messages',
+            'assistant_escalations',
+            'assistant_threads',
+            'assistant_knowledge',
+
+            /*
+             * Trained model weights + the persisted 3-month rolling forecast.
+             * One authoritative row per (institution, month), so a stale row from
+             * a previous test would be picked up instead of the fixture's.
+             */
+            'forecast_models',
+
             'forecast_embeddings',
             'forecast_benchmarks',
             'fx_rates',

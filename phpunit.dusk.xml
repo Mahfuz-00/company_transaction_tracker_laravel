@@ -6,7 +6,8 @@
          stopOnError="false"
          stopOnFailure="false"
          cacheDirectory=".phpunit.cache"
-         backupStaticProperties="false">
+         backupStaticProperties="false"
+         bootstrap="tests/dusk-bootstrap.php">
     <testsuites>
         <testsuite name="Browser Test Suite">
             <directory suffix="Test.php">./tests/Browser</directory>

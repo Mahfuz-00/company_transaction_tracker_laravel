@@ -310,18 +310,46 @@ class ForecastTrainer
     /** Write (or replace) this month's model row. */
     protected function persist(Carbon $period, array $result): ForecastModel
     {
-        return ForecastModel::withoutTenantScope()->updateOrCreate(
-            [
-                'institution_id' => $this->institution?->id,
-                'period_month' => $period->toDateString(),
-                'model' => static::MODEL,
-            ],
-            [
+        /*
+         * MATCH ON THE DATE ONLY, NOT THE RAW STRING.
+         *
+         * `period_month` is a DATE column with a `date` cast, so Eloquent
+         * serialises it to a full datetime (`2026-09-01 00:00:00`). A match built
+         * from the bare string `'2026-09-01'` therefore never equals the stored
+         * value, `updateOrCreate` finds nothing, and the second run for the same
+         * month attempts a fresh INSERT - which the (institution, period, model)
+         * UNIQUE index correctly rejects with a constraint violation.
+         *
+         * The symptom is a crash on the SECOND training run for a month, i.e.
+         * exactly when idempotency matters. `whereDate` compares on the calendar
+         * day and sidesteps the string/timestamp mismatch entirely.
+         */
+        $month = $period->toDateString();
+
+        $model = ForecastModel::withoutTenantScope()
+            ->where('institution_id', $this->institution?->id)
+            ->whereDate('period_month', $month)
+            ->where('model', static::MODEL)
+            ->first();
+
+        if ($model) {
+            $model->forceFill([
                 'basis' => $result['basis'],
                 'weights' => $result['weights'],
                 'metrics' => $result['metrics'],
-            ]
-        );
+            ])->save();
+
+            return $model;
+        }
+
+        return ForecastModel::withoutTenantScope()->create([
+            'institution_id' => $this->institution?->id,
+            'period_month' => $month,
+            'model' => static::MODEL,
+            'basis' => $result['basis'],
+            'weights' => $result['weights'],
+            'metrics' => $result['metrics'],
+        ]);
     }
 
     /* ------------------------------------------------------------------ *
@@ -348,10 +376,10 @@ class ForecastTrainer
             ? Carbon::createFromFormat('Y-m', $month)->startOfMonth()
             : now()->startOfMonth();
 
+        // Match on the calendar day (see scopeForMonth) - a bare string compare
+        // would miss the stored date-time and re-train on every run.
         $model = ForecastModel::withoutTenantScope()
-            ->where('institution_id', $this->institution?->id)
-            ->where('model', static::MODEL)
-            ->where('period_month', $period->toDateString())
+            ->forMonth($this->institution?->id, $period->toDateString())
             ->first();
 
         // Train on demand when the schedule has not run yet, so the forecast is
@@ -360,9 +388,7 @@ class ForecastTrainer
             $this->train($period->format('Y-m'));
 
             $model = ForecastModel::withoutTenantScope()
-                ->where('institution_id', $this->institution?->id)
-                ->where('model', static::MODEL)
-                ->where('period_month', $period->toDateString())
+                ->forMonth($this->institution?->id, $period->toDateString())
                 ->first();
         }
 
