@@ -268,9 +268,22 @@ export default function Builder({ catalogue = [], reports = [], options = {} }) 
                                             {result.columns?.label} · {result.columns?.value}
                                         </p>
                                     </div>
-                                    <p className="text-lg font-extrabold text-slate-900">
-                                        Total: {result.total}
-                                    </p>
+                                    <div className="flex items-center gap-3">
+                                        <form method="POST" action={route('meals.report-builder.export')}>
+                                            <input type="hidden" name="_token" value={document.querySelector('meta[name="csrf-token"]')?.content || ''} />
+                                            <input type="hidden" name="definition" value={JSON.stringify({ ...definition, filters })} />
+                                            <button
+                                                type="submit"
+                                                data-testid="builder-export-csv"
+                                                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs"
+                                            >
+                                                Export CSV
+                                            </button>
+                                        </form>
+                                        <p className="text-lg font-extrabold text-slate-900">
+                                            Total: {result.total}
+                                        </p>
+                                    </div>
                                 </div>
 
                                 <div className="max-h-[30rem] overflow-y-auto">

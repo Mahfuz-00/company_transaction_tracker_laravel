@@ -90,7 +90,7 @@ export default function Login({ status, canResetPassword }) {
                     providers={oauth}
                     requireInviteCode={ssoNeedsCode}
                     inviteCode={inviteCode}
-                    subtitle="Or sign in with"
+                    subtitle="Or continue with"
                 />
             }
             footer={

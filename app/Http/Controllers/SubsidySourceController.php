@@ -97,6 +97,18 @@ class SubsidySourceController extends Controller
             return back()->withErrors(['name' => 'A funding source with this key already exists.']);
         }
 
+        // Percentage validation: Total active subsidies allocation percentage must not exceed 100%
+        if (isset($data['percentage']) && $data['percentage'] > 0) {
+            $currentTotal = (float) SubsidySource::query()
+                ->where(fn ($q) => $q->whereNull('institution_id')->orWhere('institution_id', $institution?->id))
+                ->where('is_active', true)
+                ->sum('percentage');
+
+            if ($currentTotal + (float) $data['percentage'] > 100.0) {
+                return back()->withErrors(['percentage' => 'Total subsidy allocation rules cannot exceed 100%. Current total is ' . $currentTotal . '%.']);
+            }
+        }
+
         SubsidySource::create($data);
 
         return back()->with('success', "Funding source \"{$data['name']}\" added.");
@@ -119,6 +131,19 @@ class SubsidySourceController extends Controller
             'description' => ['nullable', 'string', 'max:500'],
             'is_active' => ['boolean'],
         ]);
+
+        $institution = Institution::current();
+        if (isset($data['percentage']) && $data['percentage'] > 0 && ($data['is_active'] ?? $subsidySource->is_active)) {
+            $otherTotal = (float) SubsidySource::query()
+                ->where('id', '!=', $subsidySource->id)
+                ->where(fn ($q) => $q->whereNull('institution_id')->orWhere('institution_id', $institution?->id))
+                ->where('is_active', true)
+                ->sum('percentage');
+
+            if ($otherTotal + (float) $data['percentage'] > 100.0) {
+                return back()->withErrors(['percentage' => 'Total subsidy allocation rules cannot exceed 100%. Other sources total ' . $otherTotal . '%.']);
+            }
+        }
 
         $subsidySource->update($data);
 

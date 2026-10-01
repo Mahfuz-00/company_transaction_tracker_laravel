@@ -1,6 +1,7 @@
 import React from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { PageHint } from '@/Components/Help/HelpHint';
+import { PageHint, HelpBadge } from '@/Components/Help/HelpHint';
+import { useTour } from '@/Components/Onboarding/OnboardingProvider';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, router } from '@inertiajs/react';
@@ -12,12 +13,15 @@ import { Head, Link, router } from '@inertiajs/react';
  * and manager. No pooled institution figures ever appear here.
  */
 
-function StatCard({ label, value, hint, tone = 'text-slate-900', icon }) {
+function StatCard({ label, value, hint, tone = 'text-slate-900', icon, help = null }) {
     return (
-        <div className="rounded-2xl border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
             <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+                        {help && <HelpBadge title={label}>{help}</HelpBadge>}
+                    </div>
                     <p className={`mt-1.5 truncate text-2xl font-extrabold ${tone}`}>{value}</p>
                     {hint && <p className="mt-1 text-xs font-medium text-slate-400">{hint}</p>}
                 </div>
@@ -59,9 +63,11 @@ export default function Dashboard({
     claims_pending = 0,
     months = [],
     month = '',
+    todayMenus = [],
 }) {
     const money = useMoney();
     const { t } = useTerminology();
+    const { openTour } = useTour();
 
     if (!hasMemberRecord) {
         return (
@@ -134,7 +140,7 @@ export default function Dashboard({
                     where to go next, without needing the first-login tour again. */}
                 <PageHint
                     title="Your personal meal account"
-                    guideHref={route('profile.edit')}
+                    onTourClick={openTour}
                 >
                     Everything on this page belongs to you alone: your balance, your
                     meals, your deposits. No one else's figures appear here. {' '}
@@ -143,6 +149,39 @@ export default function Dashboard({
                         totals.
                     </strong>
                 </PageHint>
+
+                {/* Today's Menu notification / alert card */}
+                {todayMenus && todayMenus.length > 0 && (
+                    <div data-testid="today-menu-banner" className="rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50/90 to-sky-50/90 p-5 shadow-sm">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-xs">
+                                    🍽️
+                                </span>
+                                <div>
+                                    <h4 className="text-sm font-bold text-slate-900">Today&apos;s Active Menu</h4>
+                                    <p className="text-xs text-slate-500">Live menu published by your meal manager for today.</p>
+                                </div>
+                            </div>
+                            <span className="rounded-full bg-indigo-600 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                                Today
+                            </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {todayMenus.map((menu) => (
+                                <div key={menu.id} className="rounded-xl border border-indigo-100 bg-white p-3 shadow-xs">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold capitalize text-indigo-700">{menu.meal_type}</span>
+                                        <span className="text-[11px] font-medium text-slate-400">{menu.title}</span>
+                                    </div>
+                                    <p className="mt-1.5 text-xs text-slate-700 font-medium">
+                                        {menu.items && menu.items.length > 0 ? menu.items.join(', ') : 'Special Menu'}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Balance hero */}
                 <div
@@ -188,6 +227,7 @@ export default function Dashboard({
                         value={money(summary.lifetime_deposits ?? 0, false)}
                         tone="text-emerald-600"
                         hint={`${money(summary.month_deposited ?? 0)} this month`}
+                        help="Total sum of money deposited into your personal mess meal account since opening."
                         icon="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33"
                     />
                     <StatCard
@@ -195,6 +235,7 @@ export default function Dashboard({
                         value={summary.month_meals ?? 0}
                         tone="text-[var(--accent)]"
                         hint={`${summary.lifetime_meals ?? 0} meals all time`}
+                        help="Number of meals consumed by you during the selected month period."
                         icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                     />
                     <StatCard
@@ -202,6 +243,7 @@ export default function Dashboard({
                         value={money(summary.month_meal_cost ?? 0, false)}
                         tone="text-rose-600"
                         hint={`${summary.month_meals ?? 0} × ${money(summary.cost_per_meal ?? 0, false)} per meal`}
+                        help="Total cost charged for all meals consumed during this month based on the effective meal rate."
                         icon="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                     <StatCard
@@ -209,6 +251,7 @@ export default function Dashboard({
                         value={money(summary.cost_per_meal ?? 0, false)}
                         tone="text-slate-900"
                         hint="Current rate for your institution"
+                        help="Current calculated cost for a single meal: (Total Expenses - Total Subsidies) / Total Meals."
                         icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8"
                     />
                 </div>

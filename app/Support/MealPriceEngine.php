@@ -72,6 +72,53 @@ class MealPriceEngine
     }
 
     /**
+     * Rate calculated based on configured institution period: daily, weekly, or monthly.
+     */
+    public static function rateForConfiguredPeriod(?Carbon $date = null, ?Institution $institution = null): float
+    {
+        $institution ??= Institution::current();
+        $date = $date ? $date->copy() : now();
+        $period = $institution?->meal_price_period ?? 'monthly';
+
+        if ($period === 'daily') {
+            $expenses = (float) MealExpense::query()
+                ->when($institution, fn ($q) => $q->where('institution_id', $institution->id))
+                ->whereDate('created_at', $date->toDateString())
+                ->whereNull('reversed_at')
+                ->sum('amount');
+
+            $meals = (int) MealEntry::query()
+                ->when($institution, fn ($q) => $q->where('institution_id', $institution->id))
+                ->whereDate('date', $date->toDateString())
+                ->selectRaw('COALESCE(SUM(breakfast + lunch + dinner), 0) as total')
+                ->value('total');
+
+            return $meals > 0 ? round(max(0.0, $expenses) / $meals, 4) : 0.0;
+        }
+
+        if ($period === 'weekly') {
+            $start = $date->copy()->startOfWeek();
+            $end = $date->copy()->endOfWeek();
+
+            $expenses = (float) MealExpense::query()
+                ->when($institution, fn ($q) => $q->where('institution_id', $institution->id))
+                ->whereBetween('created_at', [$start, $end])
+                ->whereNull('reversed_at')
+                ->sum('amount');
+
+            $meals = (int) MealEntry::query()
+                ->when($institution, fn ($q) => $q->where('institution_id', $institution->id))
+                ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+                ->selectRaw('COALESCE(SUM(breakfast + lunch + dinner), 0) as total')
+                ->value('total');
+
+            return $meals > 0 ? round(max(0.0, $expenses) / $meals, 4) : 0.0;
+        }
+
+        return static::rateForMonth($date->format('Y-m'), $institution);
+    }
+
+    /**
      * The raw components behind the rate, so a UI can SHOW the arithmetic rather
      * than just the answer. A number nobody can audit is a number nobody trusts.
      *

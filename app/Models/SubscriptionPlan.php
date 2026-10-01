@@ -91,4 +91,9 @@ class SubscriptionPlan extends Model
     {
         return $this->manager_limit === -1 ? 'Unlimited' : (string) $this->manager_limit;
     }
+
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
 }

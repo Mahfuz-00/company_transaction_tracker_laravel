@@ -81,6 +81,8 @@ class InstitutionController extends Controller
                 // users, so it is no longer configured here.
                 'logo_url' => $institution->logoUrl(),
                 'banner_url' => $institution->bannerUrl(),
+                'meal_price_period' => $institution->meal_price_period ?? 'monthly',
+                'meal_manager_roles' => (int) ($institution->meal_manager_roles ?? 0),
             ] : null,
             'types' => collect(Institution::TYPES)
                 ->map(fn ($preset, $key) => [
@@ -125,6 +127,8 @@ class InstitutionController extends Controller
             // A real IANA timezone only - the UI offers a dropdown, and this
             // rejects any crafted value that is not on that list.
             'timezone' => ['nullable', 'string', Rule::in(Timezones::all())],
+            'meal_price_period' => ['nullable', 'string', Rule::in(['daily', 'weekly', 'monthly'])],
+            'meal_manager_roles' => ['nullable', 'integer', 'min:0', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'contact_phone' => ['nullable', 'string', 'max:30'],

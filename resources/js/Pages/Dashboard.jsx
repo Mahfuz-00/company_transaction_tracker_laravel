@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { HelpBadge, PageHint } from '@/Components/Help/HelpHint';
+import { useTour } from '@/Components/Onboarding/OnboardingProvider';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { Head, Link } from '@inertiajs/react';
@@ -124,6 +125,7 @@ export default function Dashboard({
 }) {
     const money = useMoney();
     const { t, tTitle } = useTerminology();
+    const { openTour } = useTour();
     const [expenseView, setExpenseView] = useState('doughnut');
 
     // Terminology-aware nouns, so a company sees "Employees" and a dorm
@@ -298,7 +300,7 @@ export default function Dashboard({
                     rediscover the tour. Survives the first-login modal. */}
                 <PageHint
                     title="Your workspace at a glance"
-                    guideHref={route('profile.edit')}
+                    onTourClick={openTour}
                 >
                     The shared meal pool, today's and this month's meal counts, member
                     balances and the recent ledger. Every figure is scoped to your

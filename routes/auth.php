@@ -19,6 +19,16 @@ Route::middleware('guest')->group(function () {
 
     Route::post('register', [RegisteredUserController::class, 'store']);
 
+    // Paid Institution Onboarding & Registration Flow
+    Route::get('onboarding/register', [\App\Http\Controllers\Auth\PaidInstitutionRegistrationController::class, 'create'])
+        ->name('onboarding.institution.register');
+    Route::post('onboarding/register', [\App\Http\Controllers\Auth\PaidInstitutionRegistrationController::class, 'store'])
+        ->name('onboarding.institution.store');
+    Route::get('onboarding/gateway/{reference}', [\App\Http\Controllers\Auth\PaidInstitutionRegistrationController::class, 'gateway'])
+        ->name('onboarding.payment.gateway');
+    Route::post('onboarding/gateway/{reference}/complete', [\App\Http\Controllers\Auth\PaidInstitutionRegistrationController::class, 'completePayment'])
+        ->name('onboarding.payment.complete');
+
     /*
      * LIVE INVITE-CODE VALIDATION.
      *

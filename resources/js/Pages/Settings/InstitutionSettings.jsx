@@ -92,6 +92,8 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
         subtitle: institution?.subtitle || '',
         type: institution?.type || 'general_mess',
         timezone: institution?.timezone || 'UTC',
+        meal_price_period: institution?.meal_price_period || 'monthly',
+        meal_manager_roles: institution?.meal_manager_roles ?? 0,
         address: institution?.address || '',
         contact_email: institution?.contact_email || '',
         contact_phone: institution?.contact_phone || '',
@@ -470,6 +472,50 @@ export default function InstitutionSettings({ institution, types = [], termKeys 
                                 {overrideCount} custom term{overrideCount === 1 ? '' : 's'} applied.
                             </p>
                         )}
+                    </section>
+
+                    {/* Meal Price Calculation Period & Manager Seats */}
+                    <section className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs sm:p-7">
+                        <div className="border-b border-slate-100 pb-4">
+                            <h3 className="text-base font-bold text-slate-900">Meal Calculation &amp; Manager Configuration</h3>
+                            <p className="mt-0.5 text-xs text-slate-500">
+                                Configure the cadence of meal price calculations and limits for meal manager roles.
+                            </p>
+                        </div>
+
+                        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="mb-1.5 block text-xs font-semibold text-slate-700">Meal Price Period</label>
+                                <select
+                                    value={data.meal_price_period}
+                                    onChange={(e) => setData('meal_price_period', e.target.value)}
+                                    disabled={!canManage}
+                                    data-testid="meal-price-period-select"
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                                >
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
+                                <p className="mt-1 text-[11px] text-slate-400">Controls how meal price is computed across tables, invoices, and analytics.</p>
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 block text-xs font-semibold text-slate-700">Configured Meal Manager Roles (Seats)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="50"
+                                    value={data.meal_manager_roles}
+                                    onChange={(e) => setData('meal_manager_roles', parseInt(e.target.value, 10) || 0)}
+                                    disabled={!canManage}
+                                    data-testid="meal-manager-roles-input"
+                                    placeholder="0 for unlimited"
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+                                />
+                                <p className="mt-1 text-[11px] text-slate-400">0 means unlimited. Institute admins can also assign themselves as managers and meal members.</p>
+                            </div>
+                        </div>
                     </section>
 
                     {/* Locale / Regional (Currency removed, timezone only) */}

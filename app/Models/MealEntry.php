@@ -26,7 +26,7 @@ class MealEntry extends Model
     use BelongsToInstitution;
     use HasFactory;
 
-    protected $fillable = ['institution_id', 'student_id', 'date', 'breakfast', 'lunch', 'dinner', 'recorded_by', 'notes'];
+    protected $fillable = ['institution_id', 'student_id', 'date', 'breakfast', 'lunch', 'dinner', 'recorded_by', 'given_by', 'notes'];
 
     /**
      * Casts turn raw column values into richer PHP types on read: `date` becomes
@@ -50,6 +50,12 @@ class MealEntry extends Model
     public function recorder()
     {
         return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    /** The staff member / meal manager who gave or logged the meal entries. */
+    public function givenBy()
+    {
+        return $this->belongsTo(User::class, 'given_by');
     }
 
     /**

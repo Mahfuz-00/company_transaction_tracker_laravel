@@ -10,6 +10,7 @@ import InstitutionTypes from '@/Components/Landing/InstitutionTypes';
 import FeatureShowcase from '@/Components/Landing/FeatureShowcase';
 import WorkflowAnimation from '@/Components/Landing/WorkflowAnimation';
 import PricingGrid from '@/Components/Landing/PricingGrid';
+import FAQSection from '@/Components/Landing/FAQSection';
 import CTASection from '@/Components/Landing/CTASection';
 import LandingFooter from '@/Components/Landing/LandingFooter';
 
@@ -45,6 +46,7 @@ export default function Welcome({ plans = [], institutionCount = 0 }) {
                     <FeatureShowcase />
                     <WorkflowAnimation />
                     <PricingGrid plans={plans} />
+                    <FAQSection />
                     <CTASection />
                 </main>
 

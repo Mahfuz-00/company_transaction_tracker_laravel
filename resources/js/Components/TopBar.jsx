@@ -186,12 +186,8 @@ export default function TopBar({ title: titleOverride = null, onMenuClick = null
                     </span>
                 )}
 
-                {/* RIGHT: language, theme, notifications, profile */}
+                {/* RIGHT: theme, notifications, profile (Language choice exclusively in User Settings) */}
                 <div className="flex flex-shrink-0 items-center gap-1.5 sm:gap-2">
-                    {/* Language sits FIRST on the right rail: it is the setting a
-                        user is most likely to change immediately and then never
-                        touch again, so it should be findable without hunting. */}
-                    <LanguageSwitcher compact />
                     <ThemeToggle />
                     <NotificationBell />
                     <ProfileDropdown />
