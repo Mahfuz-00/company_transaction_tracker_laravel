@@ -160,10 +160,41 @@ class SupportAssistant
         $best = null;
         $bestScore = 0.0;
 
+        // 1. Vector RAG embedding similarity check
+        $queryVector = VectorPipeline::embed($question);
+        $vectorMatch = null;
+        $bestVectorSim = 0.0;
+
+        try {
+            $embeddings = \App\Models\AssistantEmbedding::query()
+                ->where(fn ($q) => $q->whereNull('institution_id')->orWhere('institution_id', $this->institution?->id))
+                ->whereNotNull('assistant_knowledge_id')
+                ->with('knowledge')
+                ->get();
+
+            foreach ($embeddings as $emb) {
+                if ($emb->knowledge && $emb->knowledge->is_active && is_array($emb->vector)) {
+                    $sim = VectorPipeline::cosineSimilarity($queryVector, $emb->vector);
+                    if ($sim > $bestVectorSim) {
+                        $bestVectorSim = $sim;
+                        $vectorMatch = $emb->knowledge;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fallback gracefully if embedding table not yet migrated or populated
+        }
+
+        // 2. Lexical & keyword overlap matching
         $candidates = AssistantKnowledge::searchable($this->institution?->id)->get();
 
         foreach ($candidates as $knowledge) {
             $score = $this->score($tokens, $knowledge);
+
+            // Boost score with vector similarity if this knowledge matched vector embedding
+            if ($vectorMatch && $vectorMatch->id === $knowledge->id && $bestVectorSim > 0.3) {
+                $score = max($score, ($score * 0.5) + ($bestVectorSim * 0.5));
+            }
 
             /*
              * A tenant's OWN answer beats a platform answer on a tie, because a

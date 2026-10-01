@@ -65,8 +65,22 @@ class MemberDashboardController extends Controller
         // in the UI rather than pretending it is exact historical pricing.
         $lifetimeMealCost = round($lifetimeMeals * $costPerMeal, 2);
 
+        // Today's approved menus
+        $todayMenus = \App\Models\MealMenu::query()
+            ->with(['options'])
+            ->whereDate('menu_date', now()->toDateString())
+            ->where('status', 'approved')
+            ->get()
+            ->map(fn ($m) => [
+                'id' => $m->id,
+                'title' => $m->title,
+                'meal_type' => $m->meal_type,
+                'items' => $m->options->pluck('name')->all(),
+            ]);
+
         return Inertia::render('Member/Dashboard', [
             'hasMemberRecord' => true,
+            'todayMenus' => $todayMenus,
             // The workspace this member belongs to, so the header can confirm the
             // account is linked and active (the fix for the "not linked" report).
             'institutionName' => $student->institution?->name,

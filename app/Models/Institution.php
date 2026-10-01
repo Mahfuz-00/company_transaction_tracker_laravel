@@ -33,6 +33,8 @@ class Institution extends Model
         'terminology',
         'settings',
         'subsidy_mode',
+        'meal_price_period',
+        'meal_manager_roles',
         'subscription_plan',
         'subscription_status',
         'subscription_plan',
@@ -50,6 +52,10 @@ class Institution extends Model
         'trial_ends_at',
         'trial_reminder_sent_at',
         'converted_at',
+        'onboarding_status',
+        'signup_reference',
+        'payment_gateway',
+        'payment_reference',
         'is_active',
     ];
 

@@ -76,7 +76,7 @@ export default function SsoButtons({
                     <div className="w-full border-t border-slate-200" />
                 </div>
                 <div className="relative flex justify-center">
-                    <span className="bg-white px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    <span data-testid="sso-divider-text" className="bg-white px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
                         {subtitle || 'Or continue with'}
                     </span>
                 </div>

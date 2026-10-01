@@ -200,6 +200,34 @@ class ReportBuilderController extends Controller
         return back()->with('reportResult', array_merge($result, ['report_name' => $savedReport->name]));
     }
 
+    /** Export report result to CSV. */
+    public function export(Request $request)
+    {
+        $definition = (array) $request->input('definition', []);
+
+        try {
+            $result = (new ReportBuilder)->run($definition);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $filename = 'report_' . ($result['dataset'] ?? 'data') . '_' . now()->format('Ymd_His') . '.csv';
+
+        return response()->streamDownload(function () use ($result) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, [$result['labels']['group'] ?? 'Group', $result['labels']['value'] ?? 'Value']);
+
+            foreach ($result['rows'] ?? [] as $row) {
+                fputcsv($handle, [$row['label'] ?? '', $row['value'] ?? '']);
+            }
+
+            fputcsv($handle, ['Total', $result['total'] ?? '']);
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
     /** Owner or an Institution Admin may change or remove a saved report. */
     protected function authoriseManage(Request $request, SavedReport $report): void
     {

@@ -27,6 +27,7 @@ class Claim extends Model
         'kind',
         'subject',
         'amount',
+        'adjust_balance',
         'entry_date',
         'breakfast',
         'lunch',
@@ -45,6 +46,7 @@ class Claim extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'adjust_balance' => 'boolean',
         'entry_date' => 'date',
         'claim_date' => 'date',
         'reviewed_at' => 'datetime',
@@ -63,6 +65,7 @@ class Claim extends Model
     public const SUBJECTS = [
         'deposit' => 'Missing deposit',
         'meal' => 'Missing meal entry',
+        'wrongful_meal' => 'Wrongfully counted meal',
         'other' => 'Other correction',
     ];
 

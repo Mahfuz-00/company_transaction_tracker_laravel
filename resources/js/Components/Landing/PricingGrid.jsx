@@ -67,7 +67,8 @@ export default function PricingGrid({ plans = [] }) {
                                     </ul>
 
                                     <Link
-                                        href={route('register')}
+                                        href={plan.is_free ? route('register') : route('onboarding.institution.register', { plan: plan.slug })}
+                                        data-testid={`choose-plan-${plan.slug || plan.id}`}
                                         className={`mt-8 inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-sm font-bold transition-all active:scale-[.98] ${featured ? 'bg-white text-indigo-700 hover:bg-indigo-50' : 'bg-indigo-600 text-white hover:bg-indigo-700'
                                             }`}
                                     >

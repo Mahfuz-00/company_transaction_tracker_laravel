@@ -248,14 +248,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('broadcasts.store')
         ->middleware('permission:notifications.announce');
 
-    // MEMBER-ONLY: a member's own claim submissions + status. Managers review
-    // claims through the separate /claims/review queue below.
+    // Member claims & disputes.
     Route::get('/claims', [ClaimController::class, 'index'])
         ->name('claims.index')
         ->middleware(['permission:claims.view', 'role:Member']);
     Route::post('/claims', [ClaimController::class, 'store'])
         ->name('claims.store')
         ->middleware('permission:claims.submit');
+
+    // Member Meal Schedules (Off/On notifications).
+    Route::get('/meals/schedules', [\App\Http\Controllers\Meals\MealScheduleController::class, 'index'])
+        ->name('meals.schedules.index');
+    Route::post('/meals/schedules', [\App\Http\Controllers\Meals\MealScheduleController::class, 'store'])
+        ->name('meals.schedules.store');
+    Route::get('/meals/schedules/review', [\App\Http\Controllers\Meals\MealScheduleController::class, 'review'])
+        ->name('meals.schedules.review');
+    Route::patch('/meals/schedules/{mealSchedule}/acknowledge', [\App\Http\Controllers\Meals\MealScheduleController::class, 'acknowledge'])
+        ->name('meals.schedules.acknowledge');
 
     // Manager review queue + decisions.
     Route::get('/claims/review', [ClaimController::class, 'review'])
@@ -799,6 +808,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('report-builder.destroy')->middleware('permission:meals.reports');
         Route::get('report-builder/{savedReport}/run', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'runSaved'])
             ->name('report-builder.run-saved')->middleware('permission:meals.reports');
+        Route::post('report-builder/export', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'export'])
+            ->name('report-builder.export')->middleware('permission:meals.reports');
 
         /*
          * MENU CYCLE & PROCUREMENT FORECASTS. Managing the menu is a planning act

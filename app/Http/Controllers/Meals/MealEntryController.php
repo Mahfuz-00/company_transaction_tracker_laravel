@@ -138,6 +138,7 @@ class MealEntryController extends Controller
                     'lunch' => $lunch,
                     'dinner' => $dinner,
                     'recorded_by' => auth()->id(),
+                    'given_by' => auth()->id(),
                 ];
 
                 if ($entry) {

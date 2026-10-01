@@ -69,6 +69,28 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        // Check if institution registration is awaiting payment or inactive
+        $user = Auth::user();
+        if ($user && $user->institution) {
+            if ($user->institution->onboarding_status === 'awaiting_payment') {
+                Auth::logout();
+                RateLimiter::hit($this->throttleKey());
+
+                throw ValidationException::withMessages([
+                    'email' => 'Your institution registration is awaiting payment. Please complete the subscription payment to activate your account.',
+                ]);
+            }
+
+            if (! $user->institution->is_active && ! $user->isSuperAdmin()) {
+                Auth::logout();
+                RateLimiter::hit($this->throttleKey());
+
+                throw ValidationException::withMessages([
+                    'email' => 'Your institution is currently inactive or pending review.',
+                ]);
+            }
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 

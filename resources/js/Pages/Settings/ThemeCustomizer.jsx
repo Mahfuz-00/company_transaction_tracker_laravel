@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import { useTheme, ACCENT_SOFT, ACCENT_HEX, RADIUS_PX, DENSITY_SCALE } from '@/Components/ThemeProvider';
 import ThemedText from '@/Components/UI/ThemedText';
 import useTranslation from '@/i18n/LocaleProvider';
@@ -24,7 +24,7 @@ export default function ThemeCustomizer({
     densityOptions = [],
     hintsEnabled = true,
 }) {
-    const { t } = useTranslation();
+    const { t, locale, supported, isCurrent } = useTranslation();
 
     const { data, setData, put, post, processing, errors } = useForm({
         mode: theme?.mode || 'light',
@@ -33,6 +33,17 @@ export default function ThemeCustomizer({
         density: theme?.density || 'comfortable',
         font: theme?.font || 'inter',
     });
+
+    const [savingLocale, setSavingLocale] = useState(false);
+
+    const changeLocale = (code) => {
+        if (isCurrent(code)) return;
+        setSavingLocale(true);
+        router.post(route('language.update'), { locale: code }, {
+            preserveScroll: true,
+            onFinish: () => setSavingLocale(false),
+        });
+    };
 
     /*
      * THE GLOBAL HINT PREFERENCE.
@@ -58,8 +69,7 @@ export default function ThemeCustomizer({
         setHintsOn(next);
         setSavingHints(true);
 
-        postHints(route('settings.hints.update'), {
-            data: { hints_enabled: next },
+        router.post(route('settings.hints.update'), { hints_enabled: next }, {
             preserveScroll: true,
             onFinish: () => setSavingHints(false),
         });
@@ -336,6 +346,46 @@ export default function ThemeCustomizer({
                     </div>
                 </div>
             </form>
+
+            {/*
+              * ---- LANGUAGE PREFERENCE ----
+              */}
+            <section
+                data-testid="language-preference"
+                className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+            >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0 max-w-xl">
+                        <h3 className="text-base font-bold text-slate-900">Language Preference</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                            Select your preferred language. The entire dashboard and user interface will update immediately.
+                            User-generated data and database text remain in their original language.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        {supported.map((lang) => {
+                            const active = isCurrent(lang.code);
+                            return (
+                                <button
+                                    key={lang.code}
+                                    type="button"
+                                    onClick={() => changeLocale(lang.code)}
+                                    disabled={savingLocale}
+                                    data-testid={`language-choice-${lang.code}`}
+                                    className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                                        active
+                                            ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-500/20'
+                                            : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {lang.label} ({lang.english})
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </section>
 
             {/*
               * ---- HELP & HINTS (personal preference) ----

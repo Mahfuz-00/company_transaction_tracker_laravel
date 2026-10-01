@@ -92,6 +92,7 @@ export default function ProfileDropdown() {
                 type="button"
                 onClick={() => setOpen((v) => !v)}
                 data-testid="profile-dropdown-trigger"
+                id="topbar-profile-trigger"
                 aria-haspopup="menu"
                 aria-expanded={open}
                 aria-label="Open user menu"

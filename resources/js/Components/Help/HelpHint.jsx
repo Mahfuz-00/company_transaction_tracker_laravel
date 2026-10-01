@@ -389,7 +389,7 @@ export function FieldHelp({ label, title, children, id = null }) {
  * Rendered by pages that want a constant orientation aid (noology: the modal is
  * gone, but the "what am I looking at" cue remains).
  */
-export function PageHint({ title = 'About this page', children, guideHref = null }) {
+export function PageHint({ title = 'About this page', children, guideHref = null, onTourClick = null }) {
     const { onboarding } = usePage().props;
     const role = onboarding?.role;
 
@@ -416,14 +416,24 @@ export function PageHint({ title = 'About this page', children, guideHref = null
                 </div>
             </div>
 
-            {guideHref && (
+            {onTourClick ? (
+                <button
+                    type="button"
+                    onClick={onTourClick}
+                    data-testid="page-hint-tour-trigger"
+                    className="flex-shrink-0 self-start rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50 sm:self-auto cursor-pointer"
+                >
+                    {role === 'ssa' ? 'Platform guide' : 'Show me around'}
+                </button>
+            ) : guideHref ? (
                 <a
                     href={guideHref}
+                    data-testid="page-hint-tour-trigger"
                     className="flex-shrink-0 self-start rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-semibold text-slate-600 transition-colors hover:bg-slate-50 sm:self-auto"
                 >
                     {role === 'ssa' ? 'Platform guide' : 'Show me around'}
                 </a>
-            )}
+            ) : null}
         </div>
     );
 }

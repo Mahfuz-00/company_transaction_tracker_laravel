@@ -121,7 +121,7 @@ export default function Register({ inviteCode = '', institutionName = null, role
                     requireInviteCode
                     inviteCode={data.invite_code}
                     inviteCodeValidated={invite.isValid}
-                    subtitle="Or sign up with"
+                    subtitle="Or continue with"
                     note="Your invite code above is used to place you in the right workspace."
                 />
             }
