@@ -51,6 +51,7 @@ import { Link } from '@inertiajs/react';
  * @param {node}   [props.sso]          - the SSO/OAuth block, rendered BELOW the form
  * @param {string} [props.introTitle]   - left-panel headline override
  * @param {string} [props.introBody]    - left-panel supporting paragraph
+ * @param {array}  [props.introFeatures]- left-panel capability rows (defaults provided)
  * @param {node}    props.children      - the authentication form itself
  */
 export default function AuthSplitLayout({
@@ -60,17 +61,30 @@ export default function AuthSplitLayout({
     sso = null,
     introTitle = 'Meals, deposits and dues — settled automatically.',
     introBody = 'One clear per-meal rate for your whole institution. No spreadsheets, no guesswork.',
+    introFeatures = null,
     children,
 }) {
     const { name, tagline, logoUrl } = usePlatformBranding();
 
+    /*
+     * The capability list is overridable so the Register screen can describe
+     * JOINING a workspace rather than signing in to one, while both screens keep
+     * an identical visual rhythm. Defaults reproduce the original three rows.
+     */
+    const features = introFeatures ?? [
+        { title: 'One rate, every member', body: 'Expenses ÷ meals, applied to every balance.' },
+        { title: 'Separate tenant workspaces', body: "Your institution's data stays yours alone." },
+        { title: 'Deposits, subsidies, vendors', body: 'One ledger, fully reconciled.' },
+    ];
+
     return (
         <ThemeProvider>
-            <div className="flex min-h-screen bg-white">
+            <div className="flex min-h-screen bg-[var(--surface)]">
                 {/* ---------------- LEFT: light introduction panel (desktop only) ---------------- */}
                 <aside
                     aria-hidden="true"
-                    className="relative hidden w-1/2 flex-col justify-between overflow-hidden border-r border-slate-200/60 bg-white px-12 py-12 lg:flex xl:px-16"
+                    className="relative hidden w-1/2 flex-col justify-between overflow-hidden border-r bg-[var(--surface)] px-12 py-12 lg:flex xl:px-16"
+                    style={{ borderColor: 'var(--border-color)' }}
                 >
                     {/*
                      * Ambient wash: ONE soft accent gradient plus a single
@@ -116,28 +130,21 @@ export default function AuthSplitLayout({
                         </p>
 
                         <ul className="mt-9 space-y-4">
-                            <Feature
-                                index={2}
-                                title="One rate, every member"
-                                body="Expenses ÷ meals, applied to every balance."
-                            />
-                            <Feature
-                                index={3}
-                                title="Separate tenant workspaces"
-                                body="Your institution's data stays yours alone."
-                            />
-                            <Feature
-                                index={4}
-                                title="Deposits, subsidies, vendors"
-                                body="One ledger, fully reconciled."
-                            />
+                            {features.map((feature, index) => (
+                                <Feature
+                                    key={feature.title}
+                                    index={index + 2}
+                                    title={feature.title}
+                                    body={feature.body}
+                                />
+                            ))}
                         </ul>
                     </div>
 
                     {/* Trust strip */}
                     <div
                         className="ap-stagger relative z-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400"
-                        style={{ '--ap-index': 5 }}
+                        style={{ '--ap-index': features.length + 2 }}
                     >
                         <span className="inline-flex items-center gap-2">
                             <ShieldIcon /> Encrypted credentials
@@ -208,8 +215,15 @@ export default function AuthSplitLayout({
 function Feature({ title, body, index = 0 }) {
     return (
         <li className="ap-stagger flex gap-3.5" style={{ '--ap-index': index }}>
-            <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 ring-1 ring-indigo-500/20">
-                <svg className="h-3.5 w-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-lg"
+                style={{ backgroundColor: 'var(--accent-soft)' }}>
+                <svg
+                    className="h-3.5 w-3.5"
+                    style={{ color: 'var(--accent)' }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.4" d="M5 13l4 4L19 7" />
                 </svg>
             </span>
@@ -224,7 +238,13 @@ function Feature({ title, body, index = 0 }) {
 /** Small shield glyph used by the trust strip. */
 function ShieldIcon() {
     return (
-        <svg className="h-3.5 w-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg
+            className="h-3.5 w-3.5"
+            style={{ color: 'var(--accent)' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+        >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
         </svg>
     );

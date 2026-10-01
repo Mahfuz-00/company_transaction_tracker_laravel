@@ -313,6 +313,19 @@ const ICONS = {
             'M12 12V8M9 4l1.5 2M15 4l-1.5 2M6 12H3M18 12h3M6 15l-2.5 1.5M18 15l2.5 1.5M6 9L3.5 7.5M18 9l2.5-1.5',
         ],
     },
+    /*
+     * THE SUPPORT ASSISTANT.
+     *
+     * A speech bubble with a spark — deliberately NOT the `bug` glyph (defects)
+     * nor `inbox` (enquiries): three different queues must not read as one
+     * destination in the sidebar.
+     */
+    assistant: {
+        paths: [
+            'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-5 4v-4z',
+            'M18.5 3.5l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7.7-1.6z',
+        ],
+    },
 
     /** Subsidies / Subsidy Sources - a hand holding a coin. */
     handCoins: {

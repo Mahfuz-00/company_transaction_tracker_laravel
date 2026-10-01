@@ -6,6 +6,7 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import GlobalLoadingIndicator from '@/Components/GlobalLoadingIndicator';
 import { FeedbackProvider } from '@/Components/Feedback/FeedbackProvider';
+import HintsProvider from '@/Components/Help/HintsProvider';
 import OnboardingProvider from '@/Components/Onboarding/OnboardingProvider';
 import { applyThemeTokens, resolveInitialTheme } from '@/Components/ThemeProvider';
 import { LocaleProvider } from '@/i18n/LocaleProvider';
@@ -75,6 +76,16 @@ createInertiaApp({
          */
         const onboarding = props?.initialPage?.props?.onboarding;
 
+        /*
+         * The global hint preference, read the same way (and for the same reason -
+         * HintsProvider also renders outside <App>).
+         *
+         * The VALUE here is only the initial state: HintsProvider itself follows
+         * every later Inertia visit, so flipping the switch in Settings takes effect
+         * on the redirect without a reload.
+         */
+        const hints = props?.initialPage?.props?.hints;
+
         root.render(
             /*
              * FeedbackProvider wraps the whole app (not just a layout) so flash
@@ -83,15 +94,20 @@ createInertiaApp({
              */
             <FeedbackProvider>
                 <LocaleProvider locale={locale}>
-                    <App {...props} />
+                    {/* One switch silences every `?` hint on the platform. Mounted
+                        ABOVE <App> so a badge anywhere in the tree can read it. */}
+                    <HintsProvider hints={hints}>
+                        <App {...props} />
 
-                    {/* Role-specific first-time onboarding. Mounted globally so the
-                        guide appears on whichever dashboard the user first lands on,
-                        without every page needing to render it. */}
-                    <OnboardingProvider onboarding={onboarding} />
+                        {/* Role-specific first-time onboarding, plus the manual
+                            "Show me around" trigger any screen can fire. Mounted
+                            globally so the guide appears on whichever dashboard the
+                            user first lands on. */}
+                        <OnboardingProvider onboarding={onboarding} />
 
-                    {/* One central spinner for every async request. */}
-                    <GlobalLoadingIndicator />
+                        {/* One central spinner for every async request. */}
+                        <GlobalLoadingIndicator />
+                    </HintsProvider>
                 </LocaleProvider>
             </FeedbackProvider>
         );

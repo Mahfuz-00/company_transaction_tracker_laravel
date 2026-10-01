@@ -59,6 +59,29 @@ Route::post('/contact', [\App\Http\Controllers\LandingController::class, 'contac
     ->name('landing.contact');
 
 /*
+ * THE SUPPORT ASSISTANT - PUBLIC.
+ *
+ * Deliberately OUTSIDE the auth group. The assistant is most useful at exactly the
+ * moment a visitor has a question and no account: on the landing page. Requiring a
+ * sign-in to ask "what does this cost?" would lose the enquiry.
+ *
+ * The controller owns the abuse rules (per-IP rate limiting and a thread token),
+ * and a guest's conversation is keyed by a random token rather than a sequential
+ * id, so conversations are not enumerable.
+ */
+Route::post('/assistant/ask', [\App\Http\Controllers\AssistantController::class, 'ask'])
+    ->middleware('throttle:30,1')
+    ->name('assistant.ask');
+
+Route::post('/assistant/messages/{message}/flag', [\App\Http\Controllers\AssistantController::class, 'flag'])
+    ->middleware('throttle:30,1')
+    ->name('assistant.flag');
+
+Route::post('/assistant/messages/{message}/helpful', [\App\Http\Controllers\AssistantController::class, 'helpful'])
+    ->middleware('throttle:30,1')
+    ->name('assistant.helpful');
+
+/*
  * LANGUAGE SWITCHING FOR A GUEST.
  *
  * The landing page and the auth screens are public, so a visitor must be able to
@@ -173,6 +196,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // In-app notifications. Every role sees their own; admins may broadcast.
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+
+    /*
+     * THE SUPPORT ASSISTANT - AUTHENTICATED.
+     *
+     * `history` returns the signed-in user's own conversation so reopening the
+     * panel continues where they left off. The ask/flag routes above are public and
+     * work for a signed-in user too, resolving their thread from their account.
+     */
+    Route::get('/assistant/history', [\App\Http\Controllers\AssistantController::class, 'history'])
+        ->name('assistant.history');
     Route::get('/notifications/latest', [NotificationController::class, 'latest'])->name('notifications.latest');
     Route::post('/notifications/announce', [NotificationController::class, 'announce']) ->name('notifications.announce');
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
@@ -324,6 +357,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/settings/theme', [ThemeController::class, 'edit'])->name('settings.theme.edit');
     Route::put('/settings/theme', [ThemeController::class, 'update'])->name('settings.theme.update');
     Route::post('/settings/theme/reset', [ThemeController::class, 'reset'])->name('settings.theme.reset');
+
+    /*
+     * PERSONAL PREFERENCES.
+     *
+     * Where the theme customiser stores HOW the product looks, this stores HOW it
+     * behaves FOR THIS PERSON. The only preference so far is the global hint/tooltip
+     * switch: one place to silence every `?` badge on the platform.
+     *
+     * Like the theme, it is deliberately ungated - every role (member included) owns
+     * their own guidance preference - and the controller scopes the write to
+     * `$request->user()`, so one account can never edit another's.
+     */
+    Route::post('/settings/hints', [\App\Http\Controllers\UserPreferenceController::class, 'updateHints'])
+        ->name('settings.hints.update');
 
     // Audit trail / activity log. Super Admins see everything; Institution
     // Admins see their own institution (scoped in the controller).
@@ -541,6 +588,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
      */
     Route::get('/platform/bug-reports', [BugReportController::class, 'index'])
         ->name('ssa.bug-reports.index')
+        ->middleware('role:Software Super Admin');
+
+    /*
+     * THE SUPPORT ASSISTANT'S ESCALATION QUEUE - SSA only.
+     *
+     * This is where the assistant LEARNS: answering an escalation writes a new
+     * corpus row, so the same question is handled autonomously next time. Gated on
+     * the global role (and re-asserted by the controller's own model scoping), so
+     * no tenant role can read another workspace's questions.
+     */
+    Route::get('/platform/assistant', [\App\Http\Controllers\AssistantQueueController::class, 'index'])
+        ->name('ssa.assistant.index')
+        ->middleware('role:Software Super Admin');
+    Route::patch('/platform/assistant/{escalation}', [\App\Http\Controllers\AssistantQueueController::class, 'update'])
+        ->name('ssa.assistant.update')
+        ->middleware('role:Software Super Admin');
+    Route::post('/platform/assistant/knowledge', [\App\Http\Controllers\AssistantQueueController::class, 'storeKnowledge'])
+        ->name('ssa.assistant.knowledge.store')
         ->middleware('role:Software Super Admin');
     Route::patch('/platform/bug-reports/{bugReport}', [BugReportController::class, 'update'])
         ->name('ssa.bug-reports.update')

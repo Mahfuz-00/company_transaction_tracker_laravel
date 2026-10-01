@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { router } from '@inertiajs/react';
 
 /**
  * FRONT-END i18n.
@@ -58,9 +59,43 @@ function lookup(messages, key) {
  * @param {node}   props.children
  */
 export function LocaleProvider({ locale, children }) {
-    const current = locale?.current ?? 'en';
-    const messages = locale?.messages ?? {};
-    const rtl = Boolean(locale?.rtl);
+    /*
+     * FOLLOW EVERY INERTIA VISIT.
+     *
+     * `locale` is handed down ONCE from `initialPage` (app.jsx reads it there
+     * because this provider must also wrap components that render OUTSIDE
+     * Inertia's <App>). Passing the initial page's value only means that after an
+     * Inertia visit the language NEVER changes: the switcher POSTs / GETs the new
+     * locale, the server applies and returns it, but the client keeps rendering
+     * the OLD <html lang> and the old dictionary until a full page reload.
+     *
+     * Subscribing to the router directly fixes that without reintroducing
+     * `usePage()` (which throws here - see the class docblock). The shared
+     * `locale` prop is present on every Inertia response, so a successful visit is
+     * all the signal needed.
+     */
+    const [serverLocale, setServerLocale] = useState(locale);
+
+    useEffect(() => {
+        setServerLocale(locale);
+    }, [locale]);
+
+    useEffect(() => {
+        const off = router.on('success', (event) => {
+            const next = event?.detail?.page?.props?.locale;
+
+            if (next) setServerLocale(next);
+        });
+
+        return () => {
+            // Inertia's router.on returns an unsubscribe function.
+            if (typeof off === 'function') off();
+        };
+    }, []);
+
+    const current = serverLocale?.current ?? 'en';
+    const messages = serverLocale?.messages ?? {};
+    const rtl = Boolean(serverLocale?.rtl);
 
     /**
      * Apply direction and lang to <html>.
@@ -108,11 +143,11 @@ export function LocaleProvider({ locale, children }) {
             t,
             locale: current,
             rtl,
-            supported: locale?.supported ?? [],
+            supported: serverLocale?.supported ?? [],
             /** Is this language currently active? */
             isCurrent: (code) => code === current,
         }),
-        [t, current, rtl, locale]
+        [t, current, rtl, serverLocale]
     );
 
     return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;

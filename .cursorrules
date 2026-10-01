@@ -1,0 +1,80 @@
+# NomNomytics — AI AGENT RULES
+#
+# This file is read by Cursor, Copilot, Windsurf, Cline, and similar tools.
+# Claude Code / Codex / Gemini read AGENTS.md — the rule below is duplicated
+# there verbatim and BOTH copies must stay in sync.
+#
+# =============================================================================
+# 1. DATABASE PROTECTION RULE — HIGHEST PRIORITY, NON-NEGOTIABLE
+# =============================================================================
+#
+# The developer's database is `database/database.sqlite`, selected by `.env`.
+# Tests use `database/testing.sqlite`, selected by `.env.testing` and
+# `.env.dusk.local`.
+#
+# NEVER run any command that could wipe, truncate, reset, or re-seed the
+# development database. In particular, NEVER run these without `--env=testing`:
+#
+#     php artisan migrate:fresh
+#     php artisan migrate:refresh
+#     php artisan db:wipe
+#     php artisan db:seed            (any destructive seeder)
+#
+# The Dusk suite TRUNCATES every table between tests. It is indiscriminate: it
+# deletes rows in whichever database it is pointed at. This repository has
+# ALREADY suffered data loss from exactly this — `.env` once pointed at the test
+# file, so every `php artisan dusk` silently erased the developer's work.
+#
+# BEFORE running anything destructive, verify the target:
+#
+#     php artisan tinker --execute="echo config('database.connections.sqlite.database');"
+#
+# It MUST print `database/testing.sqlite`. If it prints `database.sqlite`, STOP.
+#
+# ALSO NEVER:
+#   - edit `.env` to point DB_DATABASE at a test file
+#   - edit `.env.testing` / `.env.dusk.local` to point at `database.sqlite`
+#   - remove or weaken `assertDuskDatabaseIsDisposable()` in
+#     `tests/Browser/Support/DuskDatabase.php` (it is the enforcement point)
+#   - commit any `.sqlite` file
+#   - "fix" a failing test by resetting the developer's data
+#
+# Full detail: AGENTS.md -> "Database Protection Rule".
+#
+# =============================================================================
+# 2. TESTING
+# =============================================================================
+#
+# The suite is DUSK-ONLY, by project policy. `tests/Unit` and `tests/Feature`
+# do not exist and must not be re-added. All coverage lives in `tests/Browser/`.
+#
+#     php artisan dusk                      # the whole browser suite
+#     php artisan dusk tests/Browser/Guest  # one directory
+#
+# Prerequisites that silently break the suite (each fails misleadingly):
+#   - ChromeDriver must match the installed Chrome major version.
+#       php artisan dusk:chrome-driver <major>
+#   - `public/hot` must NOT exist, or assets load from a Vite dev server that is
+#     not running: the page returns 200, renders nothing, and logs no error.
+#       Remove-Item public\hot
+#   - SQLite must run in WAL mode (two processes write during Dusk). The pragmas
+#     live in `config/database.php`, NOT in the test bootstrap — the
+#     `artisan serve` process never runs that bootstrap.
+#
+# =============================================================================
+# 3. CONVENTIONS
+# =============================================================================
+#
+#   - Respond in the user's language.
+#   - Money is a JSON number; formatting comes from `/api/meta`. Never hard-code
+#     a currency symbol.
+#   - Terminology (Student / Employee / Boarder / Member) comes from the
+#     institution type via `useTerminology()`. Never hard-code a noun.
+#   - Multi-tenant: every tenant-owned model uses `BelongsToInstitution`. Never
+#     write a query that can see across institutions without an explicit,
+#     justified reason.
+#   - The Software Super Admin is web-only. The mobile API blocks it in three
+#     layers; do not remove any of them.
+#   - React providers that render as SIBLINGS of Inertia's `<App>` must take
+#     their page data as a PROP. Calling `usePage()` outside `<App>` throws and
+#     blanks the entire app.

@@ -3,6 +3,14 @@
 .env
 .env.backup
 .env.production
+# Dusk environment files: the local # ===========================================================================
+# DATABASE PROTECTION (see AGENTS.md)
+#
+# `.env.testing` and `.env.dusk.local` point the suite at a DISPOSABLE database.
+# They are ignored for the same reason `.env` is: they hold an APP_KEY and are
+# per-machine. `.env.testing` is committed ONLY when it contains no real secrets.
+# ===========================================================================
+.env.testing
 # Dusk environment files: the local .env.dusk.local holds a real APP_KEY and
 # must never be committed; CI generates .env.dusk on the runner.
 .env.dusk
@@ -25,10 +33,14 @@
 /vendor
 # SQLite databases are per-environment state, never source. Committing one would
 # let a local snapshot overwrite (or be shipped into) the production database.
+#
+# THIS INCLUDES THE TEST DATABASES. `testing.sqlite` and `dusk.sqlite` are
+# disposable artifacts of a test run, never fixtures to be shared.
 /database/*.sqlite
 /database/*.sqlite-journal
 /database/*.sqlite-wal
 /database/*.sqlite-shm
+/database/*.sqlite.pre-safety-backup
 # ---------------------------------------------------------------------------
 # LOCAL-ONLY MOCK / DEMO DATA.
 #

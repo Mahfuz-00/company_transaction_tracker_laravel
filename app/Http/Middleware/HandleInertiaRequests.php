@@ -228,6 +228,22 @@ class HandleInertiaRequests extends Middleware
                 'messages' => \App\Support\LocaleManager::messages(),
             ],
 
+            /*
+             * HELP HINTS (the in-body `?` badges).
+             *
+             * A PERSONAL preference, so it is resolved from the signed-in user's own
+             * `user_settings` row rather than from the institution. Shared on every
+             * response so any page can honour it without fetching anything - which is
+             * what makes turning hints off a genuinely GLOBAL effect rather than a
+             * per-page setting.
+             *
+             * A guest gets `true`: the hint components only ever render inside the
+             * authenticated shell or on public surfaces that opt in.
+             */
+            'hints' => fn () => [
+                'enabled' => $user ? $user->hintsEnabled() : true,
+            ],
+
             'oauth' => fn () => collect(\App\Support\OAuthProviders::available())
                 ->map(fn (string $provider) => [
                     'provider' => $provider,

@@ -134,14 +134,30 @@ return [
     'assistant' => [
         'title' => 'Support Assistant',
         'open' => 'Ask the assistant',
-        'placeholder' => 'Ask a question about NomNomytics…',
+        'placeholder' => 'Ask a question about the platform…',
         'send' => 'Send',
         'thinking' => 'Looking that up…',
         'helpful' => 'Was this helpful?',
         'yes' => 'Yes',
         'no' => 'Not really',
-        'escalated' => 'Thanks — we have passed this to the platform team and will get back to you.',
-        'from_docs' => 'Answered from the NomNomytics documentation.',
+        'escalated' => 'Passed to the platform team. Once they answer, I will know it for next time.',
+        'from_docs' => 'Answered from the platform documentation.',
+        // Shown when retrieval matched, but below the confident threshold. The
+        // answer is hedged rather than stated as fact.
+        'uncertain' => 'I am not fully certain this is the answer you need.',
+        'empty_state' => 'Ask anything about recording meals, deposits, reports or how the platform calculates a figure.',
+        // The SSA escalation queue.
+        'queue_title' => 'Support Assistant Queue',
+        'queue_subtitle' => 'Answering a question teaches the assistant to handle it autonomously from then on.',
+        'answer_and_teach' => 'Answer & teach the assistant',
+        'dismiss' => 'Dismiss',
+        'pending' => 'Pending',
+        'flagged' => 'Wrong answers reported',
+        'answered' => 'Answered',
+        'learned_answers' => 'Learned answers',
+        'needs_rewrite' => 'Answers needing a rewrite',
+        'reason_unanswered' => 'Could not answer',
+        'reason_flagged' => 'Answer was wrong',
     ],
 
     'validation' => [

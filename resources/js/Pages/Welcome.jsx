@@ -2,6 +2,7 @@ import React from 'react';
 import { Head } from '@inertiajs/react';
 
 import ThemeProvider from '@/Components/ThemeProvider';
+import SupportAssistant from '@/Components/Assistant/SupportAssistant';
 import { LandingAnimationStyles } from '@/Components/Landing/LandingPrimitives';
 import LandingHeader from '@/Components/Landing/LandingHeader';
 import HeroSection from '@/Components/Landing/HeroSection';
@@ -48,6 +49,20 @@ export default function Welcome({ plans = [], institutionCount = 0 }) {
                 </main>
 
                 <LandingFooter />
+
+                {/*
+                  * THE SUPPORT ASSISTANT — PUBLIC SURFACE.
+                  *
+                  * Mounted here, on the page a visitor reaches BEFORE they have an
+                  * account, because the moment someone wants to know "what does this
+                  * cost?" or "does it handle subsidies?" is the moment they are
+                  * reading this page. Requiring a sign-up to ask would lose the
+                  * question - and probably the visitor.
+                  *
+                  * `surface="landing"` scopes the conversation: a guest thread is
+                  * keyed by a random token the client holds, never a sequential id.
+                  */}
+                <SupportAssistant surface="landing" />
             </div>
         </ThemeProvider>
     );

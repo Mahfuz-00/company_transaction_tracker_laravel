@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import { Head, useForm } from '@inertiajs/react';
 import { useTheme, ACCENT_SOFT, ACCENT_HEX, RADIUS_PX, DENSITY_SCALE } from '@/Components/ThemeProvider';
 import ThemedText from '@/Components/UI/ThemedText';
+import useTranslation from '@/i18n/LocaleProvider';
 
 /**
  * The dedicated Theme Customizer.
@@ -15,7 +16,16 @@ import ThemedText from '@/Components/UI/ThemedText';
  * to the REAL document root via the shared `applyTheme` helper, so what the user
  * sees is exactly what they will get on save, with no guesswork.
  */
-export default function ThemeCustomizer({ theme, accents = [], fonts = [], radiusOptions = [], densityOptions = [] }) {
+export default function ThemeCustomizer({
+    theme,
+    accents = [],
+    fonts = [],
+    radiusOptions = [],
+    densityOptions = [],
+    hintsEnabled = true,
+}) {
+    const { t } = useTranslation();
+
     const { data, setData, put, post, processing, errors } = useForm({
         mode: theme?.mode || 'light',
         accent: theme?.accent || 'indigo',
@@ -23,6 +33,38 @@ export default function ThemeCustomizer({ theme, accents = [], fonts = [], radiu
         density: theme?.density || 'comfortable',
         font: theme?.font || 'inter',
     });
+
+    /*
+     * THE GLOBAL HINT PREFERENCE.
+     *
+     * Kept in local state (not the theme form): it posts to its own endpoint, and
+     * the optimistic update means the switch flips the instant it is clicked rather
+     * than after the round-trip. `HintsProvider` picks the saved value up from the
+     * response's shared prop, so the badges disappear on the same redirect.
+     */
+    const { post: postHints } = useForm({});
+
+    const [hintsOn, setHintsOn] = useState(Boolean(hintsEnabled));
+    const [savingHints, setSavingHints] = useState(false);
+
+    // Re-sync if the server sends a different value (e.g. changed on another tab).
+    useEffect(() => {
+        setHintsOn(Boolean(hintsEnabled));
+    }, [hintsEnabled]);
+
+    const toggleHints = () => {
+        const next = !hintsOn;
+
+        setHintsOn(next);
+        setSavingHints(true);
+
+        postHints(route('settings.hints.update'), {
+            data: { hints_enabled: next },
+            preserveScroll: true,
+            onFinish: () => setSavingHints(false),
+        });
+    };
+
 
     /*
      * LIVE PREVIEW - THE KEY FIX.
@@ -294,6 +336,68 @@ export default function ThemeCustomizer({ theme, accents = [], fonts = [], radiu
                     </div>
                 </div>
             </form>
+
+            {/*
+              * ---- HELP & HINTS (personal preference) ----
+              *
+              * Deliberately a SEPARATE form and a separate endpoint from the theme
+              * above. They are different kinds of preference (appearance vs.
+              * guidance), they save independently, and nesting a form inside the
+              * theme form would be invalid HTML that browsers silently mangle.
+              *
+              * The switch is explicit ON/OFF rather than a blind toggle, so a
+              * double-submit cannot flip it back to where it started.
+              */}
+            <section
+                data-testid="hints-preference"
+                className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
+            >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0 max-w-xl">
+                        <h3 className="text-base font-bold text-slate-900">{t('hints.settings_title')}</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                            {t('hints.toggle_description')}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-shrink-0 items-center gap-3">
+                        <span
+                            data-testid="hints-state"
+                            className={`text-xs font-bold uppercase tracking-wider ${
+                                hintsOn ? 'text-emerald-600' : 'text-slate-400'
+                            }`}
+                        >
+                            {hintsOn ? 'On' : 'Off'}
+                        </span>
+
+                        <button
+                            type="button"
+                            role="switch"
+                            aria-checked={hintsOn}
+                            aria-label={t('hints.toggle_label')}
+                            data-testid="hints-toggle"
+                            disabled={savingHints}
+                            onClick={toggleHints}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                                hintsOn ? 'bg-emerald-500' : 'bg-slate-300'
+                            }`}
+                        >
+                            <span
+                                className={`inline-block h-4.5 w-4.5 transform rounded-full bg-white shadow transition-transform ${
+                                    hintsOn ? 'translate-x-6' : 'translate-x-1'
+                                }`}
+                                style={{ height: '1.125rem', width: '1.125rem' }}
+                            />
+                        </button>
+                    </div>
+                </div>
+
+                <p className="mt-4 border-t border-slate-100 pt-3 text-[11px] leading-relaxed text-slate-400">
+                    Saved to your account (not this browser), so the choice follows you to every
+                    device. Turning hints off removes the (?) badges everywhere — they are not merely
+                    hidden.
+                </p>
+            </section>
         </SettingsLayout>
     );
 }
