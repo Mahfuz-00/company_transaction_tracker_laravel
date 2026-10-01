@@ -224,24 +224,37 @@ class ClaimController extends Controller
                 ]);
                 $depositId = $deposit->id;
             } elseif ($claim->subject === 'meal') {
-                // Missing meal entry: add the missed meals to that day's record.
-                // Looks up by DATE (the column stores a datetime), matching the
-                // pattern used by MealEntryController to avoid a unique clash.
+                // Handle meal dispute resolution:
+                // If it is a wrongful/overcounted meal dispute, subtract the count so member isn't charged.
+                // Otherwise (e.g. missing meal entry), add the meal to the day's record.
+                $isWrongful = str_contains(strtolower($claim->title . ' ' . $claim->description), 'wrongful')
+                    || str_contains(strtolower($claim->title . ' ' . $claim->description), 'overcount')
+                    || str_contains(strtolower($claim->title . ' ' . $claim->description), 'dispute');
+
                 $entry = MealEntry::query()
                     ->where('student_id', $student->id)
                     ->whereDate('date', $claim->entry_date)
                     ->first();
 
-                $attributes = [
-                    'breakfast' => (int) ($entry?->breakfast ?? 0) + (int) ($claim->breakfast ?? 0),
-                    'lunch' => (int) ($entry?->lunch ?? 0) + (int) ($claim->lunch ?? 0),
-                    'dinner' => (int) ($entry?->dinner ?? 0) + (int) ($claim->dinner ?? 0),
-                    'recorded_by' => $request->user()->id,
-                ];
+                if ($isWrongful) {
+                    $attributes = [
+                        'breakfast' => max(0, (int) ($entry?->breakfast ?? 0) - (int) ($claim->breakfast ?? 0)),
+                        'lunch' => max(0, (int) ($entry?->lunch ?? 0) - (int) ($claim->lunch ?? 0)),
+                        'dinner' => max(0, (int) ($entry?->dinner ?? 0) - (int) ($claim->dinner ?? 0)),
+                        'recorded_by' => $request->user()->id,
+                    ];
+                } else {
+                    $attributes = [
+                        'breakfast' => (int) ($entry?->breakfast ?? 0) + (int) ($claim->breakfast ?? 0),
+                        'lunch' => (int) ($entry?->lunch ?? 0) + (int) ($claim->lunch ?? 0),
+                        'dinner' => (int) ($entry?->dinner ?? 0) + (int) ($claim->dinner ?? 0),
+                        'recorded_by' => $request->user()->id,
+                    ];
+                }
 
                 if ($entry) {
                     $entry->update($attributes);
-                } else {
+                } elseif (! $isWrongful) {
                     MealEntry::create($attributes + [
                         'student_id' => $student->id,
                         'date' => $claim->entry_date,

@@ -259,7 +259,6 @@ class AnalyticsService
     public function subsidyTracking(string $month): array
     {
         $institution = Institution::current();
-        SubsidySource::ensureDefaults($institution?->id);
 
         $bySource = Subsidy::query()
             ->active()
@@ -272,8 +271,7 @@ class AnalyticsService
         $total = (float) $bySource->sum('total');
 
         $sources = SubsidySource::query()
-            ->where(fn ($q) => $q->whereNull('institution_id')
-                ->orWhere('institution_id', $institution?->id))
+            ->where('institution_id', $institution?->id)
             ->where('is_active', true)
             ->orderBy('name')
             ->get()

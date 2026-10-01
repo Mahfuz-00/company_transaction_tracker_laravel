@@ -3,8 +3,9 @@ import React, { useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import ThemeProvider from '@/Components/ThemeProvider';
 
-export default function PaymentGatewayMock({ institution, reference }) {
+export default function PaymentGatewayMock({ institution, reference, resumedWarning = false }) {
     const [processing, setProcessing] = useState(false);
+    const [showWarning, setShowWarning] = useState(Boolean(resumedWarning));
 
     const handlePay = () => {
         setProcessing(true);
@@ -17,6 +18,34 @@ export default function PaymentGatewayMock({ institution, reference }) {
         <ThemeProvider>
             <Head title="Secure Payment Gateway" />
             <div className="min-h-screen bg-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+                {showWarning && (
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        data-testid="duplicate-warning-dialog"
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+                    >
+                        <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-amber-300 text-center">
+                            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-3">
+                                <svg className="h-7 w-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900">Previous Incomplete Registration Detected</h3>
+                            <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+                                You tried to register before. This is your final attempt before previous uncompleted information is permanently purged. Please proceed to payment to activate your account.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setShowWarning(false)}
+                                data-testid="acknowledge-warning-btn"
+                                className="mt-5 w-full rounded-xl bg-amber-600 py-3 px-4 text-sm font-bold text-white shadow-md hover:bg-amber-700 transition-colors"
+                            >
+                                Acknowledge & Proceed to Payment
+                            </button>
+                        </div>
+                    </div>
+                )}
                 <div className="max-w-md w-full mx-auto bg-white rounded-2xl shadow-xl border border-slate-200 p-8 text-center space-y-6">
                     <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 mb-2">
                         <svg className="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">

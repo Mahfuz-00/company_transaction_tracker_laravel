@@ -8,7 +8,6 @@ import TextInput from '@/Components/TextInput';
 import AuthSplitLayout from '@/Layouts/AuthSplitLayout';
 import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import { useState } from 'react';
 
 /**
  * Login screen — the entry point for every signed-in session.
@@ -46,21 +45,6 @@ export default function Login({ status, canResetPassword }) {
         remember: false,
     });
 
-    /*
-     * THE SSO INVITE CODE.
-     *
-     * Held OUTSIDE the login form state because it is not submitted to
-     * /login - it is appended to the SSO redirect URL so the server can pin the
-     * sign-in to the right workspace BEFORE contacting the provider. Keeping it
-     * separate also means a failed password login does not clear it.
-     */
-    const [inviteCode, setInviteCode] = useState('');
-
-    // SSO only needs a code when the user is not already identified by an email
-    // the platform knows. We require it whenever providers exist, so an unknown
-    // external identity always lands somewhere unambiguous.
-    const ssoNeedsCode = oauth.length > 0;
-
     const submit = (e) => {
         e.preventDefault();
 
@@ -88,8 +72,7 @@ export default function Login({ status, canResetPassword }) {
             sso={
                 <SsoButtons
                     providers={oauth}
-                    requireInviteCode={ssoNeedsCode}
-                    inviteCode={inviteCode}
+                    requireInviteCode={false}
                     subtitle="Or continue with"
                 />
             }
@@ -129,33 +112,6 @@ export default function Login({ status, canResetPassword }) {
             )}
 
             <form onSubmit={submit} className="space-y-5">
-                {/* The invite code that routes an SSO sign-in to the right
-                    workspace. Only shown when providers are configured. */}
-                {ssoNeedsCode && (
-                    <div>
-                        <InputLabel
-                            htmlFor="invite_code"
-                            value="Institution Invite Code"
-                            className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400"
-                        />
-
-                        <TextInput
-                            id="invite_code"
-                            name="invite_code"
-                            value={inviteCode}
-                            className={`${inputClass} uppercase tracking-widest`}
-                            autoComplete="off"
-                            placeholder="e.g. AB12CD34"
-                            data-testid="login-invite-code"
-                            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                        />
-
-                        <p className="mt-1.5 text-[11px] text-slate-400">
-                            Required for single sign-on - it tells us which institution you belong to.
-                        </p>
-                    </div>
-                )}
-
                 <div>
                     <InputLabel htmlFor="email" value="Email Address" className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400" />
 

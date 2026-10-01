@@ -5,6 +5,7 @@ namespace Tests\Browser\Finance;
 use App\Models\Claim;
 use App\Models\Deposit;
 use App\Models\Transaction;
+use App\Support\FinanceCalculator;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -69,5 +70,19 @@ class MemberClaimAdjustmentTest extends DuskTestCase
             'kind' => 'credit',
             'payment_method' => 'Reimbursement',
         ]);
+
+        // Verify analytics accounting does not duplicate expenses or double-count contributions
+        $finance = new FinanceCalculator($institution);
+        $month = now()->format('Y-m');
+        $this->assertEquals(85.00, $finance->expensesForMonth($month));
+        // Cash contributions do not double-count the member reimbursement
+        $this->assertEquals(0.00, $finance->depositsForMonth($month));
+
+        // Member's individual wallet balance is credited with the $85
+        $breakdown = $finance->memberBreakdown($month);
+        $memberRow = $breakdown->firstWhere('id', $student->id);
+        $this->assertNotNull($memberRow);
+        $this->assertEquals(85.00, $memberRow['deposited']);
+        $this->assertEquals(85.00, $memberRow['balance']);
     }
 }

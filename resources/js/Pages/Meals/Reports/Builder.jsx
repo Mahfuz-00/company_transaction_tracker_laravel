@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { PageHint, InfoHint } from '@/Components/Help/HelpHint';
+import { PageHint, InfoHint, HelpBadge } from '@/Components/Help/HelpHint';
 import Field from '@/Components/UI/Field';
 import { Spinner } from '@/Components/UI/Loading';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
@@ -121,7 +121,12 @@ export default function Builder({ catalogue = [], reports = [], options = {} }) 
                     {/* ---- Builder ---- */}
                     <div className="lg:col-span-2">
                         <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-                            <h3 className="text-base font-bold text-slate-900">Build a report</h3>
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-base font-bold text-slate-900">Build a report</h3>
+                                <HelpBadge title="Report Builder">
+                                    Configure dynamic datasets, metrics, and groupings to analyze meal transactions and attendance.
+                                </HelpBadge>
+                            </div>
 
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field
@@ -269,7 +274,16 @@ export default function Builder({ catalogue = [], reports = [], options = {} }) 
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <form method="POST" action={route('meals.report-builder.export')}>
+                                        <form
+                                            method="POST"
+                                            action={route('meals.report-builder.export')}
+                                            onSubmit={(e) => {
+                                                const tokenInput = e.currentTarget.querySelector('input[name="_token"]');
+                                                if (tokenInput) {
+                                                    tokenInput.value = document.querySelector('meta[name="csrf-token"]')?.content || tokenInput.value;
+                                                }
+                                            }}
+                                        >
                                             <input type="hidden" name="_token" value={document.querySelector('meta[name="csrf-token"]')?.content || ''} />
                                             <input type="hidden" name="definition" value={JSON.stringify({ ...definition, filters })} />
                                             <button
@@ -318,7 +332,12 @@ export default function Builder({ catalogue = [], reports = [], options = {} }) 
 
                     {/* ---- Saved reports ---- */}
                     <div className="space-y-4">
-                        <h3 className="text-sm font-bold text-slate-900">Saved reports</h3>
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-bold text-slate-900">Saved reports</h3>
+                            <HelpBadge title="Saved Reports">
+                                Quickly run previously saved report configurations with real-time data.
+                            </HelpBadge>
+                        </div>
 
                         {reports.length > 0 ? reports.map((report) => (
                             <div

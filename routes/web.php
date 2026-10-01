@@ -808,7 +808,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->name('report-builder.destroy')->middleware('permission:meals.reports');
         Route::get('report-builder/{savedReport}/run', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'runSaved'])
             ->name('report-builder.run-saved')->middleware('permission:meals.reports');
-        Route::post('report-builder/export', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'export'])
+        Route::match(['get', 'post'], 'report-builder/export', [\App\Http\Controllers\Meals\ReportBuilderController::class, 'export'])
             ->name('report-builder.export')->middleware('permission:meals.reports');
 
         /*

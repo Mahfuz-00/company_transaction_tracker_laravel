@@ -56,7 +56,10 @@ class PaidRegistrationTest extends DuskTestCase
                 ->type('[data-testid="paid-admin-email"]', 'admin@sunrisehall.test')
                 ->type('[data-testid="paid-admin-password"]', 'secret1234')
                 ->click('[data-testid="paid-submit-btn"]')
-                // Should resume directly to the payment gateway without duplicate record
+                // Should display duplicate warning dialog in center of screen
+                ->waitFor('[data-testid="duplicate-warning-dialog"]', 20)
+                ->assertSee('final attempt before previous uncompleted information is permanently purged')
+                ->click('[data-testid="acknowledge-warning-btn"]')
                 ->waitFor('[data-testid="pay-complete-btn"]', 20);
         });
 

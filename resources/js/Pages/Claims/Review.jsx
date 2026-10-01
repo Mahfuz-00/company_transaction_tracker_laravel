@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
+import HelpBadge from '@/Components/Help/HelpHint';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { useFeedback } from '@/Components/Feedback/FeedbackProvider';
@@ -135,6 +136,9 @@ export default function Review({ claims, stats = {}, kinds = [], filters = {} })
             <div className="space-y-5">
                 {/* Status tabs */}
                 <div className="flex flex-wrap items-center gap-2">
+                    <HelpBadge title="Review Queue">
+                        Review member claims and disputes. Approvals adjust ledger balances or meal records accordingly.
+                    </HelpBadge>
                     {statusTabs.map((tab) => (
                         <button
                             key={tab.value}

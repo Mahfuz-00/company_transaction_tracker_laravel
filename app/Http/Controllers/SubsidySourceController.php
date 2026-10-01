@@ -31,16 +31,8 @@ class SubsidySourceController extends Controller
     {
         $institution = Institution::current();
 
-        // Make sure the out-of-the-box sources exist before listing.
-        SubsidySource::ensureDefaults($institution?->id);
-
-        // "Mine OR the shared defaults" - the model's overridden global scope
-        // already widens SubsidySource this way; repeating the clause here keeps
-        // the rule visible at the point it is relied upon (and covers the global
-        // /SSA context where the tenant scope adds nothing).
         $sources = SubsidySource::query()
-            ->where(fn ($q) => $q->whereNull('institution_id')
-                ->orWhere('institution_id', $institution?->id))
+            ->where('institution_id', $institution?->id)
             ->withCount(['subsidies as subsidy_count'])
             ->orderBy('name')
             ->get()
@@ -90,7 +82,7 @@ class SubsidySourceController extends Controller
 
         // Two sources with the same key would collide in reports.
         $exists = SubsidySource::where('key', $data['key'])
-            ->where(fn ($q) => $q->whereNull('institution_id')->orWhere('institution_id', $institution?->id))
+            ->where('institution_id', $institution?->id)
             ->exists();
 
         if ($exists) {
@@ -100,7 +92,7 @@ class SubsidySourceController extends Controller
         // Percentage validation: Total active subsidies allocation percentage must not exceed 100%
         if (isset($data['percentage']) && $data['percentage'] > 0) {
             $currentTotal = (float) SubsidySource::query()
-                ->where(fn ($q) => $q->whereNull('institution_id')->orWhere('institution_id', $institution?->id))
+                ->where('institution_id', $institution?->id)
                 ->where('is_active', true)
                 ->sum('percentage');
 
@@ -136,7 +128,7 @@ class SubsidySourceController extends Controller
         if (isset($data['percentage']) && $data['percentage'] > 0 && ($data['is_active'] ?? $subsidySource->is_active)) {
             $otherTotal = (float) SubsidySource::query()
                 ->where('id', '!=', $subsidySource->id)
-                ->where(fn ($q) => $q->whereNull('institution_id')->orWhere('institution_id', $institution?->id))
+                ->where('institution_id', $institution?->id)
                 ->where('is_active', true)
                 ->sum('percentage');
 

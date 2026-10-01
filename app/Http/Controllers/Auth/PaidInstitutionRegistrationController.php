@@ -59,7 +59,8 @@ class PaidInstitutionRegistrationController extends Controller
                     'payment_gateway' => $data['payment_gateway'] ?? 'stripe',
                 ]);
 
-                return redirect()->route('onboarding.payment.gateway', ['reference' => $ref]);
+                return redirect()->route('onboarding.payment.gateway', ['reference' => $ref, 'resumed' => 1])
+                    ->with('resumed_warning', true);
             }
 
             return back()->withErrors(['email' => 'An account with this email address already exists. Please log in.']);
@@ -73,7 +74,8 @@ class PaidInstitutionRegistrationController extends Controller
                 'payment_gateway' => $data['payment_gateway'] ?? 'stripe',
             ]);
 
-            return redirect()->route('onboarding.payment.gateway', ['reference' => $ref]);
+            return redirect()->route('onboarding.payment.gateway', ['reference' => $ref, 'resumed' => 1])
+                ->with('resumed_warning', true);
         }
 
         $ref = 'SIGNUP-'.Str::upper(Str::random(10));
@@ -116,10 +118,12 @@ class PaidInstitutionRegistrationController extends Controller
     public function gateway(Request $request, string $reference)
     {
         $institution = Institution::where('signup_reference', $reference)->firstOrFail();
+        $isResumed = $request->boolean('resumed') || (bool) session('resumed_warning');
 
         return Inertia::render('Auth/PaymentGatewayMock', [
             'institution' => $institution,
             'reference' => $reference,
+            'resumedWarning' => $isResumed,
         ]);
     }
 
