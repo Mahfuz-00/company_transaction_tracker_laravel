@@ -187,8 +187,8 @@ class ReportBuilder
             'measure' => $measure,
             'group_by' => $groupBy,
             'filters' => $filters,
-            'from' => $definition['from'] ?? null,
-            'to' => $definition['to'] ?? null,
+            'from' => $definition['from'] ?? ($definition['filters']['from'] ?? null),
+            'to' => $definition['to'] ?? ($definition['filters']['to'] ?? null),
             'limit' => min((int) ($definition['limit'] ?? 50), self::MAX_ROWS),
         ];
     }

@@ -4,6 +4,7 @@ namespace Tests\Browser\Payments;
 
 use App\Models\Deposit;
 use App\Models\Refund;
+use Laravel\Dusk\Browser;
 use Tests\Browser\Support\DuskSupport;
 use Tests\DuskTestCase;
 
@@ -56,6 +57,16 @@ class PaymentRefundTest extends DuskTestCase
             'amount' => 50.00,
             'reason' => 'withdrawal',
         ]);
+
+        $this->step('IA', 'Payments', 'verify refund is visible in refund module table', __LINE__);
+
+        $this->browse(function (Browser $browser) use ($admin, $student) {
+            $browser->loginAs($admin)
+                ->visit('/meals/refunds')
+                ->waitForText('Refunds', 20)
+                ->assertSee($student->name)
+                ->assertSee('50.00');
+        });
     }
 
     public function test_refund_cannot_exceed_available_member_credit(): void

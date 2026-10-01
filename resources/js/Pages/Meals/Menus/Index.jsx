@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { PageHint, InfoHint } from '@/Components/Help/HelpHint';
+import { PageHint, InfoHint, HelpBadge } from '@/Components/Help/HelpHint';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
 import { Spinner } from '@/Components/UI/Loading';
@@ -89,13 +89,16 @@ export default function Index({ menus, mealTypes = [], filters = {}, canApprove 
 
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                     {[
-                        { label: 'Voting open', value: summary.open_votes ?? 0, tone: 'text-sky-600' },
-                        { label: 'Awaiting approval', value: summary.awaiting_approval ?? 0, tone: 'text-amber-600' },
-                        { label: 'Approved', value: summary.approved ?? 0, tone: 'text-emerald-600' },
-                        { label: 'Eligible voters', value: summary.eligible_voters ?? 0, tone: 'text-slate-900' },
+                        { label: 'Voting open', value: summary.open_votes ?? 0, tone: 'text-sky-600', help: 'Menus currently collecting member votes.' },
+                        { label: 'Awaiting approval', value: summary.awaiting_approval ?? 0, tone: 'text-amber-600', help: 'Menus awaiting decision by admin or meal manager.' },
+                        { label: 'Approved', value: summary.approved ?? 0, tone: 'text-emerald-600', help: 'Menus scheduled to be prepared for members.' },
+                        { label: 'Eligible voters', value: summary.eligible_voters ?? 0, tone: 'text-slate-900', help: 'Total active members allowed to participate in votes.' },
                     ].map((card) => (
                         <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{card.label}</p>
+                            <div className="flex items-center justify-between">
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{card.label}</p>
+                                <HelpBadge title={card.label}>{card.help}</HelpBadge>
+                            </div>
                             <p className={`mt-1 text-2xl font-bold ${card.tone}`}>{card.value}</p>
                         </div>
                     ))}

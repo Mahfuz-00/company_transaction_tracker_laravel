@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import SettingsLayout from '@/Layouts/SettingsLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
+import HelpBadge from '@/Components/Help/HelpHint';
 import useCan from '@/Utils/can';
 import { Spinner } from '@/Components/UI/Loading';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
@@ -23,7 +24,7 @@ export default function SubsidySources({ sources, totalPercentage }) {
     const [editing, setEditing] = useState(null);
     const [confirmDelete, setConfirmDelete] = useState(null);
 
-    const { data, setData, post, put, processing, errors, reset, clearErrors } = useForm({
+    const { data, setData, post, put, processing, errors, setError, reset, clearErrors } = useForm({
         name: '',
         key: '',
         percentage: '',
@@ -60,6 +61,16 @@ export default function SubsidySources({ sources, totalPercentage }) {
 
     const submit = (event) => {
         event.preventDefault();
+
+        const pct = parseFloat(data.percentage) || 0;
+        const otherTotal = editing
+            ? (totalPercentage || 0) - (parseFloat(editing.percentage) || 0)
+            : (totalPercentage || 0);
+
+        if (otherTotal + pct > 100.0) {
+            setError('percentage', `Total subsidy allocation rules cannot exceed 100%. Current remaining allocation is ${(100 - otherTotal).toFixed(1)}%.`);
+            return;
+        }
 
         const options = { preserveScroll: true, onSuccess: () => closeModal() };
 
@@ -123,8 +134,13 @@ export default function SubsidySources({ sources, totalPercentage }) {
                 <div className={`rounded-xl border p-4 shadow-sm ${splitOff ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}>
                     <div className="flex items-center justify-between gap-3">
                         <div>
-                            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                                Total Default Share
+                            <div className="flex items-center gap-2">
+                                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                                    Total Default Share
+                                </span>
+                                <HelpBadge title="Total Subsidies Allocation">
+                                    Total allocation percentage of all active subsidy sources combined. Can never exceed 100%.
+                                </HelpBadge>
                             </div>
                             <div className={`mt-0.5 text-2xl font-bold ${splitOff ? 'text-amber-600' : 'text-emerald-600'}`}>
                                 {totalPercentage}%

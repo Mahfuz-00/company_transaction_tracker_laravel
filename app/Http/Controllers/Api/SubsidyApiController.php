@@ -101,13 +101,9 @@ class SubsidyApiController extends Controller
     public function sources()
     {
         $institution = Institution::current();
-        SubsidySource::ensureDefaults($institution?->id);
 
         $sources = SubsidySource::query()
-            // Institution-specific sources PLUS the shared (null-institution)
-            // defaults, so every workspace sees the platform baseline.
-            ->where(fn ($q) => $q->whereNull('institution_id')
-                ->orWhere('institution_id', $institution?->id))
+            ->where('institution_id', $institution?->id)
             ->where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'name', 'key', 'percentage', 'description'])

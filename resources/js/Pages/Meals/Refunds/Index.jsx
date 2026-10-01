@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import MealsLayout from '@/Layouts/MealsLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
+import HelpBadge from '@/Components/Help/HelpHint';
 import useCan from '@/Utils/can';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
@@ -176,16 +177,26 @@ export default function Index({ refunds, members, reasons, costPerMeal, filtered
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        {hasFilters ? 'Total for current filter' : 'Total refunded (all time)'}
+                    <div className="flex items-center justify-between">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            {hasFilters ? 'Total for current filter' : 'Total refunded (all time)'}
+                        </div>
+                        <HelpBadge title="Total Refunded">
+                            Aggregate sum of refunded balances issued to members.
+                        </HelpBadge>
                     </div>
                     <div className="mt-1 text-2xl font-bold text-rose-600">
                         {money(filteredTotal, false)}
                     </div>
                 </div>
                 <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        Active Refunds
+                    <div className="flex items-center justify-between">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            Active Refunds
+                        </div>
+                        <HelpBadge title="Active Refunds">
+                            Refunds that currently reduce member balances and cash holdings.
+                        </HelpBadge>
                     </div>
                     <div className="mt-1 text-2xl font-bold text-slate-800">
                         {money(activeTotal ?? 0, false)}
@@ -193,8 +204,13 @@ export default function Index({ refunds, members, reasons, costPerMeal, filtered
                     <div className="mt-0.5 text-[11px] text-slate-400">Currently reducing balances</div>
                 </div>
                 <div className="rounded-xl border-slate-200 bg-white p-4 shadow-sm">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        Reversed Refunds
+                    <div className="flex items-center justify-between">
+                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            Reversed Refunds
+                        </div>
+                        <HelpBadge title="Reversed Refunds">
+                            Cancelled or rolled-back refunds restored to member balances.
+                        </HelpBadge>
                     </div>
                     <div className="mt-1 text-2xl font-bold text-slate-400">
                         {money(reversedTotal ?? 0, false)}

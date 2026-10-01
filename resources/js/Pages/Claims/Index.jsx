@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import Modal from '@/Components/UI/Modal';
 import Field from '@/Components/UI/Field';
+import HelpBadge from '@/Components/Help/HelpHint';
 import useMoney from '@/Utils/useMoney';
 import useTerminology from '@/Utils/useTerminology';
 import { Head, Link, useForm } from '@inertiajs/react';
@@ -144,9 +145,14 @@ export default function Index({ hasMemberRecord = true, claims, kinds = [], subj
                     </div>
 
                     <div className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
-                        <div className="border-b border-slate-100 px-6 py-4">
-                            <h3 className="text-base font-bold text-slate-900">Your claims</h3>
-                            <p className="text-xs text-slate-500">Track the status of everything you have submitted</p>
+                        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">Your claims</h3>
+                                <p className="text-xs text-slate-500">Track the status of everything you have submitted</p>
+                            </div>
+                            <HelpBadge title="Claims & Disputes">
+                                Submit wrongful meal counts, missing deposits, or grocery expense reimbursements for manager approval.
+                            </HelpBadge>
                         </div>
 
                         {rows.length > 0 ? (

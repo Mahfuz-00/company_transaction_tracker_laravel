@@ -203,7 +203,13 @@ class ReportBuilderController extends Controller
     /** Export report result to CSV. */
     public function export(Request $request)
     {
-        $definition = (array) $request->input('definition', []);
+        $raw = $request->input('definition', []);
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            $definition = is_array($decoded) ? $decoded : [];
+        } else {
+            $definition = (array) $raw;
+        }
 
         try {
             $result = (new ReportBuilder)->run($definition);

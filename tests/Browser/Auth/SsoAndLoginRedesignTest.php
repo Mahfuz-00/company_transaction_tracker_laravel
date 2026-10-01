@@ -40,9 +40,12 @@ class SsoAndLoginRedesignTest extends DuskTestCase
                 ->waitFor('form', 20)
                 ->assertVisible('input[name="email"]')
                 ->assertVisible('input[name="password"]')
+                ->assertMissing('input[name="invite_code"]')
+                ->assertMissing('[data-testid="login-invite-code"]')
                 ->assertVisible('[data-testid="sso-buttons"]')
                 ->assertVisible('[data-testid="sso-divider-text"]')
                 ->assertVisible('[data-testid="sso-button-google"]')
+                ->assertAttribute('[data-testid="sso-button-google"]', 'aria-disabled', 'false')
                 ->assertVisible('[data-testid="sso-button-microsoft"]')
                 ->assertVisible('[data-testid="sso-button-facebook"]')
                 ->assertVisible('[data-testid="sso-button-x"]');

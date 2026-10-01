@@ -49,34 +49,16 @@ class SubsidySource extends Model
     }
 
     /**
-     * The built-in sources seeded for every institution on first boot. Kept
-     * here so the seeder and the "restore defaults" action agree.
+     * No default subsidies: subsidy sources must be created entirely by the
+     * Institute Admin from scratch.
      */
-    public const DEFAULTS = [
-        ['name' => 'University Authority', 'key' => 'university_authority', 'percentage' => 50],
-        ['name' => 'Company Management', 'key' => 'company_management', 'percentage' => 50],
-        ['name' => 'College Administration', 'key' => 'college_administration', 'percentage' => 50],
-        ['name' => 'Government Grant', 'key' => 'government_grant', 'percentage' => 20],
-        ['name' => 'Donation', 'key' => 'donation', 'percentage' => 10],
-        ['name' => 'Other', 'key' => 'other', 'percentage' => 0],
-    ];
+    public const DEFAULTS = [];
 
-    /** Ensure the active institution has the default sources. */
+    /** EnsureDefaults is a no-op; no hardcoded defaults are injected. */
     public static function ensureDefaults(?int $institutionId): void
     {
-        foreach (self::DEFAULTS as $source) {
-            // Without scoping, firstOrCreate could match a row belonging to a
-            // DIFFERENT institution that happens to share the default name.
-            // The explicit scope keeps the create/lookup pinned to $institutionId.
-            static::withoutTenantScope()->firstOrCreate(
-                ['institution_id' => $institutionId, 'name' => $source['name']],
-                [
-                    'key' => $source['key'],
-                    'percentage' => $source['percentage'],
-                    'is_active' => true,
-                ]
-            );
-        }
+        // No hardcoded default subsidy sources are seeded.
+        return;
     }
 
     /**

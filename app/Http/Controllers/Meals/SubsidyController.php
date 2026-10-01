@@ -30,9 +30,6 @@ class SubsidyController extends Controller
         // Subsidy tracking is STRICTLY month-scoped, defaulting to now.
         $month = FinanceCalculator::resolveMonth($request->query('month'));
 
-        // Guarantee the institution has its default funding sources to pick from.
-        SubsidySource::ensureDefaults($institution?->id);
-
         $subsidies = Subsidy::query()
             ->with(['department:id,name,slug', 'student:id,name,roll', 'recorder:id,name', 'fundingSource'])
             ->forMonth($month)
@@ -59,8 +56,7 @@ class SubsidyController extends Controller
             ->groupBy('source')
             ->pluck('total', 'source');
 
-        $sources = SubsidySource::where(fn ($q) => $q->whereNull('institution_id')
-                ->orWhere('institution_id', $institution?->id))
+        $sources = SubsidySource::where('institution_id', $institution?->id)
             ->where('is_active', true)
             ->orderBy('name')
             ->get()
